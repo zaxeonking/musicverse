@@ -5,6 +5,7 @@ import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { STATUS_TEXT } from '../../utils/playerStatus'
 import { swallowNextClick } from '../../utils/swallowNextClick'
 import CoverArt from '../ui/CoverArt'
+import MarqueeText from '../ui/MarqueeText'
 import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
 import LyricLine from './LyricLine'
 import MiniBubble from './MiniBubble'
@@ -247,10 +248,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
             <CoverArt cover={now.cover} src={now.coverSrc} />
           </div>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold text-ink">{now.title}</span>
-            <span className={`block truncate text-xs ${status === 'error' ? 'text-danger' : 'text-ink-muted'}`}>
-              {isError ? STATUS_TEXT.error : subtitle}
-            </span>
+            <MarqueeText text={now.title} className="text-sm font-semibold text-ink" />
+            <MarqueeText
+              text={isError ? STATUS_TEXT.error : subtitle}
+              className={`text-xs ${status === 'error' ? 'text-danger' : 'text-ink-muted'}`}
+            />
           </span>
         </button>
 

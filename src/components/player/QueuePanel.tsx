@@ -6,6 +6,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import { getUpcomingTracks } from '../../utils/playerQueue'
 import { STATUS_TEXT } from '../../utils/playerStatus'
 import CoverArt from '../ui/CoverArt'
+import MarqueeText from '../ui/MarqueeText'
 import { describeMainButton } from './PlayerControls'
 import TrackActionSheet from './TrackActionSheet'
 import UpcomingList from './UpcomingList'
@@ -169,10 +170,11 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
                 <TrackCover track={currentTrack} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-accent">{currentTrack.title}</span>
-                <span className={`block truncate text-xs ${isError ? 'text-danger' : 'text-ink-muted'}`}>
-                  {isError ? STATUS_TEXT.error : status === 'playing' ? currentTrack.artists : STATUS_TEXT[status] || currentTrack.artists}
-                </span>
+                <MarqueeText text={currentTrack.title} className="text-sm font-semibold text-accent" />
+                <MarqueeText
+                  text={isError ? STATUS_TEXT.error : status === 'playing' ? currentTrack.artists : STATUS_TEXT[status] || currentTrack.artists}
+                  className={`text-xs ${isError ? 'text-danger' : 'text-ink-muted'}`}
+                />
               </span>
               <NowIcon
                 className={`h-5 w-5 shrink-0 text-accent ${main.kind === 'busy' ? 'animate-spin motion-reduce:animate-none' : ''}`}

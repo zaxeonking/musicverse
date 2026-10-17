@@ -8,6 +8,7 @@ import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { noticeMessage } from '../../utils/libraryNotice'
 import { looksLikeSameTrack, STATUS_TEXT } from '../../utils/playerStatus'
 import CoverArt from '../ui/CoverArt'
+import MarqueeText from '../ui/MarqueeText'
 import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
 import LyricsPanel from './LyricsPanel'
 import SeekBar from './SeekBar'
@@ -280,8 +281,8 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
             <h2 title={now.title} className="line-clamp-2 break-words font-display text-2xl font-bold leading-tight text-ink">
               {now.title}
             </h2>
-            <p className="mt-1 truncate text-base text-ink-muted">{now.artists}</p>
-            {now.album && <p className="mt-0.5 truncate text-sm text-ink-faint">{now.album}</p>}
+            <MarqueeText text={now.artists} className="mt-1 text-base text-ink-muted" />
+            {now.album && <MarqueeText text={now.album} className="mt-0.5 text-sm text-ink-faint" />}
           </div>
 
           {isError ? (

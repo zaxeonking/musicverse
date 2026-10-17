@@ -286,6 +286,10 @@ Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 - Saat memuat lagu atau buffering, notifikasi menampilkan bilah berjalan terus dan teks "Memuat lagu…".
 - Metadata sesi dipasang ulang hanya bila berubah, jadi kartu media tidak berkedip atau bilah kembali ke awal.
 
+**Tampilan pemutar**
+- **Judul panjang menggulir:** judul/artis yang terpotong di mini player, artis/album di pemutar penuh, dan lagu aktif di antrean menggulir ke samping sampai ujung terlihat, berhenti sebentar (±1,6 dtk), kembali ke awal, berhenti lagi, lalu menggulir lagi (`components/ui/MarqueeText.tsx`). Teks yang muat tetap diam; mode "kurangi gerakan" memakai elipsis biasa.
+- **Lirik mini player per kata:** kata yang sudah/sedang dinyanyikan terang, sisanya redup. LRC hanya punya waktu per baris, jadi waktu tiap kata diperkirakan dari panjang kata dalam baris itu (`LyricLine.tsx`). Baris yang lebih lebar dari strip bergeser agar kata aktif tetap di tengah. Lirik tanpa waktu per baris (mode perkiraan / lirik biasa) tidak disorot per kata; baris panjangnya menggulir seperti judul.
+
 > Perubahan ini menyentuh kode native, jadi butuh **APK baru** (build web saja tidak cukup).
 
 ## Judul lagu apa adanya (v0.2.1)
