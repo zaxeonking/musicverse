@@ -1,0 +1,102 @@
+name: Build APK
+
+# Rilis: push tag versi, mis.  git tag v0.2.0 && git push origin v0.2.0
+# Atau jalankan manual dari tab Actions (hanya menghasilkan artifact, tidak membuat Release).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # membuat GitHub Release + melampirkan APK
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Repo TEMPAT RILIS (harus public supaya APK/web bisa membacanya tanpa login). Isi variabel repo
+      # RELEASE_REPO (Settings > Secrets and variables > Actions > Variables) mis. USER/musicverse-releases.
+      # Kosong = pakai repo ini sendiri (hanya berfungsi jika repo ini public).
+      RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Periksa secret penandatanganan
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS belum diisi (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      # Versi aplikasi = nama tag (v0.2.0 -> 0.2.0), jadi package.json tidak perlu diedit manual
+      # dan selalu cocok dengan tag yang dibandingkan fitur cek pembaruan.
+      - name: Samakan versi dengan tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
+      - run: npm install --no-audit --no-fund
+
+      - run: npm run build
+
+      - name: Siapkan proyek Android
+        run: |
+          [ -d android ] || npx cap add android
+          npx cap sync android
+          node scripts/setup-android.mjs
+
+      - name: Build APK release (belum bertanda tangan)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Tanda tangani APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          UNSIGNED="$(ls android/app/build/outputs/apk/release/*.apk | head -1)"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          "$BT/zipalign" -p -f 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$RUNNER_TEMP/release.jks" \
+            --ks-pass "pass:$KEYSTORE_PASS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:${KEY_PASS:-$KEYSTORE_PASS}" \
+            --out musicverse.apk "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --print-certs musicverse.apk
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musicverse-apk
+          path: musicverse.apk
+
+      - name: Buat GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          # Untuk repo rilis lain: PAT (fine-grained, izin Contents: Read and write pada repo rilis saja).
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" musicverse.apk \
+            --repo "$RELEASE_REPO" \
+            --title "MusicVerse ${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -1,0 +1,174 @@
+import { useEffect, useState } from 'react'
+import { AlertCircle, ListMusic, RotateCw } from 'lucide-react'
+import { useLibrary } from '../../context/LibraryContext'
+import { useTrackMenu } from '../../context/TrackMenuContext'
+import { usePlaylist } from '../../context/PlaylistContext'
+import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { noticeMessage } from '../../utils/libraryNotice'
+import { classifyImportInput } from '../../utils/spotifyUrl'
+import { getRowActivity } from '../../utils/playerStatus'
+import { QUEUE_RESULT_TEXT } from '../../utils/queueResultText'
+import EmptyState from '../ui/EmptyState'
+import AddToPlaylistSheet from './AddToPlaylistSheet'
+import PlaylistHeader from './PlaylistHeader'
+import PlaylistSkeleton from './PlaylistSkeleton'
+import TrackList from './TrackList'
+
+/** Tombol ini benar-benar mengulang permintaan terakhir lewat context. */
+function RetryButton() {
+  const { retry } = usePlaylist()
+  return (
+    <button
+      type="button"
+      onClick={() => void retry()}
+      className="btn-primary"
+    >
+      <RotateCw className="h-4 w-4" aria-hidden="true" />
+      Coba lagi
+    </button>
+  )
+}
+
+/** Detail teknis error; teks bisa dipilih/disalin untuk dikirim saat melapor masalah. */
+function ErrorDetail({ detail }: { detail?: string | null }) {
+  if (!detail) return null
+  return (
+    <details className="w-full max-w-md text-left text-xs text-ink-muted" open>
+      <summary className="cursor-pointer select-none">Detail teknis</summary>
+      <pre className="mt-2 select-text whitespace-pre-wrap break-all rounded-md bg-bg p-3 font-mono">{detail}</pre>
+    </details>
+  )
+}
+
+/** Menampilkan playlist dari API: kosong, memuat, gagal, atau daftar lagu. */
+export default function PlaylistView() {
+  const { status, playlist, error, errorDetail, fromCache, canRetry, loadPlaylist, requestedUrl } = usePlaylist()
+  const wasSearch = requestedUrl !== null && ['search', 'track'].includes(classifyImportInput(requestedUrl).kind)
+  const player = useAudioPlayer()
+  const { notice, savedIdFor, savePlaylist, removePlaylist, dismissNotice } = useLibrary()
+  const { showToast } = useTrackMenu()
+
+  const [picking, setPicking] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (toast === null) return
+    const timer = setTimeout(() => setToast(null), 2500)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  if (status === 'loading') return <PlaylistSkeleton />
+
+  if (!playlist) {
+    if (status === 'error') {
+      return (
+        <EmptyState
+          icon={AlertCircle}
+          tone="error"
+          title={wasSearch ? 'Lagu tidak ditemukan' : 'Playlist gagal dimuat'}
+          description={error ?? 'Terjadi kesalahan. Coba lagi.'}
+          action={
+            <div className="flex flex-col items-center gap-4">
+              {canRetry && <RetryButton />}
+              <ErrorDetail detail={errorDetail} />
+            </div>
+          }
+        />
+      )
+    }
+    return (
+      <EmptyState
+        icon={ListMusic}
+        title="Belum ada lagu atau playlist"
+        description="Ketik judul lagu, tempel tautan lagu, atau tempel tautan playlist Spotify (playlist harus publik)."
+      />
+    )
+  }
+
+  const savedId = savedIdFor(playlist)
+  const handleToggleSaved = () => {
+    // Status tombol hanya berubah jika operasi benar-benar tersimpan; kegagalan ditampilkan lewat `notice`.
+    if (savedId !== null) removePlaylist(savedId)
+    else savePlaylist(playlist)
+  }
+
+  // Hanya hasil cari judul / tautan lagu (lagu satuan) yang boleh dicampur ke antrean. Tautan playlist tidak.
+  const isSingleSearch = playlist.source === 'search'
+  const handleAddToQueue = () => {
+    const track = playlist.tracks[0]
+    if (!track) return
+    showToast(QUEUE_RESULT_TEXT[player.addToQueue(track, { fromSearch: true })])
+  }
+
+  return (
+    <section aria-label={`Playlist ${playlist.title}`} className="space-y-6">
+      {notice && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+          <p className="min-w-0 flex-1">{noticeMessage(notice)}</p>
+          <button type="button" onClick={dismissNotice} className="btn-secondary h-9 px-3">
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {status === 'error' && error && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+            <span>
+              {error} <span className="text-ink-muted">Playlist sebelumnya tetap ditampilkan.</span>
+            </span>
+          </p>
+          {canRetry && <RetryButton />}
+          <ErrorDetail detail={errorDetail} />
+        </div>
+      )}
+
+      <PlaylistHeader
+        title={playlist.title}
+        cover={playlist.cover}
+        trackCount={playlist.tracks.length}
+        fromCache={fromCache}
+        onPlayAll={() => player.playAll(playlist.tracks)}
+        onReload={() => void loadPlaylist(playlist.url)}
+        isSaved={savedId !== null}
+        // Lagu satuan (hasil cari judul / tautan lagu) tidak bisa masuk Koleksi; simpan lewat "Playlist saya".
+        onToggleSaved={playlist.source === 'search' ? undefined : handleToggleSaved}
+        onAddToPlaylist={playlist.source === 'search' && playlist.tracks.length > 0 ? () => setPicking(true) : undefined}
+        onAddToQueue={isSingleSearch && playlist.tracks.length > 0 ? handleAddToQueue : undefined}
+      />
+
+      {picking && playlist.tracks[0] && (
+        <AddToPlaylistSheet
+          track={playlist.tracks[0]}
+          onClose={() => setPicking(false)}
+          onDone={setToast}
+        />
+      )}
+      {toast && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-44 z-[70] mx-auto w-fit max-w-sm rounded-full bg-ink px-4 py-2 text-center text-sm font-medium text-bg shadow-lg"
+        >
+          {toast}
+        </div>
+      )}
+
+      <TrackList
+        key={playlist.id}
+        tracks={playlist.tracks}
+        onPlay={player.selectTrack}
+        playingTrackId={player.currentTrack?.id ?? null}
+        playbackActivity={getRowActivity(player.status)}
+        // Lagu satuan dari pencarian boleh masuk antrean lewat menu lagu; playlist tetap tidak dicampur.
+        searchable={isSingleSearch}
+      />
+    </section>
+  )
+}

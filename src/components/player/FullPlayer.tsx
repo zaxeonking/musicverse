@@ -1,0 +1,351 @@
+import { AlertCircle, ChevronDown, FolderPlus, Mic2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react'
+import { useLibrary } from '../../context/LibraryContext'
+import { useTrackMenu } from '../../context/TrackMenuContext'
+import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useLyrics } from '../../hooks/useLyrics'
+import { useNowPlaying } from '../../hooks/useNowPlaying'
+import { noticeMessage } from '../../utils/libraryNotice'
+import { looksLikeSameTrack, STATUS_TEXT } from '../../utils/playerStatus'
+import CoverArt from '../ui/CoverArt'
+import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
+import LyricsPanel from './LyricsPanel'
+import SeekBar from './SeekBar'
+import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
+import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Pemutar penuh (dialog modal). Memakai state dan aksi yang sama dengan MiniPlayer,
+ * sehingga keduanya selalu sinkron. Esc / tombol turun menutupnya.
+ */
+export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => void; onOpenQueue: () => void }) {
+  const { status, currentTrack, playbackInfo } = useAudioPlayer()
+  const now = useNowPlaying()
+  const { notice, dismissNotice } = useLibrary()
+  const { openTrackMenu } = useTrackMenu()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
+  const [showLyrics, setShowLyrics] = useState(false)
+  const [timerOpen, setTimerOpen] = useState(false)
+  const [crossfadeOpen, setCrossfadeOpen] = useState(false)
+  // Geser di area sampul/lirik: sampul digeser ke atas atau samping -> lirik; di lirik, geser samping -> kembali ke sampul.
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const onSwipeStart = (event: TouchEvent) => {
+    const t = event.touches[0]
+    swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null
+  }
+  const onSwipeEnd = (event: TouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    const t = event.changedTouches[0]
+    if (!start || !t) return
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    const horizontal = Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5
+    const up = dy < -50 && Math.abs(dy) > Math.abs(dx) * 1.5
+    if (horizontal) setShowLyrics((value) => !value)
+    else if (up && !showLyrics) setShowLyrics(true)
+  }
+  // Lirik dicari untuk lagu yang BENAR-BENAR terdengar: jika server memberi audio lagu lain, pakai datanya.
+  const lyricsTrack = useMemo(() => {
+    if (!currentTrack) return null
+    if (playbackInfo && !looksLikeSameTrack(currentTrack, playbackInfo)) {
+      return { ...currentTrack, title: playbackInfo.title, artists: playbackInfo.artist, album: playbackInfo.album, duration: playbackInfo.duration }
+    }
+    return currentTrack
+  }, [currentTrack, playbackInfo])
+  const { state: lyrics, retry: retryLyrics } = useLyrics(lyricsTrack, showLyrics)
+
+  // Tutup dengan animasi: pemutar meluncur turun ke mini player, baru riwayat dimundurkan.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+  const closingRef = useRef(false)
+  const animateClose = useCallback(() => {
+    const el = dialogRef.current
+    if (closingRef.current) return
+    closingRef.current = true
+    if (!el) {
+      onCloseRef.current()
+      return
+    }
+    el.style.animation = 'none'
+    el.style.transformOrigin = 'top center'
+    el.style.transition = 'transform 280ms cubic-bezier(0.5,0,0.75,0), border-radius 280ms, opacity 240ms ease-in 60ms'
+    el.style.borderRadius = '28px'
+    el.style.transform = `translate3d(0, ${window.innerHeight}px, 0) scale(0.92)`
+    el.style.opacity = '0.6'
+    window.setTimeout(() => onCloseRef.current(), 250)
+  }, [])
+
+  // Seret ke bawah dari mana saja (selama konten di posisi paling atas) = tutup. Pakai event sentuh
+  // native karena touchmove harus bisa di-preventDefault agar halaman tidak ikut tergulung.
+  const ready = now !== null && currentTrack !== null
+  useEffect(() => {
+    const el = dialogRef.current
+    if (!el) return
+    const CLOSE_PX = 120
+    let startX = 0
+    let startY = 0
+    let lastY = 0
+    let lastT = 0
+    let velocity = 0
+    let tracking = false
+    let dragging = false
+    let crossed = false
+
+    const blocked = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false
+      // Sheet/dialog bersarang (timer, crossfade) punya gesturnya sendiri.
+      const nested = target.closest('[role="dialog"]')
+      if (nested && nested !== el) return true
+      let node: HTMLElement | null = target
+      while (node) {
+        if (node.matches('input[type="range"]')) return true
+        if (node.scrollTop > 0) {
+          const oy = getComputedStyle(node).overflowY
+          if (oy === 'auto' || oy === 'scroll') return true
+        }
+        if (node === el) break
+        node = node.parentElement
+      }
+      return false
+    }
+
+    const springBack = () => {
+      el.style.transition = 'transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 380ms, opacity 200ms'
+      el.style.transform = ''
+      el.style.borderRadius = ''
+      el.style.opacity = ''
+    }
+
+    const onStart = (event: globalThis.TouchEvent) => {
+      const t = event.touches[0]
+      tracking = event.touches.length === 1 && !!t && !closingRef.current && !blocked(event.target)
+      dragging = false
+      crossed = false
+      if (!tracking || !t) return
+      startX = t.clientX
+      startY = t.clientY
+      lastY = t.clientY
+      lastT = event.timeStamp
+      velocity = 0
+    }
+
+    const onMove = (event: globalThis.TouchEvent) => {
+      const t = event.touches[0]
+      if (!tracking || !t) return
+      const dx = t.clientX - startX
+      const dy = t.clientY - startY
+      if (!dragging) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        // Hanya gerakan ke bawah yang dominan vertikal; selain itu biarkan scroll/gestur lain.
+        if (dy < 0 || Math.abs(dx) > Math.abs(dy) || el.scrollTop > 0) {
+          tracking = false
+          return
+        }
+        dragging = true
+        el.style.animation = 'none'
+        el.style.transformOrigin = 'top center'
+      }
+      if (event.cancelable) event.preventDefault()
+      const dt = event.timeStamp - lastT
+      if (dt > 0) velocity = (t.clientY - lastY) / dt
+      lastY = t.clientY
+      lastT = event.timeStamp
+      const pull = Math.max(0, dy - 8)
+      const p = Math.min(pull / 320, 1)
+      el.style.transition = 'none'
+      el.style.transform = `translate3d(0, ${pull}px, 0) scale(${1 - p * 0.07})`
+      el.style.borderRadius = `${Math.min(pull / 4, 28)}px`
+      const over = pull > CLOSE_PX
+      if (over !== crossed) {
+        crossed = over
+        if (over) navigator.vibrate?.(10)
+      }
+    }
+
+    const onEnd = (event: globalThis.TouchEvent, cancelled: boolean) => {
+      if (!tracking || !dragging) {
+        tracking = false
+        return
+      }
+      tracking = false
+      dragging = false
+      const t = event.changedTouches[0]
+      const pull = t ? t.clientY - startY - 8 : 0
+      if (!cancelled && (pull > CLOSE_PX || (velocity > 0.7 && pull > 40))) animateClose()
+      else springBack()
+    }
+    const onTouchEnd = (event: globalThis.TouchEvent) => onEnd(event, false)
+    const onTouchCancel = (event: globalThis.TouchEvent) => onEnd(event, true)
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchCancel)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchCancel)
+    }
+  }, [ready, animateClose])
+
+  // Fokus masuk ke dialog, scroll halaman dikunci, fokus dikembalikan saat ditutup.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const { overflow } = document.body.style
+    document.body.style.overflow = 'hidden'
+    closeRef.current?.focus()
+    return () => {
+      document.body.style.overflow = overflow
+      previous?.focus?.()
+    }
+  }, [])
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      animateClose()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const items = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+    if (items.length === 0) return
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
+  if (!now || !currentTrack) return null
+  const isError = status === 'error'
+  const mismatch = playbackInfo !== null && !looksLikeSameTrack(currentTrack, playbackInfo)
+
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Pemutar penuh"
+      onKeyDown={onKeyDown}
+      className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-y-auto bg-bg"
+      style={{ backgroundImage: `linear-gradient(180deg, ${now.cover.from}66 0%, #121212 70%)` }}
+    >
+      {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
+      />
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <header className="flex items-center justify-between">
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={animateClose}
+            aria-label="Tutup pemutar penuh"
+            className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-white/10 focus-ring"
+          >
+            <ChevronDown className="h-7 w-7" aria-hidden="true" />
+          </button>
+          <p className="truncate px-2 text-sm font-medium text-ink-muted">Sedang diputar</p>
+          <QueueButton onClick={onOpenQueue} size="lg" className="-mr-2 flex" />
+        </header>
+
+        {/* Slot tengah: sampul, atau (saat lirik dibuka) lirik tanpa latar, lebih lebar dan tinggi. */}
+        <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="flex flex-1 items-center justify-center py-4">
+          {showLyrics ? (
+            <div className="h-[min(46dvh,30rem)] min-h-[16rem] w-full animate-lyrics-up">
+              <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} />
+            </div>
+          ) : (
+            <div className="w-[min(100%,38dvh,26rem)] shadow-2xl shadow-black/50">
+              <CoverArt cover={now.cover} src={now.coverSrc} />
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4 sm:space-y-5">
+          <div className="min-w-0">
+            <h2 title={now.title} className="line-clamp-2 break-words font-display text-2xl font-bold leading-tight text-ink">
+              {now.title}
+            </h2>
+            <p className="mt-1 truncate text-base text-ink-muted">{now.artists}</p>
+            {now.album && <p className="mt-0.5 truncate text-sm text-ink-faint">{now.album}</p>}
+          </div>
+
+          {isError ? (
+            <PlayerError />
+          ) : (
+            <>
+              <SeekBar />
+              <p role="status" className="min-h-4 text-center text-xs text-ink-muted" aria-live="polite">
+                {status === 'playing' ? '' : STATUS_TEXT[status]}
+              </p>
+            </>
+          )}
+
+          <TransportControls size="lg" />
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => openTrackMenu(currentTrack)}
+              aria-haspopup="dialog"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-ink transition-colors hover:border-accent active:bg-white/10 focus-ring"
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden="true" />
+              Simpan
+            </button>
+            <SpotifyLink url={now.spotifyUrl} variant="button" />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowLyrics((value) => !value)}
+              aria-pressed={showLyrics}
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-5 text-sm font-semibold transition-colors active:bg-white/10 focus-ring ${
+                showLyrics ? 'border-accent text-accent' : 'border-white/20 text-ink hover:border-accent'
+              }`}
+            >
+              <Mic2 className="h-4 w-4" aria-hidden="true" />
+              Lirik
+            </button>
+            <CrossfadeButton onClick={() => setCrossfadeOpen(true)} />
+            <SleepTimerButton onClick={() => setTimerOpen(true)} />
+          </div>
+          {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
+          {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
+
+          {notice && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg bg-card/80 px-3 py-2 text-xs text-ink">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+              <p className="min-w-0 flex-1">{noticeMessage(notice)}</p>
+              <button type="button" onClick={dismissNotice} className="btn-secondary h-8 px-3 text-xs">
+                Tutup
+              </button>
+            </div>
+          )}
+
+          {mismatch && playbackInfo && (
+            <p className="text-center text-xs text-ink-muted">
+              Audio yang ditemukan server berbeda dari lagu yang dipilih: {playbackInfo.title}
+              {playbackInfo.artist ? ` — ${playbackInfo.artist}` : ''}.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
