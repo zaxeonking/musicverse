@@ -89,9 +89,11 @@ export function scoreCandidate(
   info: PlaybackInfo,
   viaLink: boolean,
   actualDuration: number | null = null,
+  ignoreTitle = false,
 ): number {
   const parts: Array<[number | null, number]> = [
-    [titleScore(wanted, info), 0.3],
+    // Unduhan: judul tidak dihitung (judul dari server sering beda tulisan dari judul playlist).
+    [ignoreTitle ? null : titleScore(wanted, info), 0.3],
     [artistScore(wanted, info), 0.2],
     [durationScore(wanted, info, actualDuration), actualDuration !== null ? 0.5 : 0.35],
   ]
@@ -136,7 +138,7 @@ export function versionMarkers(title: string, artists: string): Set<string> {
 
 /**
  * Pemeriksaan ketat untuk unduhan: null jika identitas audio dari server cocok dengan lagu di playlist,
- * selain itu pesan alasannya. Yang dibandingkan: ID lagu Spotify (jika kedua sisi punya), judul (kata per kata),
+ * selain itu pesan alasannya. Yang dibandingkan: ID lagu Spotify (jika kedua sisi punya),
  * artis (nama harus ditemukan), dan penanda versi (live/remix/instrumental/cover/...). Server yang tidak mengirim
  * judul atau artis tidak otomatis ditolak, tetapi harus lolos pemeriksaan durasi file yang ketat. Durasi diperiksa
  * terpisah dari berkas aslinya.
@@ -147,15 +149,13 @@ export function metadataMismatch(wanted: WantedTrack, info: PlaybackInfo): strin
   if (wantedId && gotId && wantedId !== gotId) {
     return 'Audio dari server berasal dari lagu Spotify yang berbeda dengan lagu di playlist.'
   }
-  const title = titleScore(wanted, info)
-  if (title !== null && title < 0.75) {
-    return `Judul audio dari server ("${info.title}") tidak cocok dengan lagu di playlist ("${wanted.title}").`
-  }
+  // Judul TIDAK dipakai untuk menolak: server sering menulis judul beda dari playlist (mis. "Ho - Kago Tea Time - Fuyu No Hi"
+  // vs "Fuyu No Hi"). Yang tetap wajib cocok: ID lagu Spotify, artis, penanda versi, dan durasi.
   // Artis hanya dipakai untuk MENOLAK jika server benar-benar menyebut artis (field `artist` terisi) dan ID lagu Spotify
   // tidak bisa dicocokkan. Server yang tidak mengirim nama artis, atau ID lagu yang sudah sama, tidak boleh membuat unduhan ditolak.
   const idMatches = Boolean(wantedId && gotId && wantedId === gotId)
   const artist = idMatches || !info.artist.trim() ? null : artistScore(wanted, info)
-  // Sebagian nama artis cocok sudah cukup (penulisan nama antar server sering berbeda); judul + ID + durasi tetap diperiksa ketat.
+  // Sebagian nama artis cocok sudah cukup (penulisan nama antar server sering berbeda); ID + durasi + versi tetap diperiksa ketat.
   const needed = 0.5
   if (artist !== null && artist < needed) {
     return `Artis audio dari server ("${info.artist}") tidak cocok dengan lagu di playlist ("${wanted.artists}").`

@@ -767,7 +767,7 @@ export async function fetchPlaybackInfo(
       }
     }
     const fit = durationFit(actual, expected)
-    const score = scoreCandidate(wanted, info, true, actual)
+    const score = scoreCandidate(wanted, info, true, actual, Boolean(options.strict))
     console.info(
       `[MusicVerse] Kandidat ${name}: skor ${score.toFixed(2)}, durasi audio ${actual?.toFixed(1) ?? '?'} dtk ` +
         `(playlist ${expected ?? '?'} dtk), judul "${info.title}", artis "${info.artist}"`,

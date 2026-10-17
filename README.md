@@ -274,7 +274,7 @@ Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 - Tombol **Pindahkan** di tab Unduhan memindahkan lagu ke playlist lain atau mengeluarkannya jadi *Lagu satuan*, tanpa menyentuh berkas.
 
 **Unduhan**
-- Verifikasi lebih ketat: ID Spotify, judul, artis, penanda versi (live, remix, dll.), durasi dua arah, ukuran berkas, dan laju bit. Berkas yang tidak lolos dibuang, lalu sumber lain dicoba.
+- Verifikasi ketat: ID Spotify, artis, penanda versi (live, remix, dll.), durasi dua arah, ukuran berkas, dan laju bit. **Judul boleh beda** dari playlist (tidak lagi membuat unduhan ditolak, mis. "Fuyu No Hi" vs "Ho - Kago Tea Time - Fuyu No Hi"). Berkas yang tidak lolos dibuang, lalu sumber lain dicoba.
 - Sinyal jelek: gagal ambil sumber, terputus, atau terpotong dicoba ulang sampai 6x (menunggu online bila offline), baru ditandai gagal.
 - Unduhan aman saat update APK: indeks dicocokkan dengan isi folder dan dipulihkan dari `meta`; berkas update APK dipindah ke folder `app-update/`.
 - Satu notifikasi progres untuk seluruh antrean ("Lagu 2 dari 12"), dengan izin notifikasi diminta otomatis di Android 13+.
@@ -324,7 +324,7 @@ Judul dan artis disimpan serta ditampilkan **persis seperti dari server**: tidak
 
 Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika semua gagal, unduhan ditandai gagal dan tidak ada berkas tersimpan):
 
-- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul cocok kata per kata (>= 0,75), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
+- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul **tidak dipakai untuk menolak** (v0.2.3: server sering menulis judul beda dari playlist), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
   dan **penanda versi** sama: live, remix/edit, instrumental/karaoke, akustik, cover, sped up/slowed/reverb/8D, lofi, demo.
 - **Durasi (dua arah):** durasi file harus dalam +-10 dtk atau 4% dari lagu di playlist (yang lebih besar), baik terlalu pendek maupun terlalu panjang.
   Diperiksa dua kali: dari sumber sebelum diunduh, lalu dari berkas lokal sesudah diunduh (dibaca ulang sampai 3x).
