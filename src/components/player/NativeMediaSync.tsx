@@ -4,6 +4,7 @@ import { MusicVerseNative, type NativeMediaActionEvent } from '../../native/musi
 import { composeNotificationCover } from '../../utils/notificationCover'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { stripArtistPrefix } from '../../utils/trackTitle'
+import { parseDurationText } from '../../hooks/useAudioPlayerController'
 
 /** Selisih (detik) antara posisi yang diperkirakan notifikasi dan posisi sebenarnya sebelum dilaporkan ulang. */
 const DRIFT_S = 1.5
@@ -94,7 +95,8 @@ export default function NativeMediaSync() {
       return
     }
     let cancelled = false
-    composeNotificationCover(coverUrl, fallbackCover(`${title}${album}`))
+    // Tanpa badge logo: di APK ikon aplikasi sudah ditampilkan sistem di sisi kiri sampul.
+    composeNotificationCover(coverUrl, fallbackCover(`${title}${album}`), false)
       .then(async (url) => {
         if (!url) return
         const base64 = await blobUrlToBase64(url)
@@ -127,7 +129,12 @@ export default function NativeMediaSync() {
       return
     }
 
-    const durationS = duration !== null && Number.isFinite(duration) && duration > 0 ? duration : 0
+    // Durasi audio kadang belum diketahui (metadata belum dimuat / stream): pakai durasi dari data lagu supaya
+    // bilah progres notifikasi tidak macet di 0.
+    const durationS =
+      duration !== null && Number.isFinite(duration) && duration > 0
+        ? duration
+        : (currentTrack ? parseDurationText(currentTrack.duration) : null) ?? 0
     const newTrack = sentTrack.current !== trackId
     const coverReady = cover !== null && cover.trackId === trackId ? cover.base64 : null
     const coverToSend = coverReady !== null && sentCover.current !== trackId ? coverReady : null
@@ -166,7 +173,7 @@ export default function NativeMediaSync() {
     }).catch((error: unknown) => {
       console.warn('[MusicVerse] Notifikasi native gagal diperbarui:', error)
     })
-  }, [trackId, title, artists, album, playing, hasNext, hasPrevious, currentTime, duration, cover])
+  }, [trackId, title, artists, album, playing, hasNext, hasPrevious, currentTime, duration, cover, currentTrack])
 
   return null
 }

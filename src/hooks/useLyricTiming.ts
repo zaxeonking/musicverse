@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { usePlaybackTime } from './useAudioPlayer'
+import { audioEngine } from '../services/audioEngine'
+import { usePlaybackTime, useAudioPlayer } from './useAudioPlayer'
 import type { LyricsResult, SyncedVersion } from '../services/lyricsApi'
 import { findActiveLine } from '../utils/lrc'
 import { readJson } from '../utils/safeStorage'
@@ -71,10 +72,46 @@ export function useLyricTiming(result: Extract<LyricsResult, { kind: 'synced' }>
   const mode: TimingMode = !known || diff <= TIMING_EXACT_S ? 'exact' : ratio >= SCALE_MIN && ratio <= SCALE_MAX ? 'scaled' : 'estimated'
   const lyricTime = mode === 'scaled' ? currentTime / ratio : currentTime
 
-  const active = useMemo(
+  const { status } = useAudioPlayer()
+  const playing = status === 'playing'
+
+  // Baris aktif menurut waktu dari event `timeupdate` (dipakai saat jeda / sebelum jam langsung berjalan).
+  const eventActive = useMemo(
     () => (mode === 'estimated' ? estimateActive(items, currentTime, audioDuration) : findActiveLine(lines, lyricTime + offset + LEAD_S)),
     [mode, items, lines, currentTime, lyricTime, offset, audioDuration],
   )
+
+  // Saat memutar: baca posisi audio langsung tiap frame, supaya lirik tidak telat menunggu `timeupdate`
+  // (±250 ms di browser, bisa lebih di WebView APK). State hanya berubah saat baris aktif berganti.
+  const [liveActive, setLiveActive] = useState<number | null>(null)
+  useEffect(() => {
+    if (!playing) {
+      setLiveActive(null)
+      return
+    }
+    let frame = 0
+    let last = Number.NaN
+    const tick = () => {
+      const t = audioEngine.getLiveTime()
+      if (t !== null) {
+        const idx =
+          mode === 'estimated'
+            ? estimateActive(items, t, audioDuration)
+            : findActiveLine(lines, (mode === 'scaled' ? t / ratio : t) + offset + LEAD_S)
+        if (idx !== last) {
+          last = idx
+          setLiveActive(idx)
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(frame)
+      setLiveActive(null)
+    }
+  }, [playing, mode, items, lines, ratio, offset, audioDuration])
+  const active = liveActive ?? eventActive
 
   return { items, active, mode, offset, setOffset, ratio, lyricTime, lyricsDuration, audioDuration, seekable, storageKey }
 }

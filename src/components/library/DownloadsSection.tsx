@@ -1,17 +1,24 @@
-import { AlertCircle, Download, Loader2, Play, Trash2, X } from 'lucide-react'
+import { AlertCircle, Download, Loader2, Pause, Play, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { usePlayerUiActions } from '../../context/PlayerUiContext'
+import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useLongPress } from '../../hooks/useLongPress'
 import { cancelQueued, dismissTransferError } from '../../native/downloads'
 import {
   coverSrcFor,
   removeDownload,
   toPlaylistTrack,
   totalBytes,
+  trackKey,
   useOffline,
   type DownloadedTrack,
   type Transfer,
 } from '../../native/offline'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { getRowActivity } from '../../utils/playerStatus'
+import type { RowActivity } from '../../types/player'
+import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
@@ -35,7 +42,20 @@ function transferLabel(transfer: Transfer): string {
   }
 }
 
-function DownloadedRow({ item, onPlay }: { item: DownloadedTrack; onPlay: () => void }) {
+interface DownloadedRowProps {
+  item: DownloadedTrack
+  track: PlaylistTrack
+  selected: boolean
+  /** Status playback jika ini lagu aktif di pemutar; 'none' untuk lagu lain. */
+  activity: RowActivity
+  onSelect: () => void
+  /** Memutar lagu ini dari daftar unduhan. */
+  onPlay: () => void
+  /** Jeda / lanjutkan lagu aktif. */
+  onToggle: () => void
+}
+
+function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onToggle }: DownloadedRowProps) {
   const [cover, setCover] = useState<string | undefined>(item.cover || undefined)
   useEffect(() => {
     let cancelled = false
@@ -47,21 +67,75 @@ function DownloadedRow({ item, onPlay }: { item: DownloadedTrack; onPlay: () => 
     }
   }, [item])
   const fallback = useMemo(() => fallbackCover(`${item.title}${item.album}`), [item.title, item.album])
+  const { openTrackMenu } = useTrackMenu()
+  const { openFullPlayer } = usePlayerUiActions()
+  // Tahan lama: menu lagu yang sama dengan di playlist (tambah ke playlist, antrean, hapus unduhan, dst.).
+  // Lagu unduhan berdiri sendiri, jadi boleh dimasukkan ke antrean mana pun (seperti hasil Cari).
+  const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true }))
+  const isCurrent = activity !== 'none'
+  const highlighted = selected || isCurrent
+  const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
+  const playLabel =
+    activity === 'playing'
+      ? `Jeda ${item.title}`
+      : activity === 'loading'
+        ? `Memuat ${item.title}`
+        : activity === 'paused'
+          ? `Lanjutkan ${item.title}`
+          : `Putar ${item.title}`
+
   return (
-    <li className="flex items-center gap-3 rounded-md px-2 py-2">
-      <button type="button" onClick={onPlay} aria-label={`Putar ${item.title}`} className="flex min-w-0 flex-1 items-center gap-3 text-left focus-ring">
-        <span className="w-12 shrink-0">
-          <CoverArt cover={fallback} src={cover} />
+    <li
+      aria-current={isCurrent ? 'true' : undefined}
+      onClick={() => {
+        onSelect()
+        // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh, sama seperti baris playlist.
+        if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay()
+        openFullPlayer()
+      }}
+      {...longPress}
+      className={`flex select-none cursor-pointer items-center gap-3 rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] ${
+        highlighted ? 'bg-raised shadow-now' : 'hover:bg-card active:bg-raised'
+      }`}
+    >
+      <span className="w-12 shrink-0">
+        <CoverArt cover={fallback} src={cover} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-base font-medium ${highlighted ? 'text-accent' : 'text-ink'}`}>{item.title}</span>
+        <span className="block truncate text-sm text-ink-muted">
+          {item.artists} · {formatBytes(item.bytes)}
+          {activity === 'error' && <span className="text-danger"> · Gagal diputar</span>}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-base font-medium text-ink">{item.title}</span>
-          <span className="block truncate text-sm text-ink-muted">
-            {item.artists} · {formatBytes(item.bytes)}
-          </span>
-        </span>
-        <Play className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
+      </span>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          if (activity === 'playing' || activity === 'loading' || activity === 'paused') onToggle()
+          else onPlay()
+        }}
+        aria-label={playLabel}
+        aria-busy={activity === 'loading'}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
+          highlighted ? 'text-accent' : 'text-ink-muted'
+        }`}
+      >
+        <Icon
+          className={`h-5 w-5 ${activity === 'loading' ? 'animate-spin motion-reduce:animate-none' : ''}`}
+          fill={activity === 'loading' ? 'none' : 'currentColor'}
+          aria-hidden="true"
+        />
       </button>
-      <button type="button" onClick={() => void removeDownload(item.key)} aria-label={`Hapus unduhan ${item.title}`} className="icon-btn shrink-0 text-ink-muted">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          void removeDownload(item.key)
+        }}
+        aria-label={`Hapus unduhan ${item.title}`}
+        className="icon-btn shrink-0 text-ink-muted"
+      >
         <Trash2 className="h-5 w-5" aria-hidden="true" />
       </button>
     </li>
@@ -74,6 +148,10 @@ export default function DownloadsSection() {
   const player = useAudioPlayer()
   const tracks = useMemo(() => items.map(toPlaylistTrack), [items])
   const pending = [...transfers.values()]
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  // Lagu yang sedang diputar dikenali lewat kunci yang sama dengan unduhan (juga bila diputar dari playlist lain).
+  const currentKey = player.currentTrack ? trackKey(player.currentTrack) : null
+  const currentActivity = getRowActivity(player.status)
 
   return (
     <section aria-label="Unduhan">
@@ -140,7 +218,19 @@ export default function DownloadsSection() {
       ) : (
         <ul className="-mx-2">
           {items.map((item, index) => (
-            <DownloadedRow key={item.key} item={item} onPlay={() => player.playList(tracks, index)} />
+            <DownloadedRow
+              key={item.key}
+              item={item}
+              track={tracks[index]}
+              selected={selectedKey === item.key}
+              activity={currentKey === item.key ? currentActivity : 'none'}
+              onSelect={() => setSelectedKey(item.key)}
+              onPlay={() => {
+                setSelectedKey(item.key)
+                player.playList(tracks, index)
+              }}
+              onToggle={player.togglePlayPause}
+            />
           ))}
         </ul>
       )}

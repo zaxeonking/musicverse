@@ -17,6 +17,7 @@ import { isNativeApp } from './platform'
 
 export const DOWNLOAD_DIR = 'download'
 export const COVER_DIR = `${DOWNLOAD_DIR}/covers`
+export const LYRICS_DIR = `${DOWNLOAD_DIR}/lyrics`
 const INDEX_KEY = 'musicverse:downloads:v1'
 /** Berkas lebih kecil dari ini dianggap rusak (mis. halaman error HTML yang tersimpan sebagai audio). */
 export const MIN_VALID_BYTES = 100 * 1024
@@ -208,7 +209,11 @@ export async function resolveOfflinePlayback(track: {
 export async function removeDownload(key: string): Promise<void> {
   const item = state.items.find((entry) => entry.key === key)
   if (!item) return
-  const targets = [`${DOWNLOAD_DIR}/${item.fileName}`, ...(item.coverFileName ? [`${COVER_DIR}/${item.coverFileName}`] : [])]
+  const targets = [
+    `${DOWNLOAD_DIR}/${item.fileName}`,
+    ...(item.coverFileName ? [`${COVER_DIR}/${item.coverFileName}`] : []),
+    `${LYRICS_DIR}/${item.key}.json`,
+  ]
   for (const path of targets) {
     try {
       await Filesystem.deleteFile({ path, directory: Directory.External })

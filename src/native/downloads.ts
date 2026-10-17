@@ -3,6 +3,7 @@ import { fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import type { PlaylistTrack } from '../types/spotify'
 import { isSafeHttpUrl } from '../utils/spotifyUrl'
 import { MusicVerseNative } from './musicVerseNative'
+import { fetchAndSaveLyrics } from './offlineLyrics'
 import {
   COVER_DIR,
   DOWNLOAD_DIR,
@@ -170,6 +171,9 @@ async function downloadOne({ track, key }: Job): Promise<void> {
   }
   setItems([entry, ...getOfflineState().items.filter((item) => item.key !== key)])
   setTransfer(key, null)
+  // Lirik ikut disimpan supaya tampil offline. Usaha terbaik di latar belakang; gagal tidak memengaruhi unduhan
+  // (nanti dicoba lagi oleh backfill / saat lirik dibuka).
+  void fetchAndSaveLyrics(track, key)
 }
 
 function finishSession(): void {

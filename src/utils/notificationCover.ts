@@ -107,10 +107,11 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
 
 /**
  * Membuat sampul notifikasi: sampul lagu + lingkaran kecil logo MusicVerse di pojok kanan bawah.
+ * Badge bisa dimatikan (`withBadge = false`), mis. di APK yang ikon aplikasinya sudah ditampilkan sistem.
  * Mengembalikan blob URL (panggil `URL.revokeObjectURL` saat tak dipakai), atau null jika gagal.
  * Jika gambar sampul tidak bisa dimuat dengan CORS, dipakai gradient `cover` sebagai cadangan (logo tetap tampil).
  */
-export async function composeNotificationCover(coverUrl: string | undefined, cover: Cover): Promise<string | null> {
+export async function composeNotificationCover(coverUrl: string | undefined, cover: Cover, withBadge = true): Promise<string | null> {
   if (typeof document === 'undefined') return null
   const canvas = document.createElement('canvas')
   canvas.width = SIZE
@@ -128,7 +129,7 @@ export async function composeNotificationCover(coverUrl: string | undefined, cov
     }
   }
   if (!drewImage) drawGradientCover(ctx, cover)
-  drawLogoBadge(ctx)
+  if (withBadge) drawLogoBadge(ctx)
 
   const blob = await toBlob(canvas)
   return blob ? URL.createObjectURL(blob) : null

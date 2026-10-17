@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import ApkPromo from './ApkPromo'
+import OfflineBanner from './OfflineBanner'
 import UpdateBanner from './UpdateBanner'
 import PlayerDock from '../player/PlayerDock'
 import BottomNav from './BottomNav'
@@ -43,6 +44,7 @@ export default function AppShell() {
       <Sidebar />
       <div className="flex h-full min-w-0 flex-1 flex-col lg:ml-sidebar">
         <MobileHeader />
+        <OfflineBanner />
         <ApkPromo />
         <UpdateBanner />
         <main

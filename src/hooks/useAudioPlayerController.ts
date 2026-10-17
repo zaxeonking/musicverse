@@ -145,7 +145,7 @@ const POSITION_SAVE_INTERVAL_MS = 5_000
 const RESUME_END_MARGIN_S = 3
 
 /** "3:45" / "1:02:10" -> detik; null jika formatnya tidak dikenali. */
-function parseDurationText(text: string): number | null {
+export function parseDurationText(text: string): number | null {
   if (!/^\d{1,3}(:\d{1,2}){1,2}$/.test(text.trim())) return null
   return text
     .trim()

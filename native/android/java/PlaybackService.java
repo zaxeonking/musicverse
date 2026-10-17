@@ -15,7 +15,9 @@ import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 
@@ -94,6 +96,20 @@ public class PlaybackService extends Service {
   private final State current = new State();
   private Bitmap defaultCover;
   private boolean foreground = false;
+  /** Waktu (elapsedRealtime) saat positionMs terakhir dilaporkan JS; dasar penghitungan posisi berjalan. */
+  private long positionAt = 0;
+  private final Handler handler = new Handler(Looper.getMainLooper());
+  /**
+   * Beberapa ROM (ColorOS/Realme, MIUI, dll.) tidak menggerakkan bilah progres sendiri dari kecepatan 1x,
+   * jadi bilahnya diam di posisi terakhir. Selama memutar, posisi dihitung ulang dan didorong ke sesi tiap detik.
+   */
+  private final Runnable ticker = new Runnable() {
+    @Override public void run() {
+      if (!current.playing || session == null) return;
+      pushPlaybackState();
+      handler.postDelayed(this, 1000);
+    }
+  };
 
   @Override
   public void onCreate() {
@@ -147,6 +163,7 @@ public class PlaybackService extends Service {
 
   @Override
   public void onDestroy() {
+    handler.removeCallbacks(ticker);
     instance = null;
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     if (session != null) {
@@ -168,6 +185,7 @@ public class PlaybackService extends Service {
     current.album = next.album;
     current.durationMs = next.durationMs;
     current.positionMs = next.positionMs;
+    positionAt = SystemClock.elapsedRealtime();
     current.playing = next.playing;
     current.hasNext = next.hasNext;
     current.hasPrevious = next.hasPrevious;
@@ -175,6 +193,8 @@ public class PlaybackService extends Service {
     if (next.cover != null) current.cover = next.cover;
 
     updateSession();
+    handler.removeCallbacks(ticker);
+    if (current.playing) handler.postDelayed(ticker, 1000);
     Notification notification = buildNotification();
     if (current.playing) {
       if (wakeLock != null && !wakeLock.isHeld()) wakeLock.acquire();
@@ -201,6 +221,7 @@ public class PlaybackService extends Service {
   }
 
   void shutdown() {
+    handler.removeCallbacks(ticker);
     stopForeground(true);
     foreground = false;
     stopSelf();
@@ -238,6 +259,19 @@ public class PlaybackService extends Service {
     if (current.durationMs > 0) meta.putLong(MediaMetadata.METADATA_KEY_DURATION, current.durationMs);
     session.setMetadata(meta.build());
 
+    pushPlaybackState();
+  }
+
+  /** Posisi saat ini: posisi terakhir dari JS + waktu berjalan sejak itu (hanya saat memutar), dijepit ke durasi. */
+  private long livePosition() {
+    long pos = current.positionMs;
+    if (current.playing) pos += SystemClock.elapsedRealtime() - positionAt;
+    if (current.durationMs > 0 && pos > current.durationMs) pos = current.durationMs;
+    return Math.max(0, pos);
+  }
+
+  private void pushPlaybackState() {
+    if (session == null) return;
     long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP;
     if (current.durationMs > 0) actions |= PlaybackState.ACTION_SEEK_TO;
     if (current.hasNext) actions |= PlaybackState.ACTION_SKIP_TO_NEXT;
@@ -245,7 +279,7 @@ public class PlaybackService extends Service {
     session.setPlaybackState(new PlaybackState.Builder()
         .setActions(actions)
         .setState(current.playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-            current.positionMs, current.playing ? 1f : 0f, SystemClock.elapsedRealtime())
+            livePosition(), current.playing ? 1f : 0f, SystemClock.elapsedRealtime())
         .build());
   }
 

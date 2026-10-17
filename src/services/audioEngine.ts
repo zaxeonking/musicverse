@@ -544,6 +544,16 @@ class AudioEngine {
   }
 
   /**
+   * Posisi putar saat ini langsung dari elemen audio (tidak menunggu event `timeupdate` yang hanya ±4x/detik,
+   * dan di WebView Android bisa lebih jarang). Dipakai lirik agar sorotan baris tidak telat. null = tak ada audio aktif.
+   */
+  getLiveTime(): number | null {
+    const audio = this.audio
+    if (!audio || this.activeSource === null) return null
+    return Number.isFinite(audio.currentTime) ? audio.currentTime : null
+  }
+
+  /**
    * Memindahkan posisi putar dan mengembalikan posisi yang benar-benar dipakai. Mengembalikan
    * null (tanpa mengubah apa pun) jika tidak ada audio aktif atau audio tidak mendukung seek.
    * Nilai dijepit ke rentang yang bisa di-seek.
