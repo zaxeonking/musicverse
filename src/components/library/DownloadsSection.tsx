@@ -1,11 +1,12 @@
-import { AlertCircle, Battery, BatteryCharging, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, RotateCw, Trash2, Wifi, WifiOff, X } from 'lucide-react'
+import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, RotateCw, Settings, Trash2, WifiOff, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useLongPress } from '../../hooks/useLongPress'
-import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, setChargingOnlyEnabled, setWifiOnlyEnabled } from '../../native/downloads'
+import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, downloadNow, holdDownload, resumeHeld } from '../../native/downloads'
 import {
   coverSrcFor,
   removeDownload,
@@ -31,50 +32,21 @@ function formatBytes(bytes: number): string {
 }
 
 function transferLabel(transfer: Transfer, paused: boolean, heldText: string | null): string {
+  if (transfer.held && transfer.status === 'queued') return 'Ditahan'
+  if (transfer.held && transfer.status === 'resolving') return 'Menyiapkan… lalu ditahan'
   switch (transfer.status) {
     case 'queued':
       return paused ? 'Dijeda' : heldText ? `Menunggu ${heldText}` : 'Menunggu antrean'
     case 'resolving':
-      return 'Menyiapkan…'
-    case 'downloading':
-      if (transfer.percent !== null) return `Mengunduh ${transfer.percent}%`
-      return transfer.bytes ? `Mengunduh… ${formatBytes(transfer.bytes)}` : 'Mengunduh…'
+      return paused && !transfer.forced ? 'Menyiapkan… lalu dijeda' : 'Menyiapkan…'
+    case 'downloading': {
+      const note = paused && !transfer.forced ? ' · dijeda setelah lagu ini' : ''
+      if (transfer.percent !== null) return `Mengunduh ${transfer.percent}%${note}`
+      return `${transfer.bytes ? `Mengunduh… ${formatBytes(transfer.bytes)}` : 'Mengunduh…'}${note}`
+    }
     case 'error':
       return transfer.message ?? 'Unduhan gagal'
   }
-}
-
-function SettingSwitch({
-  checked,
-  onChange,
-  icon: Icon,
-  label,
-  hint,
-}: {
-  checked: boolean
-  onChange: () => void
-  icon: typeof Wifi
-  label: string
-  hint: string
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className="flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 text-left text-sm text-ink focus-ring"
-    >
-      <Icon className={`h-4 w-4 shrink-0 ${checked ? 'text-accent' : 'text-ink-muted'}`} aria-hidden="true" />
-      <span className="min-w-0 flex-1">
-        <span className="block">{label}</span>
-        <span className="block text-xs text-ink-muted">{hint}</span>
-      </span>
-      <span aria-hidden="true" className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-white/20'}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${checked ? 'left-[1.125rem]' : 'left-0.5'}`} />
-      </span>
-    </button>
-  )
 }
 
 interface DownloadedRowProps {
@@ -202,7 +174,7 @@ export default function DownloadsSection() {
   const tracks = useMemo(() => items.map(toPlaylistTrack), [items])
   const pending = [...transfers.values()]
   const failed = pending.filter((t) => t.status === 'error').length
-  const waiting = pending.filter((t) => t.status === 'queued').length
+  const waiting = pending.filter((t) => t.status === 'queued' && !t.held).length
   const working = pending.some((t) => t.status === 'resolving' || t.status === 'downloading')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   // Lagu yang sedang diputar dikenali lewat kunci yang sama dengan unduhan (juga bila diputar dari playlist lain).
@@ -311,22 +283,12 @@ export default function DownloadsSection() {
         </p>
       </header>
 
-      <div className="mb-3 space-y-2">
-        <SettingSwitch
-          checked={wifiOnly}
-          onChange={() => setWifiOnlyEnabled(!wifiOnly)}
-          icon={wifiOnly ? Wifi : WifiOff}
-          label="Unduh hanya lewat Wi-Fi"
-          hint="Antrean berhenti saat memakai data seluler dan lanjut sendiri saat Wi-Fi tersambung."
-        />
-        <SettingSwitch
-          checked={chargingOnly}
-          onChange={() => setChargingOnlyEnabled(!chargingOnly)}
-          icon={chargingOnly ? BatteryCharging : Battery}
-          label="Unduh hanya saat dicas"
-          hint="Antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok."
-        />
-      </div>
+      <Link to="/settings/downloads" className="mb-3 flex items-center gap-2 rounded-lg bg-card px-4 py-2.5 text-xs text-ink-muted focus-ring">
+        <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">
+          Pengaturan unduhan: {wifiOnly || chargingOnly ? [wifiOnly && 'hanya Wi-Fi', chargingOnly && 'hanya saat dicas'].filter(Boolean).join(', ') : 'tanpa syarat'}
+        </span>
+      </Link>
 
       {(waiting > 0 || failed > 0) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -376,6 +338,8 @@ export default function DownloadsSection() {
               <li key={transfer.key} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
                 {transfer.status === 'error' ? (
                   <AlertCircle className="h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+                ) : transfer.status === 'queued' && transfer.held ? (
+                  <Pause className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
                 ) : transfer.status === 'queued' && paused ? (
                   <Pause className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
                 ) : transfer.status === 'queued' && blocked ? (
@@ -417,6 +381,28 @@ export default function DownloadsSection() {
                     className="icon-btn -my-2"
                   >
                     <RotateCw className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+                {(transfer.status === 'queued' || transfer.status === 'resolving') && !transfer.held && (
+                  <button
+                    type="button"
+                    aria-label="Tahan lagu ini"
+                    title="Tahan lagu ini (yang lain jalan terus)"
+                    onClick={() => holdDownload(transfer.key)}
+                    className="icon-btn -my-2"
+                  >
+                    <Pause className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
+                {transfer.status === 'queued' && (
+                  <button
+                    type="button"
+                    aria-label={transfer.held ? 'Lanjutkan lagu ini' : 'Unduh lagu ini sekarang'}
+                    title={transfer.held ? 'Lanjutkan lagu ini' : 'Unduh lagu ini sekarang'}
+                    onClick={() => (transfer.held ? resumeHeld(transfer.key) : downloadNow(transfer.key))}
+                    className="icon-btn -my-2"
+                  >
+                    <Play className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
                 {(transfer.status === 'queued' || transfer.status === 'error') && (

@@ -45,6 +45,22 @@ import { readJson, removeKey, writeJson } from '../utils/safeStorage'
 interface Job {
   track: PlaylistTrack
   key: string
+  /** Dipilih pengguna untuk diunduh sekarang: abaikan jeda dan syarat Wi-Fi/cas. */
+  forced?: boolean
+  /** Ditahan satu per satu oleh pengguna: dilewati antrean sampai dilanjutkan. */
+  held?: boolean
+}
+
+/** Dilempar di titik aman saat antrean dijeda; lagunya dikembalikan ke depan antrean, BUKAN dihitung gagal. */
+class PauseSignal extends Error {
+  constructor() {
+    super('Dijeda')
+    this.name = 'PauseSignal'
+  }
+}
+
+function throwIfPaused(job: Job): void {
+  if (!job.forced && (job.held || getOfflineState().paused)) throw new PauseSignal()
 }
 
 const queue: Job[] = []
@@ -138,7 +154,7 @@ function heldReason(): string {
 /** Melanjutkan antrean otomatis bila tidak ada lagi yang menahannya (jeda manual atau syarat belum terpenuhi). */
 function maybeAutoStart(): void {
   const s = getOfflineState()
-  if (queue.length > 0 && !running && !s.paused && !isHeldByConditions()) void pump()
+  if (queue.some((j) => !j.held) && !running && !s.paused && !isHeldByConditions()) void pump()
 }
 
 let netTimer = 0
@@ -158,12 +174,20 @@ function updateWatch(): void {
 let notifyAt = 0
 let notifyPermissionAsked = false
 
-function notify(title: string, text: string, percent: number | null, done = false, force = false): void {
+function notify(
+  title: string,
+  text: string,
+  percent: number | null,
+  done = false,
+  force = false,
+  waiting = false,
+  action?: 'pause' | 'resume',
+): void {
   if (!isNativeApp()) return
   const now = Date.now()
   if (!force && now - notifyAt < 600) return
   notifyAt = now
-  MusicVerseNative.showDownloadProgress({ title, text, percent, done }).catch(() => {
+  MusicVerseNative.showDownloadProgress({ title, text, percent, done, waiting, action }).catch(() => {
     // Izin notifikasi ditolak / plugin tidak ada: progres tetap tampil di dalam aplikasi.
   })
 }
@@ -188,8 +212,9 @@ function installProgressListener(): void {
       percent,
       bytes: event.bytes,
       total: known ? event.contentLength : undefined,
+      forced: getOfflineState().transfers.get(active.key)?.forced,
     })
-    notify(active.title, sessionLine(), percent)
+    notify(active.title, sessionLine(), percent, false, false, false, 'pause')
   })
 }
 
@@ -303,10 +328,20 @@ const BAD_SIGNAL_TEXT = 'Sinyal jelek, unduhan gagal. Coba lagi saat koneksi leb
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 
 /** Menunggu jeda coba ulang; bila perangkat offline, menunggu sampai online lagi (maks. 1 menit). */
-async function waitBeforeRetry(attempt: number): Promise<void> {
-  await sleep(Math.min(NET_RETRY_MAX_DELAY_MS, NET_RETRY_DELAY_MS * attempt))
+/** Tidur yang memeriksa jeda tiap 250 ms, supaya lagu yang sedang menunggu/mengulang ikut berhenti saat dijeda. */
+async function pausableSleep(ms: number, job: Job): Promise<void> {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    throwIfPaused(job)
+    await sleep(Math.min(250, Math.max(0, end - Date.now())))
+  }
+  throwIfPaused(job)
+}
+
+async function waitBeforeRetry(attempt: number, job: Job): Promise<void> {
+  await pausableSleep(Math.min(NET_RETRY_MAX_DELAY_MS, NET_RETRY_DELAY_MS * attempt), job)
   const until = Date.now() + OFFLINE_WAIT_MS
-  while (typeof navigator !== 'undefined' && navigator.onLine === false && Date.now() < until) await sleep(1_000)
+  while (typeof navigator !== 'undefined' && navigator.onLine === false && Date.now() < until) await pausableSleep(1_000, job)
 }
 
 /** Kegagalan yang bukan gangguan sesaat (lagu tanpa audio / hanya klip / dibatalkan): tidak dicoba ulang. */
@@ -315,10 +350,11 @@ function isTransientApiError(error: unknown): boolean {
   return error.code !== 'no_audio' && error.code !== 'clip_only' && error.code !== 'aborted'
 }
 
-async function downloadOne({ track, key }: Job): Promise<void> {
+async function downloadOne(job: Job): Promise<void> {
+  const { track, key, forced } = job
   const title = track.title
-  setTransfer(key, { key, title, status: 'resolving', percent: null })
-  notify(title, sessionLine(), null, false, true)
+  setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
+  notify(title, sessionLine(), null, false, true, false, 'pause')
   await ensureDir(DOWNLOAD_DIR)
   await ensureDir(COVER_DIR)
 
@@ -336,8 +372,9 @@ async function downloadOne({ track, key }: Job): Promise<void> {
   let info: PlaybackInfo
   let size = 0
   for (;;) {
+    throwIfPaused(job)
     await safeDelete(partPath)
-    setTransfer(key, { key, title, status: 'resolving', percent: null })
+    setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
     try {
       info = await fetchPlaybackInfo(track, { strict: true, avoid })
     } catch (error) {
@@ -347,19 +384,21 @@ async function downloadOne({ track, key }: Job): Promise<void> {
         console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
         if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
         avoid.length = 0
-        await sleep(MISMATCH_RETRY_DELAY_MS)
+        await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
         continue
       }
       if (!isTransientApiError(error)) throw error
       netFailures += 1
       console.warn(`[MusicVerse] Gagal mengambil sumber unduhan (percobaan ${netFailures}/${NET_RETRY_MAX}):`, error)
       if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
-      await waitBeforeRetry(netFailures)
+      await waitBeforeRetry(netFailures, job)
       continue
     }
     if (!isSafeHttpUrl(info.audioUrl)) throw new Error('Sumber audio tidak valid.')
+    // Titik aman terakhir sebelum unduhan berkas (yang tidak bisa dihentikan di tengah): bila dijeda, berhenti di sini.
+    throwIfPaused(job)
 
-    setTransfer(key, { key, title, status: 'downloading', percent: null })
+    setTransfer(key, { key, title, status: 'downloading', percent: null, forced })
     const active = { key, title, total: 0 }
     activeUrls.set(info.audioUrl, active)
     let downloadError: unknown = null
@@ -382,7 +421,7 @@ async function downloadOne({ track, key }: Job): Promise<void> {
       console.warn(`[MusicVerse] Unduhan terputus (percobaan ${netFailures}/${NET_RETRY_MAX}):`, downloadError)
       await safeDelete(partPath)
       if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
-      await waitBeforeRetry(netFailures)
+      await waitBeforeRetry(netFailures, job)
       continue
     }
 
@@ -399,7 +438,7 @@ async function downloadOne({ track, key }: Job): Promise<void> {
     if (problem.retrySame) {
       netFailures += 1
       if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
-      await waitBeforeRetry(netFailures)
+      await waitBeforeRetry(netFailures, job)
       continue
     }
     // Berkas tidak cocok: singkirkan sumber itu dan coba sumber lain. Bila semua sudah dicoba, ulangi dari awal
@@ -410,7 +449,7 @@ async function downloadOne({ track, key }: Job): Promise<void> {
       mismatchRounds += 1
       if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(problem.reason)
       avoid.length = 0
-      await sleep(MISMATCH_RETRY_DELAY_MS)
+      await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
     }
   }
 
@@ -474,8 +513,16 @@ async function pump(): Promise<void> {
   installProgressListener()
   try {
     // Dijeda atau (mode hanya Wi-Fi) sedang seluler: lagu yang sedang berjalan diselesaikan dulu, berikutnya tidak dimulai.
-    while (!getOfflineState().paused && !(await conditionsBlocked())) {
-      const job = queue.shift()
+    for (;;) {
+      // Lagu yang dipilih manual jalan walau dijeda dan walau syarat Wi-Fi/cas belum terpenuhi.
+      const wantsForced = queue.some((j) => j.forced)
+      // Lagu yang ditahan satu per satu dilewati; bila hanya tersisa yang ditahan, sesi selesai.
+      if (!wantsForced && (getOfflineState().paused || !queue.some((j) => !j.held))) break
+      if (!wantsForced && (await conditionsBlocked())) break
+      const forcedIndex = queue.findIndex((j) => j.forced)
+      const runnableIndex = queue.findIndex((j) => !j.held)
+      const index = forcedIndex >= 0 ? forcedIndex : getOfflineState().paused ? -1 : runnableIndex
+      const job = index >= 0 ? queue.splice(index, 1)[0] : undefined
       if (!job) break
       current = job
       try {
@@ -483,10 +530,16 @@ async function pump(): Promise<void> {
         sessionDone += 1
         failedJobs.delete(job.key)
       } catch (error) {
-        console.warn('[MusicVerse] Unduhan gagal:', error)
-        sessionFailed += 1
-        failedJobs.set(job.key, { job, epoch: sessionEpoch })
-        setTransfer(job.key, { key: job.key, title: job.track.title, status: 'error', percent: null, message: errorText(error) })
+        if (error instanceof PauseSignal) {
+          // Dijeda di titik aman: kembali ke depan antrean, bukan gagal.
+          queue.unshift({ track: job.track, key: job.key, held: job.held })
+          setTransfer(job.key, { key: job.key, title: job.track.title, status: 'queued', percent: null, held: job.held })
+        } else {
+          console.warn('[MusicVerse] Unduhan gagal:', error)
+          sessionFailed += 1
+          failedJobs.set(job.key, { job, epoch: sessionEpoch })
+          setTransfer(job.key, { key: job.key, title: job.track.title, status: 'error', percent: null, message: errorText(error) })
+        }
       }
       current = null
       persistQueue()
@@ -496,10 +549,10 @@ async function pump(): Promise<void> {
     current = null
     const s = getOfflineState()
     if (queue.length > 0 && s.paused) {
-      notify('Unduhan dijeda', `${queue.length} lagu menunggu. Buka Unduhan untuk melanjutkan.`, null, true, true)
+      notify('Unduhan dijeda', `${queue.length} lagu menunggu. Buka Unduhan untuk melanjutkan.`, null, true, true, false, 'resume')
     } else if (queue.length > 0 && isHeldByConditions()) {
       const why = heldReason()
-      notify(`Menunggu ${why}`, `${queue.length} lagu menunggu. Lanjut otomatis saat ${why === 'cas' ? 'HP dicas' : why === 'Wi-Fi' ? 'tersambung Wi-Fi' : 'tersambung Wi-Fi dan dicas'}.`, null, true, true)
+      notify(`Menunggu ${why}`, `${queue.length} lagu menunggu. Lanjut otomatis saat ${why === 'cas' ? 'HP dicas' : why === 'Wi-Fi' ? 'tersambung Wi-Fi' : 'tersambung Wi-Fi dan dicas'}.`, null, false, true, true)
     } else {
       // Antrean habis: jeda tidak boleh "menempel" ke unduhan berikutnya.
       setPaused(false)
@@ -636,6 +689,43 @@ export function resumeDownloads(): void {
   void pump()
 }
 
+/**
+ * Menahan SATU lagu (yang lain jalan terus). Lagu yang menunggu dilewati antrean; lagu yang masih menyiapkan berhenti di
+ * titik aman. Lagu yang sudah mengunduh berkas tidak bisa dihentikan di tengah (plugin Filesystem tidak punya pembatalan).
+ */
+export function holdDownload(key: string): boolean {
+  const queued = queue.find((j) => j.key === key)
+  const target = queued ?? (current?.key === key ? current : undefined)
+  if (!target) return false
+  const transfer = getOfflineState().transfers.get(key)
+  if (transfer?.status === 'downloading') return false
+  target.held = true
+  if (transfer) setTransfer(key, { ...transfer, held: true })
+  return true
+}
+
+/** Melanjutkan satu lagu yang ditahan: kembali ke antrean biasa. */
+export function resumeHeld(key: string): boolean {
+  const job = queue.find((j) => j.key === key)
+  if (!job) return false
+  job.held = false
+  const transfer = getOfflineState().transfers.get(key)
+  if (transfer) setTransfer(key, { ...transfer, held: false })
+  void pump()
+  return true
+}
+
+/** Mengunduh lagu pilihan sekarang juga: jalan walau antrean dijeda atau syarat Wi-Fi/cas belum terpenuhi. */
+export function downloadNow(key: string): boolean {
+  const job = queue.find((j) => j.key === key)
+  if (!job) return false
+  job.forced = true
+  job.held = false
+  setTransfer(key, { ...(getOfflineState().transfers.get(key) ?? { key, status: 'queued' as const, percent: null }), forced: true, held: false })
+  void pump()
+  return true
+}
+
 /** Menyalakan/mematikan "Unduh hanya lewat Wi-Fi" (disimpan di perangkat). */
 export function setWifiOnlyEnabled(on: boolean): void {
   setWifiOnly(on)
@@ -666,6 +756,13 @@ function saveSettings(): void {
  */
 export function initDownloads(): void {
   if (!isNativeApp()) return
+  // Tombol Jeda / Lanjutkan di notifikasi unduhan.
+  void MusicVerseNative.addListener('downloadAction', (event) => {
+    if (event.action === 'pause') pauseDownloads()
+    else if (event.action === 'resume') resumeDownloads()
+  }).catch(() => {
+    // Plugin lama tanpa event ini: tombol notifikasi tidak ada juga.
+  })
   const settings = readJson(SETTINGS_KEY)
   if (settings.status === 'ok' && typeof settings.value === 'object' && settings.value !== null) {
     const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown }

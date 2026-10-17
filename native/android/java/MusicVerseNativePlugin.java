@@ -12,6 +12,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.database.Cursor;
+import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -57,6 +58,11 @@ public class MusicVerseNativePlugin extends Plugin {
 
   @Override
   public void load() {
+    DownloadService.setListener((action) -> {
+      JSObject event = new JSObject();
+      event.put("action", action);
+      notifyListeners("downloadAction", event);
+    });
     PlaybackService.setListener((action, seekMs) -> {
       JSObject event = new JSObject();
       event.put("action", action);
@@ -68,6 +74,7 @@ public class MusicVerseNativePlugin extends Plugin {
   @Override
   protected void handleOnDestroy() {
     PlaybackService.setListener(null);
+    DownloadService.setListener(null);
     uiHandler.removeCallbacksAndMessages(null);
     if (downloadReceiver != null) {
       try {
@@ -268,40 +275,13 @@ public class MusicVerseNativePlugin extends Plugin {
 
   @PluginMethod
   public void showDownloadProgress(PluginCall call) {
-    Context context = getContext();
-    NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-    if (nm == null) {
-      call.resolve();
-      return;
-    }
-    if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(DL_CHANNEL) == null) {
-      NotificationChannel channel = new NotificationChannel(DL_CHANNEL, "Unduhan lagu", NotificationManager.IMPORTANCE_LOW);
-      channel.setDescription("Progres unduhan lagu untuk diputar offline");
-      channel.setShowBadge(false);
-      channel.setSound(null, null);
-      nm.createNotificationChannel(channel);
-    }
     boolean done = Boolean.TRUE.equals(call.getBoolean("done", false));
+    boolean waiting = Boolean.TRUE.equals(call.getBoolean("waiting", false));
     Object percentValue = call.getData().opt("percent");
     Integer percent = percentValue instanceof Number ? Integer.valueOf((int) Math.round(((Number) percentValue).doubleValue())) : null;
-    Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, DL_CHANNEL) : new Notification.Builder(context);
-    builder
-        .setSmallIcon(R.drawable.ic_stat_musicverse)
-        .setContentTitle(call.getString("title", "Unduhan"))
-        .setContentText(call.getString("text", ""))
-        .setOnlyAlertOnce(true)
-        .setOngoing(!done)
-        .setAutoCancel(done);
-    if (done) builder.setProgress(0, 0, false);
-    else if (percent == null) builder.setProgress(0, 0, true);
-    else builder.setProgress(100, Math.max(0, Math.min(100, percent)), false);
-    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-    if (launch != null) {
-      int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
-      builder.setContentIntent(PendingIntent.getActivity(context, 0, launch, flags));
-    }
     try {
-      nm.notify(DL_NOTIFICATION_ID, builder.build());
+      // Notifikasi dimiliki DownloadService (foreground service) supaya unduhan tetap jalan di latar belakang.
+      DownloadService.update(getContext(), call.getString("title", "Unduhan"), call.getString("text", ""), percent, done, waiting, call.getString("action"));
       call.resolve();
     } catch (RuntimeException e) {
       call.reject("Notifikasi unduhan gagal: " + e.getMessage());
@@ -334,6 +314,21 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve(result);
   }
 
+  /** Apakah aplikasi lain sedang memutar audio atau ada panggilan/dering. Dipakai putar-ulang otomatis setelah gangguan. */
+  @PluginMethod
+  public void isOtherAudioActive(PluginCall call) {
+    boolean busy = false;
+    try {
+      AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+      if (am != null) busy = am.isMusicActive() || am.getMode() != AudioManager.MODE_NORMAL;
+    } catch (RuntimeException e) {
+      busy = false;
+    }
+    JSObject result = new JSObject();
+    result.put("busy", busy);
+    call.resolve(result);
+  }
+
   /** Apakah HP sedang dicas (dipakai pilihan "Unduh hanya saat dicas"). Gagal baca = "unknown" (tidak dianggap lepas cas). */
   @PluginMethod
   public void getPowerState(PluginCall call) {
@@ -357,8 +352,7 @@ public class MusicVerseNativePlugin extends Plugin {
 
   @PluginMethod
   public void clearDownloadProgress(PluginCall call) {
-    NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-    if (nm != null) nm.cancel(DL_NOTIFICATION_ID);
+    DownloadService.stop(getContext());
     call.resolve();
   }
 

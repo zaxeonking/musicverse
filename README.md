@@ -262,7 +262,7 @@ Menu tahan-lama (menu lagu dan menu di panel antrean) bukan bagian dari state ro
   3 detik terakhir lagu diabaikan. Data rusak/tidak konsisten = sesi dibuang. `cleanup()` menghapus sesi.
 - **Sleep timer custom**: selain 15/30/45/60 menit, ada isian menit bulat 1–720 di Sleep timer.
 
-## Catatan rilis v0.3.0
+## Catatan rilis v0.3.5
 
 Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 
@@ -292,17 +292,32 @@ Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 
 **Unduhan: coba lagi & jeda**
 - **Coba lagi:** unduhan yang gagal punya tombol putar-ulang di barisnya, plus tombol **Coba ulang yang gagal (N)** di atas daftar. Data lagunya disimpan di memori selama aplikasi terbuka (`failedJobs` di `native/downloads.ts`), jadi tidak perlu membuka playlist asalnya. Setelah aplikasi ditutup, daftar gagal hilang; unduh lagi dari playlistnya.
-- **Jeda/Lanjutkan:** tombol **Jeda unduhan** menahan lagu berikutnya. Lagu yang sedang berjalan diselesaikan dulu karena plugin Filesystem tidak bisa menghentikan unduhan di tengah. Lagu yang menunggu ditandai "Dijeda", notifikasi berubah jadi "Unduhan dijeda", dan status jeda otomatis dilepas saat antrean habis atau dikosongkan.
+- **Jeda/Lanjutkan:** tombol **Jeda unduhan** menahan lagu berikutnya. Lagu yang masih **menyiapkan** (mencari sumber / menunggu ulang) ikut berhenti di titik aman dan kembali ke depan antrean, bukan ditandai gagal. Lagu yang sudah **mengunduh berkas** diselesaikan dulu karena plugin Filesystem tidak bisa menghentikan unduhan di tengah (labelnya "dijeda setelah lagu ini").
+- **Unduh lagu pilihan:** tombol putar di tiap lagu yang menunggu mengunduh lagu itu saja sekarang, walau antrean dijeda atau syarat Wi-Fi/cas belum terpenuhi (pilihan manual mengabaikan keduanya). Lagu lain tetap menunggu. Lagu yang menunggu ditandai "Dijeda", notifikasi berubah jadi "Unduhan dijeda", dan status jeda otomatis dilepas saat antrean habis atau dikosongkan.
 - Judul bergulir hanya dipakai untuk **lagu yang sedang diputar** (mini player, pemutar penuh, baris lagu aktif di antrean), bukan di daftar lagu.
 
 **Unduhan: hanya Wi-Fi & antrean tahan ditutup**
-- **Unduh hanya lewat Wi-Fi** (tombol di halaman Unduhan, disimpan di perangkat). Saat menyala dan koneksi seluler, lagu berikutnya tidak dimulai (label "Menunggu Wi-Fi", notifikasi "Menunggu Wi-Fi"), dan antrean lanjut sendiri begitu Wi-Fi tersambung (koneksi dicek tiap 4 dtk selama ada antrean, plus saat online/offline berubah). Lagu yang sudah berjalan diselesaikan dulu. Jenis koneksi dibaca native lewat `getNetworkType` (ConnectivityManager, izin `ACCESS_NETWORK_STATE` ditambahkan `setup-android.mjs`). Koneksi yang tidak bisa ditentukan dianggap bukan seluler, jadi unduhan tidak diblokir.
+- **Unduh hanya lewat Wi-Fi** (Pengaturan > Unduhan, disimpan di perangkat). Saat menyala dan koneksi seluler, lagu berikutnya tidak dimulai (label "Menunggu Wi-Fi", notifikasi "Menunggu Wi-Fi"), dan antrean lanjut sendiri begitu Wi-Fi tersambung (koneksi dicek tiap 4 dtk selama ada antrean, plus saat online/offline berubah). Lagu yang sudah berjalan diselesaikan dulu. Jenis koneksi dibaca native lewat `getNetworkType` (ConnectivityManager, izin `ACCESS_NETWORK_STATE` ditambahkan `setup-android.mjs`). Koneksi yang tidak bisa ditentukan dianggap bukan seluler, jadi unduhan tidak diblokir.
 - **Antrean tersimpan** di `localStorage` kunci `musicverse:download-queue:v1` (ikut tercermin ke `Android/data`): lagu yang menunggu, yang sedang berjalan, dan yang gagal (dengan pesannya). Saat aplikasi dibuka lagi, antrean dipulihkan dalam keadaan **dijeda** supaya tidak langsung memakai data; tekan **Lanjutkan unduhan**. Lagu yang sudah selesai terunduh dilewati. Berkas `.part` sisa dibersihkan saat unduhan berikutnya.
 
 **Unduhan: hanya saat dicas, unduh yang baru, hapus per playlist**
-- **Unduh hanya saat dicas** (tombol di halaman Unduhan, disimpan di perangkat): antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok. Bisa digabung dengan "hanya Wi-Fi"; label dan notifikasi menyebut syarat yang belum terpenuhi ("Menunggu Wi-Fi", "Menunggu cas", atau "Menunggu Wi-Fi dan cas"). Status cas dibaca native lewat `getPowerState` (BatteryManager, tanpa izin tambahan; cadangan `navigator.getBattery()`). Status yang tidak terbaca tidak memblokir unduhan.
+- **Unduh hanya saat dicas** (Pengaturan > Unduhan, disimpan di perangkat): antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok. Bisa digabung dengan "hanya Wi-Fi"; label dan notifikasi menyebut syarat yang belum terpenuhi ("Menunggu Wi-Fi", "Menunggu cas", atau "Menunggu Wi-Fi dan cas"). Status cas dibaca native lewat `getPowerState` (BatteryManager, tanpa izin tambahan; cadangan `navigator.getBattery()`). Status yang tidak terbaca tidak memblokir unduhan.
 - **Unduh yang baru** (halaman playlist hasil "Unduh semua", hanya APK): mengambil ulang playlist Spotify-nya dari `sourceId`, menambahkan lagu baru ke playlist itu, lalu mengunduh semua yang belum terunduh (lagu lama yang dulu gagal ikut dicoba lagi). Lagu yang dihapus dari Spotify tidak dihapus dari perangkat. Lagu yang sengaja kamu keluarkan dari playlist ini akan muncul lagi bila masih ada di Spotify.
 - **Hapus unduhan per playlist**: tiap kelompok di tab Unduhan (dan *Lagu satuan*) menampilkan jumlah lagu + ukuran, dan tombol tempat sampah untuk menghapus semua berkas lagunya sekaligus (`removeDownloads` di `native/offline.ts`). Playlist-nya tetap ada. Berkas lagu dipakai bersama, jadi lagu yang juga ada di playlist lain ikut hilang dari sana; konfirmasi menyebut jumlahnya.
+
+**Unduhan di latar belakang**
+- **Perbaikan:** unduhan sebelumnya hanya berjalan mulus selama app terbuka di depan, karena prosesnya tidak dilindungi. Sekarang `DownloadService` (foreground service `dataSync` + wake lock) menjaga unduhan tetap jalan saat pindah halaman/app, layar mati, atau app di latar belakang. Notifikasi progres menjadi notifikasi foreground-nya.
+- Saat antrean menunggu Wi-Fi/cas, service tetap hidup **tanpa** wake lock supaya bisa lanjut sendiri tanpa menguras baterai. Saat dijeda manual atau selesai, service berhenti.
+- **Batas yang perlu diketahui:** unduhan masih dijalankan oleh JS di WebView, jadi kalau aplikasi **disapu dari recent apps** unduhan berhenti (antrean tersimpan dan dipulihkan dalam keadaan dijeda saat dibuka lagi). Di Android 15+, foreground service `dataSync` dibatasi sekitar 6 jam per 24 jam oleh sistem.
+
+**Pengaturan, jeda per lagu, tombol notifikasi**
+- **Halaman Pengaturan** (ikon roda gigi di header, hanya APK): `/settings` berisi daftar kategori, tiap kategori punya halaman sendiri (`/settings/downloads` untuk Unduhan). Pengaturan baru cukup menambah satu entri di `CATEGORIES` (`pages/SettingsPage.tsx`) + satu halaman + satu rute. Tombol "hanya Wi-Fi" dan "hanya saat dicas" pindah ke sana; halaman Unduhan hanya menampilkan ringkasan syaratnya dengan tautan ke pengaturan.
+- **Tahan satu lagu** (tombol jeda di barisnya): lagu yang menunggu dilewati antrean sementara yang lain jalan terus; lagu yang masih menyiapkan berhenti di titik aman. Lagu yang sudah mengunduh berkas tidak bisa ditahan (plugin Filesystem tidak punya pembatalan). Tombol putar pada lagu yang ditahan melanjutkannya ke antrean biasa. Tombol "Jeda unduhan" di atas daftar tetap menjeda semuanya sekaligus.
+- **Tombol di notifikasi unduhan:** **Jeda** saat berjalan, **Lanjutkan** saat dijeda (`DownloadService` meneruskan ke JS lewat event `downloadAction`). Tombol hanya bekerja selama aplikasi (JS) masih hidup.
+
+**Pemutar: lanjut otomatis setelah diinterupsi & notifikasi bertahan**
+- **Putar lagi otomatis:** bila musik berhenti karena app lain (mis. TikTok) atau panggilan, lalu gangguannya selesai, musik diputar lagi sendiri. `audioEngine` membedakan jeda pengguna (tombol, notifikasi, headset, `pause()`/`stop()`) dari jeda sistem (event `pause` tanpa dipanggil aplikasi); hanya yang kedua yang diputar ulang (`components/player/AutoResumeSync.tsx`). Selesainya gangguan dideteksi native lewat `isOtherAudioActive` (`AudioManager.isMusicActive()` + mode panggilan), dicek tiap 2 dtk setelah jeda tunggu 3 dtk; bila app lain tidak pernah terdeteksi memutar audio, putar lagi setelah 8 dtk. Juga dicoba saat kamu kembali ke aplikasi. Berhenti menunggu setelah 1 jam. Hanya APK.
+- **Notifikasi bertahan 1 jam:** saat dijeda, `PlaybackService` tetap foreground (wake lock dilepas, hemat baterai) dan notifikasinya tidak bisa digeser; hilang sendiri setelah 1 jam sejak mulai dijeda, atau lewat tombol **Tutup** di notifikasi. Begitu diputar lagi, batas 1 jam dihitung ulang dari jeda berikutnya. Bila Android sendiri mematikan proses aplikasi (kehabisan memori, penghemat baterai ketat), notifikasi ikut hilang; itu di luar kendali aplikasi.
 
 > Perubahan ini menyentuh kode native, jadi butuh **APK baru** (build web saja tidak cukup).
 
@@ -342,7 +357,7 @@ Judul dan artis disimpan serta ditampilkan **persis seperti dari server**: tidak
 
 Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika semua gagal, unduhan ditandai gagal dan tidak ada berkas tersimpan):
 
-- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul **tidak dipakai untuk menolak** (v0.3.0: server sering menulis judul beda dari playlist), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
+- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul **tidak dipakai untuk menolak** (v0.3.5: server sering menulis judul beda dari playlist), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
   dan **penanda versi** sama: live, remix/edit, instrumental/karaoke, akustik, cover, sped up/slowed/reverb/8D, lofi, demo.
 - **Durasi (dua arah):** durasi file harus dalam +-10 dtk atau 4% dari lagu di playlist (yang lebih besar), baik terlalu pendek maupun terlalu panjang.
   Diperiksa dua kali: dari sumber sebelum diunduh, lalu dari berkas lokal sesudah diunduh (dibaca ulang sampai 3x).

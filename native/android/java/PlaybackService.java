@@ -106,6 +106,15 @@ public class PlaybackService extends Service {
   /** Waktu (elapsedRealtime) saat positionMs terakhir dilaporkan JS; dasar penghitungan posisi berjalan. */
   private long positionAt = 0;
   private final Handler handler = new Handler(Looper.getMainLooper());
+  /** Lama notifikasi pemutar bertahan saat dijeda / tidak dipakai sebelum service berhenti (1 jam). */
+  private static final long IDLE_LIMIT_MS = 60L * 60L * 1000L;
+  private boolean idleScheduled = false;
+  private final Runnable idleStop = new Runnable() {
+    @Override public void run() {
+      idleScheduled = false;
+      shutdown();
+    }
+  };
   /**
    * Beberapa ROM (ColorOS/Realme, MIUI, dll.) tidak menggerakkan bilah progres sendiri dari kecepatan 1x,
    * jadi bilahnya diam di posisi terakhir. Selama memutar, posisi dihitung ulang dan didorong ke sesi tiap detik.
@@ -211,17 +220,20 @@ public class PlaybackService extends Service {
     if (current.playing) handler.postDelayed(ticker, 1000);
     Notification notification = buildNotification();
     if (current.playing) {
+      handler.removeCallbacks(idleStop);
+      idleScheduled = false;
       if (wakeLock != null && !wakeLock.isHeld()) wakeLock.acquire();
       startInForeground(notification);
     } else {
+      // Jeda: wake lock dilepas (hemat baterai), tetapi service tetap foreground dan notifikasi tetap ada sampai
+      // IDLE_LIMIT_MS tanpa dipakai. Itu menjaga proses (dan WebView) tetap hidup agar bisa lanjut sendiri setelah
+      // diinterupsi app lain. Batas waktu dihitung dari saat mulai dijeda, bukan diperpanjang tiap pembaruan.
       if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
-      // Jeda: notifikasi tetap ada tetapi boleh digeser untuk menutup.
-      if (foreground) {
-        stopForeground(false);
-        foreground = false;
+      startInForeground(notification);
+      if (!idleScheduled) {
+        handler.postDelayed(idleStop, IDLE_LIMIT_MS);
+        idleScheduled = true;
       }
-      NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-      if (nm != null) nm.notify(NOTIFICATION_ID, notification);
     }
   }
 
@@ -236,6 +248,8 @@ public class PlaybackService extends Service {
 
   void shutdown() {
     handler.removeCallbacks(ticker);
+    handler.removeCallbacks(idleStop);
+    idleScheduled = false;
     stopForeground(true);
     foreground = false;
     stopSelf();
@@ -344,6 +358,8 @@ public class PlaybackService extends Service {
       builder.addAction(button(R.drawable.ic_media_next, "Berikutnya", ACTION_NEXT, 4));
       nextIndex = count++;
     }
+    // Notifikasi tidak bisa digeser selama dijeda (bertahan sampai 1 jam), jadi sediakan tombol Tutup.
+    if (!current.playing) builder.addAction(button(R.drawable.ic_media_close, "Tutup", ACTION_DISMISS, 6));
     int[] compact;
     if (previousIndex >= 0 && nextIndex >= 0) compact = new int[] {previousIndex, playIndex, nextIndex};
     else if (previousIndex >= 0) compact = new int[] {previousIndex, playIndex};
@@ -373,7 +389,7 @@ public class PlaybackService extends Service {
         .setCategory(Notification.CATEGORY_TRANSPORT)
         .setOnlyAlertOnce(true)
         .setShowWhen(false)
-        .setOngoing(current.playing)
+        .setOngoing(true)
         .setStyle(style);
     if (current.loading) {
       // Jeda antar lagu: bilah berjalan terus (indeterminate) menggantikan bilah posisi.

@@ -59,6 +59,10 @@ export interface Transfer {
   bytes?: number
   total?: number
   message?: string
+  /** Dipilih manual ("unduh sekarang"): jalan walau antrean dijeda. */
+  forced?: boolean
+  /** Ditahan satu per satu oleh pengguna. */
+  held?: boolean
 }
 
 interface OfflineState {

@@ -41,6 +41,15 @@ export interface DownloadNotification {
   percent: number | null
   /** true = unduhan selesai/gagal: notifikasi tidak lagi "sedang berjalan" dan bisa disapu. */
   done?: boolean
+  /** true = antrean menunggu syarat (Wi-Fi/cas): proses tetap dijaga tetapi tanpa wake lock. */
+  waiting?: boolean
+  /** Tombol di notifikasi: Jeda (saat berjalan) atau Lanjutkan (saat dijeda). */
+  action?: 'pause' | 'resume'
+}
+
+/** Tombol Jeda/Lanjutkan di notifikasi unduhan. */
+export interface DownloadActionEvent {
+  action: 'pause' | 'resume'
 }
 
 export interface MusicVerseNativePlugin {
@@ -51,6 +60,8 @@ export interface MusicVerseNativePlugin {
   getNetworkType(): Promise<{ type: 'wifi' | 'ethernet' | 'cellular' | 'other' | 'none' | 'unknown'; metered: boolean }>
   /** Apakah HP sedang dicas. `known` false = tidak terbaca. */
   getPowerState(): Promise<{ known: boolean; charging: boolean }>
+  /** Apakah aplikasi lain sedang memutar audio / ada panggilan (dipakai putar-ulang otomatis setelah gangguan). */
+  isOtherAudioActive(): Promise<{ busy: boolean }>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */
   downloadUpdate(options: { url: string; version: string }): Promise<void>
   /** Membuka installer untuk APK yang sudah diunduh. Menolak dengan code NEED_PERMISSION jika izin pasang belum ada. */
@@ -70,6 +81,10 @@ export interface MusicVerseNativePlugin {
   isIgnoringBatteryOptimizations(): Promise<{ ignoring: boolean }>
   /** Membuka layar pengaturan optimasi baterai sistem. */
   openBatterySettings(): Promise<void>
+  addListener(
+    eventName: 'downloadAction',
+    listener: (event: DownloadActionEvent) => void,
+  ): Promise<PluginListenerHandle>
   addListener(
     eventName: 'mediaAction',
     listener: (event: NativeMediaActionEvent) => void,

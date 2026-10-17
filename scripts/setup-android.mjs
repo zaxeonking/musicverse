@@ -4,7 +4,7 @@
 // (sudah otomatis lewat `npm run android:sync`).
 //
 // Yang dilakukan:
-//  1. Menyalin PlaybackService, MusicVerseNativePlugin, MainActivity ke android/app/src/main/java/<appId>/
+//  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity ke android/app/src/main/java/<appId>/
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
 //  4. Menambah izin + <service> + usesCleartextTraffic ke AndroidManifest.xml
@@ -60,6 +60,7 @@ const permissions = [
   'android.permission.ACCESS_NETWORK_STATE',
   'android.permission.FOREGROUND_SERVICE',
   'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+  'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.WAKE_LOCK',
   'android.permission.REQUEST_INSTALL_PACKAGES',
@@ -76,6 +77,16 @@ if (!manifest.includes('.PlaybackService')) {
     '            android:name=".PlaybackService"\n' +
     '            android:exported="false"\n' +
     '            android:foregroundServiceType="mediaPlayback" />\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${service}$1</application>`)
+}
+
+// Foreground service unduhan lagu: menjaga unduhan tetap jalan saat app di latar belakang / layar mati.
+if (!manifest.includes('.DownloadService')) {
+  const service =
+    '        <service\n' +
+    '            android:name=".DownloadService"\n' +
+    '            android:exported="false"\n' +
+    '            android:foregroundServiceType="dataSync" />\n'
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${service}$1</application>`)
 }
 

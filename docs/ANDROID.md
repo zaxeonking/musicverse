@@ -113,6 +113,7 @@ Sampul lagu tetap diambil dari internet (atau dari berkas lokal untuk lagu yang 
 lalu dikirim ke native; selama belum siap atau gagal dimuat dipakai sampul bawaan APK.
 
 ### 9.2 Jalan di latar belakang
+- `DownloadService` = foreground service bertipe `dataSync` + `PARTIAL_WAKE_LOCK` (maks. 10 menit per pembaruan, otomatis lepas bila JS berhenti) yang menjaga unduhan lagu tetap jalan di latar belakang dan memiliki notifikasi progres unduhan. Saat antrean menunggu Wi-Fi/cas, service tetap hidup tanpa wake lock. Izin: `FOREGROUND_SERVICE_DATA_SYNC`.
 - `PlaybackService` = foreground service bertipe `mediaPlayback` + `PARTIAL_WAKE_LOCK` + `MediaSession`.
 - Audio **tetap diputar oleh WebView** (engine crossfade/fade yang ada tidak ditulis ulang); service menjaga
   proses tetap hidup dan menampilkan kontrol. Tombol notifikasi/layar kunci/headset diteruskan ke pemutar JS.

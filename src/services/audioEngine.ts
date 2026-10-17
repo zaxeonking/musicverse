@@ -193,6 +193,11 @@ class AudioEngine {
    */
   private keeper: HTMLAudioElement | null = null
   private keeperTimer = 0
+  /** true sejak pengguna/aplikasi memanggil pause()/stop(); false lagi saat audio diputar. Jeda tanpa ini = gangguan sistem. */
+  private userPaused = false
+  /** Audio berhenti di luar kehendak pengguna (app lain mengambil audio, panggilan, dll.) dan belum diputar lagi. */
+  private interrupted = false
+  private readonly interruptListeners = new Set<() => void>()
   private readonly listeners = new Set<AudioEngineListener>()
 
   // Volume akhir elemen = master × trackEnd × gain elemen. Semuanya 0..1.
@@ -209,9 +214,18 @@ class AudioEngine {
     const audio = this.audio
     // Hanya elemen aktif yang dilaporkan; elemen cadangan / lagu lama yang sedang memudar diabaikan.
     if (!audio || event.target !== audio || this.activeSource === null) return
-    if (event.type === 'play' || event.type === 'playing') this.keeperPlay()
-    else if (event.type === 'pause' && !audio.ended) this.keeperPause()
-    else if (event.type === 'ended' || event.type === 'error') this.keeperLinger()
+    if (event.type === 'play' || event.type === 'playing') {
+      this.userPaused = false
+      this.interrupted = false
+      this.keeperPlay()
+    } else if (event.type === 'pause' && !audio.ended) {
+      this.keeperPause()
+      if (!this.userPaused && !this.interrupted) {
+        this.interrupted = true
+        for (const listener of [...this.interruptListeners]) listener()
+      }
+    }
+    if (event.type === 'ended' || event.type === 'error') this.keeperLinger()
     this.emitFrom(audio, event.type as AudioEngineEventType)
   }
 
@@ -511,6 +525,8 @@ class AudioEngine {
   /** Memuat dan memutar URL. Resolve = play() diterima; status "playing" tetap menunggu event. */
   async load(url: string): Promise<void> {
     const audio = this.element()
+    this.userPaused = false
+    this.interrupted = false
     this.keeperPlay()
     this.activeSource = url
     audio.src = url
@@ -526,6 +542,7 @@ class AudioEngine {
       throw new AudioEngineError('unknown', 'Tidak ada audio yang dimuat.')
     }
     this.keeperPlay()
+    this.userPaused = false
     try {
       await this.audio.play()
     } catch (error) {
@@ -535,12 +552,25 @@ class AudioEngine {
 
   pause(): void {
     // Jeda manual di tengah fade/crossfade: selesaikan dulu, lalu jeda; volume kembali penuh untuk lanjut.
+    this.userPaused = true
+    this.interrupted = false
     this.settleCrossfade()
     this.ramps = this.ramps.filter((item) => item.target !== 'master')
     this.keeperPause()
     this.audio?.pause()
     this.masterGain = 1
     this.applyAllVolumes()
+  }
+
+  /** Audio berhenti karena gangguan (bukan jeda pengguna) dan belum dilanjutkan. */
+  isInterrupted(): boolean {
+    return this.interrupted && this.activeSource !== null
+  }
+
+  /** Dipanggil saat gangguan dimulai. Mengembalikan fungsi untuk berhenti mendengarkan. */
+  onInterrupt(listener: () => void): () => void {
+    this.interruptListeners.add(listener)
+    return () => this.interruptListeners.delete(listener)
   }
 
   /**
@@ -576,6 +606,8 @@ class AudioEngine {
 
   /** Menghentikan dan melepas sumber audio (koneksi unduhan ikut dilepas). */
   stop(): void {
+    this.userPaused = true
+    this.interrupted = false
     this.activeSource = null
     this.keeperLinger()
     this.resetFades()
