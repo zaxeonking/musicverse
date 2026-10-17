@@ -199,3 +199,9 @@ Folder `android/` di-commit atau tidak, keduanya jalan (jika belum ada, workflow
 = `USER/musicverse-releases` dan secret `RELEASES_TOKEN` = fine-grained PAT dengan izin *Contents: Read and write*
 khusus repo rilis itu. Workflow mem-build dengan `VITE_GITHUB_REPO` = repo rilis dan mengunggah APK ke sana.
 
+### 9.8 Ikon launcher
+`native/android/res/` berisi ikon launcher (logo equalizer hijau yang sama dengan web): PNG `mipmap-*/ic_launcher(_round).png`,
+adaptive icon Android 8+ (`mipmap-anydpi-v26/`, latar `#121212` di `values/mv_colors.xml`, foreground
+`drawable-nodpi/mv_icon_foreground.png`, juga dipakai sebagai ikon monokrom Android 13+). `npm run android:setup`
+menyalinnya menimpa ikon bawaan Capacitor. Ganti ikon: ganti berkas-berkas itu, lalu build ulang.
+
