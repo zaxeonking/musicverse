@@ -21,7 +21,6 @@ import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
-import SectionHeader from '../ui/SectionHeader'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -142,7 +141,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
   )
 }
 
-/** Bagian "Unduhan" di Koleksi (hanya APK): lagu yang bisa diputar offline + progres unduhan. */
+/** Isi halaman Unduhan (hanya APK): lagu yang bisa diputar offline + progres unduhan. */
 export default function DownloadsSection() {
   const { items, transfers } = useOffline()
   const player = useAudioPlayer()
@@ -155,10 +154,12 @@ export default function DownloadsSection() {
 
   return (
     <section aria-label="Unduhan">
-      <SectionHeader
-        title="Unduhan"
-        subtitle={items.length > 0 ? `${items.length} lagu · ${formatBytes(totalBytes(items))} · bisa diputar offline` : 'Lagu yang disimpan untuk diputar offline'}
-      />
+      <header className="mb-4">
+        <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Unduhan</h1>
+        <p className="mt-1 text-ink-muted">
+          {items.length > 0 ? `${items.length} lagu · ${formatBytes(totalBytes(items))} · bisa diputar offline` : 'Lagu yang disimpan untuk diputar offline'}
+        </p>
+      </header>
 
       {pending.length > 0 && (
         <ul className="mb-3 space-y-2">
@@ -234,6 +235,7 @@ export default function DownloadsSection() {
           ))}
         </ul>
       )}
+
     </section>
   )
 }

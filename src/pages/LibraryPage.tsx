@@ -1,33 +1,18 @@
-import { AlertCircle, History, LayoutGrid, Library, List, X } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import DownloadsSection from '../components/library/DownloadsSection'
-import MyPlaylistsSection from '../components/library/MyPlaylistsSection'
+import { AlertCircle, History, X } from 'lucide-react'
+import { useCallback, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import PlaylistsSection from '../components/library/PlaylistsSection'
 import RecentlyPlayedList from '../components/library/RecentlyPlayedList'
-import SavedPlaylistCard from '../components/library/SavedPlaylistCard'
-import Chip from '../components/ui/Chip'
 import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import SectionHeader from '../components/ui/SectionHeader'
 import { useLibrary } from '../context/LibraryContext'
 import { usePlaylist } from '../context/PlaylistContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
-import type { LibrarySort, LibraryView, RecentPlay, SavedPlaylist } from '../types/library'
+import type { RecentPlay } from '../types/library'
 import { fallbackCover } from '../utils/fallbackCover'
 import { noticeMessage } from '../utils/libraryNotice'
-import { sortSavedPlaylists, toPlaylistDetail } from '../utils/libraryStorage'
 import { getRowActivity } from '../utils/playerStatus'
-import { isNativeApp } from '../native/platform'
-
-const sortOptions: { id: LibrarySort; label: string }[] = [
-  { id: 'recent', label: 'Terbaru' },
-  { id: 'name', label: 'Nama A–Z' },
-]
-
-const viewOptions: { id: LibraryView; label: string; icon: typeof LayoutGrid }[] = [
-  { id: 'grid', label: 'Tampilan kisi', icon: LayoutGrid },
-  { id: 'list', label: 'Tampilan daftar', icon: List },
-]
 
 const primaryButton = 'btn-primary'
 
@@ -59,36 +44,11 @@ function NoticeBar({
 }
 
 export default function LibraryPage() {
-  const navigate = useNavigate()
-  const { playlist: active, restorePlaylist } = usePlaylist()
-  const { saved, recent, prefs, health, notice, savedIdFor, savePlaylist, removePlaylist, clearRecent, setPrefs, dismissNotice } =
-    useLibrary()
+  const { playlist: active } = usePlaylist()
+  const { saved, recent, health, notice, savedIdFor, savePlaylist, clearRecent, dismissNotice } = useLibrary()
   const player = useAudioPlayer()
   const [recoveredDismissed, setRecoveredDismissed] = useState(false)
-  const savedSectionRef = useRef<HTMLDivElement>(null)
-
-  const sorted = useMemo(() => sortSavedPlaylists(saved, prefs.sort), [saved, prefs.sort])
-  const activeId = active?.id ?? null
   const activeUnsaved = active !== null && active.source !== 'search' && savedIdFor(active) === null
-
-  /** Membuka playlist tersimpan di Beranda. Playlist yang sudah aktif dan playback-nya tidak disentuh. */
-  const handleOpen = useCallback(
-    (playlist: SavedPlaylist) => {
-      restorePlaylist(toPlaylistDetail(playlist))
-      navigate('/')
-    },
-    [restorePlaylist, navigate],
-  )
-
-  /** Hanya menghapus dari Koleksi; playlist aktif dan pemutaran yang berjalan tidak ikut berhenti. */
-  const handleRemove = useCallback(
-    (playlist: SavedPlaylist) => {
-      removePlaylist(playlist.id)
-      // Kartu yang difokuskan hilang; pindahkan fokus ke bagian ini agar pengguna keyboard/pembaca layar tidak "jatuh" ke awal halaman.
-      requestAnimationFrame(() => savedSectionRef.current?.focus())
-    },
-    [removePlaylist],
-  )
 
   const currentTrack = player.currentTrack
   const handlePlayRecent = useCallback(
@@ -115,8 +75,8 @@ export default function LibraryPage() {
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Koleksi</h1>
-          <p className="mt-1 text-ink-muted">Playlist yang pernah kamu muat dan lagu yang baru kamu putar.</p>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Playlist</h1>
+          <p className="mt-1 text-ink-muted">Playlist buatanmu, yang pernah kamu muat, dan lagu yang baru kamu putar.</p>
         </div>
         {saved.length > 0 && (
           <Link to="/" className={primaryButton}>
@@ -167,85 +127,7 @@ export default function LibraryPage() {
         </section>
       )}
 
-      {isNativeApp() && <DownloadsSection />}
-
-      <MyPlaylistsSection />
-
-      <section aria-label="Playlist tersimpan">
-        <div ref={savedSectionRef} tabIndex={-1} className="outline-none">
-          <SectionHeader
-            title="Playlist tersimpan"
-            subtitle={saved.length > 0 ? `${saved.length} playlist di perangkat ini` : undefined}
-          />
-        </div>
-
-        {sorted.length === 0 ? (
-          <EmptyState
-            icon={Library}
-            title="Belum ada playlist tersimpan"
-            description="Playlist Spotify yang berhasil kamu muat akan disimpan otomatis di browser ini dan muncul di sini."
-            action={
-              <Link to="/" className={primaryButton}>
-                Muat playlist
-              </Link>
-            }
-          />
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="no-scrollbar -m-1 flex gap-2 overflow-x-auto p-1" role="group" aria-label="Urutkan playlist">
-                {sortOptions.map((option) => (
-                  <Chip key={option.id} active={prefs.sort === option.id} onClick={() => setPrefs({ sort: option.id })}>
-                    {option.label}
-                  </Chip>
-                ))}
-              </div>
-
-              <div className="flex shrink-0 rounded-full bg-raised p-1" role="group" aria-label="Tampilan">
-                {viewOptions.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    aria-label={label}
-                    aria-pressed={prefs.view === id}
-                    onClick={() => setPrefs({ view: id })}
-                    className={`flex h-9 w-11 items-center justify-center rounded-full transition-colors active:scale-95 focus-ring motion-reduce:active:scale-100 ${
-                      prefs.view === id ? 'bg-bg text-accent' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <ul
-              className={
-                prefs.view === 'grid'
-                  ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5'
-                  : '-mx-2'
-              }
-            >
-              {sorted.map((playlist) => (
-                <SavedPlaylistCard
-                  key={playlist.id}
-                  playlist={playlist}
-                  layout={prefs.view}
-                  active={playlist.id === activeId}
-                  onOpen={handleOpen}
-                  onRemove={handleRemove}
-                />
-              ))}
-            </ul>
-
-            <p className="text-xs text-ink-faint">
-              {isNativeApp()
-                ? 'Disimpan di penyimpanan aplikasi (Android/data). Lagu hanya bisa diputar offline jika sudah diunduh.'
-                : 'Disimpan hanya di browser ini dan bisa hilang jika data browser dihapus. Memutar lagu tetap membutuhkan koneksi internet.'}
-            </p>
-          </div>
-        )}
-      </section>
+      <PlaylistsSection />
 
       <section aria-label="Baru diputar">
         <SectionHeader

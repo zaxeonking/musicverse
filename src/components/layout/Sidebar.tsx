@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import { navItems } from '../../config/navigation'
+import { getNavItems } from '../../config/navigation'
 import { usePlaylist } from '../../context/PlaylistContext'
 import type { Cover } from '../../types'
 import { fallbackCover } from '../../utils/fallbackCover'
@@ -40,7 +40,7 @@ export default function Sidebar() {
 
       <nav aria-label="Navigasi utama" className="px-3">
         <ul className="space-y-1">
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {getNavItems().map(({ to, label, icon: Icon }) => (
             <li key={to}>
               <NavLink
                 to={to}

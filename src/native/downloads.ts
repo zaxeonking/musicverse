@@ -21,7 +21,7 @@ import { isNativeApp } from './platform'
  * jaringan dan API. URL audio diambil lewat `fetchPlaybackInfo` yang sama dengan pemutaran, jadi
  * hanya lagu penuh yang lolos pemeriksaan durasi/judul yang disimpan (klip 30 detik ditolak).
  *
- * Progres: di daftar Unduhan (Koleksi) dan di satu notifikasi sistem untuk seluruh antrean.
+ * Progres: di tab Unduhan dan di satu notifikasi sistem untuk seluruh antrean.
  *
  * BATAS: unduhan berjalan di dalam proses aplikasi. Selama musik diputar (foreground service aktif),
  * proses aman; jika aplikasi ditutup paksa atau dimatikan sistem saat mengunduh, unduhan terhenti
@@ -185,7 +185,7 @@ function finishSession(): void {
       ? ok === 1
         ? '1 lagu selesai diunduh'
         : `${ok} lagu selesai diunduh`
-      : `${ok} selesai, ${failed} gagal. Buka Koleksi untuk melihat.`
+      : `${ok} selesai, ${failed} gagal. Buka Unduhan untuk melihat.`
   notify('Unduhan selesai', text, null, true, true)
   sessionTotal = 0
   sessionDone = 0
@@ -274,7 +274,7 @@ export function bulkDownloadText(result: BulkEnqueueResult): string {
   if (result.unsupported) return 'Unduhan hanya tersedia di aplikasi Android'
   if (result.queued === 0) return result.already > 0 ? 'Semua lagu sudah diunduh' : 'Lagu sedang diunduh'
   const skipped = result.already + result.busy
-  return `Mengunduh ${result.queued} lagu${skipped > 0 ? ` (${skipped} dilewati)` : ''}. Lihat progres di notifikasi atau Koleksi`
+  return `Mengunduh ${result.queued} lagu${skipped > 0 ? ` (${skipped} dilewati)` : ''}. Lihat progres di notifikasi atau tab Unduhan`
 }
 
 /** Membatalkan unduhan yang masih mengantre (yang sudah berjalan tidak bisa dibatalkan). */

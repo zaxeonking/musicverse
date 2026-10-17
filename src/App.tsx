@@ -8,6 +8,7 @@ import { PlayerUiProvider } from './context/PlayerUiContext'
 import { PlaylistProvider } from './context/PlaylistContext'
 import { SleepTimerProvider } from './context/SleepTimerContext'
 import { TrackMenuProvider } from './context/TrackMenuContext'
+import DownloadsPage from './pages/DownloadsPage'
 import HomePage from './pages/HomePage'
 import LibraryPage from './pages/LibraryPage'
 import MyPlaylistPage from './pages/MyPlaylistPage'
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: '/', element: <HomePage /> },
       { path: '/search', element: <SearchPage /> },
       { path: '/library', element: <LibraryPage /> },
+      { path: '/downloads', element: <DownloadsPage /> },
       { path: '/my/:id', element: <MyPlaylistPage /> },
       { path: '*', element: <HomePage /> },
     ],

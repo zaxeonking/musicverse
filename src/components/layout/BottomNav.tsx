@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { navItems } from '../../config/navigation'
+import { getNavItems } from '../../config/navigation'
 
 /**
  * Bagian dari kolom flex AppShell (paling bawah, shrink-0), jadi selalu terlihat dan tidak
@@ -12,7 +12,7 @@ export default function BottomNav() {
       className="relative z-30 shrink-0 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur lg:hidden"
     >
       <ul className="mx-auto flex max-w-md">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {getNavItems().map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1">
             <NavLink
               to={to}

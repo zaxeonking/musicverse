@@ -91,7 +91,7 @@ export default function TrackMenuSheet({ track, fromSearch, onClose, onToast }: 
   const startDownload = () => {
     const result = downloadTrack(track)
     onToast(
-      result === 'queued' ? 'Mengunduh… lihat progres di Koleksi' : result === 'already' ? 'Lagu sudah diunduh' : 'Sedang diunduh',
+      result === 'queued' ? 'Mengunduh… lihat progres di Unduhan' : result === 'already' ? 'Lagu sudah diunduh' : 'Sedang diunduh',
     )
     onClose()
   }
