@@ -2,6 +2,10 @@ package __APP_ID__;
 
 import android.Manifest;
 import android.app.DownloadManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -37,6 +41,9 @@ public class MusicVerseNativePlugin extends Plugin {
   private static final String UPDATE_FILE = "musicverse-update.apk";
   private static final String PREFS = "musicverse_update";
   private static final String PREF_ID = "download_id";
+
+  private static final String DL_CHANNEL = "musicverse_downloads";
+  private static final int DL_NOTIFICATION_ID = 4242;
 
   private final Handler uiHandler = new Handler(Looper.getMainLooper());
   private BroadcastReceiver downloadReceiver;
@@ -246,6 +253,58 @@ public class MusicVerseNativePlugin extends Plugin {
     result.put("downloading", downloading);
     result.put("ready", ready);
     call.resolve(result);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Notifikasi progres unduhan lagu (satu notifikasi untuk seluruh antrean).
+  // ---------------------------------------------------------------------------------------------
+
+  @PluginMethod
+  public void showDownloadProgress(PluginCall call) {
+    Context context = getContext();
+    NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm == null) {
+      call.resolve();
+      return;
+    }
+    if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(DL_CHANNEL) == null) {
+      NotificationChannel channel = new NotificationChannel(DL_CHANNEL, "Unduhan lagu", NotificationManager.IMPORTANCE_LOW);
+      channel.setDescription("Progres unduhan lagu untuk diputar offline");
+      channel.setShowBadge(false);
+      channel.setSound(null, null);
+      nm.createNotificationChannel(channel);
+    }
+    boolean done = Boolean.TRUE.equals(call.getBoolean("done", false));
+    Integer percent = call.getInt("percent");
+    Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, DL_CHANNEL) : new Notification.Builder(context);
+    builder
+        .setSmallIcon(R.drawable.ic_stat_musicverse)
+        .setContentTitle(call.getString("title", "Unduhan"))
+        .setContentText(call.getString("text", ""))
+        .setOnlyAlertOnce(true)
+        .setOngoing(!done)
+        .setAutoCancel(done);
+    if (done) builder.setProgress(0, 0, false);
+    else if (percent == null) builder.setProgress(0, 0, true);
+    else builder.setProgress(100, Math.max(0, Math.min(100, percent)), false);
+    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+    if (launch != null) {
+      int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+      builder.setContentIntent(PendingIntent.getActivity(context, 0, launch, flags));
+    }
+    try {
+      nm.notify(DL_NOTIFICATION_ID, builder.build());
+      call.resolve();
+    } catch (RuntimeException e) {
+      call.reject("Notifikasi unduhan gagal: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void clearDownloadProgress(PluginCall call) {
+    NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm != null) nm.cancel(DL_NOTIFICATION_ID);
+    call.resolve();
   }
 
   @PluginMethod

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Play, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Play, Trash2, X } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
@@ -6,6 +6,8 @@ import EmptyState from '../components/ui/EmptyState'
 import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsContext'
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
+import { bulkDownloadText, downloadTracks } from '../native/downloads'
+import { isNativeApp } from '../native/platform'
 import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
 import { MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
@@ -170,6 +172,17 @@ export default function MyPlaylistPage() {
           <Play className="h-4 w-4" aria-hidden="true" />
           Putar semua
         </button>
+        {isNativeApp() && (
+          <button
+            type="button"
+            onClick={() => showToast(bulkDownloadText(downloadTracks(tracks)))}
+            disabled={tracks.length === 0}
+            className="btn-secondary"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Unduh semua
+          </button>
+        )}
         {confirmDelete ? (
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Konfirmasi hapus playlist">
             <span className="text-sm text-ink-muted">Hapus playlist ini?</span>

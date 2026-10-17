@@ -28,7 +28,8 @@ function transferLabel(transfer: Transfer): string {
     case 'resolving':
       return 'Menyiapkan…'
     case 'downloading':
-      return transfer.percent === null ? 'Mengunduh…' : `Mengunduh ${transfer.percent}%`
+      if (transfer.percent !== null) return `Mengunduh ${transfer.percent}%`
+      return transfer.bytes ? `Mengunduh… ${formatBytes(transfer.bytes)}` : 'Mengunduh…'
     case 'error':
       return transfer.message ?? 'Unduhan gagal'
   }
@@ -84,7 +85,8 @@ export default function DownloadsSection() {
       {pending.length > 0 && (
         <ul className="mb-3 space-y-2">
           {pending.map((transfer) => {
-            const name = tracks.find((t) => t.id === transfer.key)?.title
+            const name = transfer.title ?? tracks.find((t) => t.id === transfer.key)?.title
+            const active = transfer.status === 'downloading' || transfer.status === 'resolving'
             return (
               <li key={transfer.key} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
                 {transfer.status === 'error' ? (
@@ -94,7 +96,23 @@ export default function DownloadsSection() {
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{name ?? 'Lagu'}</span>
-                  <span className="block truncate text-xs text-ink-muted">{transferLabel(transfer)}</span>
+                  <span className={`block text-xs ${transfer.status === 'error' ? 'select-text break-words text-danger' : 'truncate text-ink-muted'}`}>
+                    {transferLabel(transfer)}
+                  </span>
+                  {active && (
+                    <span
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={transfer.percent ?? undefined}
+                      className="mt-2 block h-1 overflow-hidden rounded-full bg-white/10"
+                    >
+                      <span
+                        className={`block h-full rounded-full bg-accent ${transfer.percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}
+                        style={transfer.percent === null ? undefined : { width: `${transfer.percent}%` }}
+                      />
+                    </span>
+                  )}
                 </span>
                 {(transfer.status === 'queued' || transfer.status === 'error') && (
                   <button

@@ -1,4 +1,4 @@
-import { BookmarkCheck, BookmarkPlus, ListEnd, ListPlus, Play, RotateCw } from 'lucide-react'
+import { BookmarkCheck, BookmarkPlus, Download, ListEnd, ListPlus, Play, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isSafeHttpUrl } from '../../utils/spotifyUrl'
@@ -38,6 +38,8 @@ interface PlaylistHeaderProps {
   isSaved?: boolean
   /** Menambah/menghapus dari Koleksi. Tombol disembunyikan jika tidak diberikan. */
   onToggleSaved?: () => void
+  /** Mengunduh seluruh lagu playlist untuk offline (hanya di APK; tombol disembunyikan jika tidak diberikan). */
+  onDownloadAll?: () => void
   /** Menambahkan lagu ke "Playlist saya" (dipakai untuk hasil pencarian lagu satuan). */
   onAddToPlaylist?: () => void
   /** Menambahkan lagu ke antrean pemutar (hanya untuk hasil pencarian lagu satuan, bukan playlist). */
@@ -53,6 +55,7 @@ export default function PlaylistHeader({
   onReload,
   isSaved = false,
   onToggleSaved,
+  onDownloadAll,
   onAddToPlaylist,
   onAddToQueue,
 }: PlaylistHeaderProps) {
@@ -101,6 +104,12 @@ export default function PlaylistHeader({
                   <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
                 )}
                 {isSaved ? 'Hapus dari Koleksi' : 'Simpan ke Koleksi'}
+              </button>
+            )}
+            {onDownloadAll && (
+              <button type="button" onClick={onDownloadAll} disabled={trackCount === 0} className="btn-secondary">
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Unduh semua
               </button>
             )}
             {onAddToQueue && (

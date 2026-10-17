@@ -4,6 +4,8 @@ import { useLibrary } from '../../context/LibraryContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { usePlaylist } from '../../context/PlaylistContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { bulkDownloadText, downloadTracks } from '../../native/downloads'
+import { isNativeApp } from '../../native/platform'
 import { noticeMessage } from '../../utils/libraryNotice'
 import { classifyImportInput } from '../../utils/spotifyUrl'
 import { getRowActivity } from '../../utils/playerStatus'
@@ -140,6 +142,8 @@ export default function PlaylistView() {
         isSaved={savedId !== null}
         // Lagu satuan (hasil cari judul / tautan lagu) tidak bisa masuk Koleksi; simpan lewat "Playlist saya".
         onToggleSaved={playlist.source === 'search' ? undefined : handleToggleSaved}
+        // Unduh offline hanya di APK dan hanya untuk playlist (lagu satuan punya menu Unduh sendiri).
+        onDownloadAll={isNativeApp() && playlist.source !== 'search' ? () => showToast(bulkDownloadText(downloadTracks(playlist.tracks))) : undefined}
         onAddToPlaylist={playlist.source === 'search' && playlist.tracks.length > 0 ? () => setPicking(true) : undefined}
         onAddToQueue={isSingleSearch && playlist.tracks.length > 0 ? handleAddToQueue : undefined}
       />

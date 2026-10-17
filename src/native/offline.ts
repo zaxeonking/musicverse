@@ -42,6 +42,11 @@ export interface Transfer {
   status: TransferStatus
   /** 0..100, hanya bermakna saat `downloading` dan ukuran total diketahui. */
   percent: number | null
+  /** Judul lagu (untuk daftar progres; lagu yang belum selesai belum ada di daftar unduhan). */
+  title?: string
+  /** Byte yang sudah diterima dan total (-1/undefined jika server tidak memberi ukuran). */
+  bytes?: number
+  total?: number
   message?: string
 }
 

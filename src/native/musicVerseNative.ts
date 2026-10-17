@@ -32,7 +32,19 @@ export interface UpdateProgressEvent {
   total: number
 }
 
+export interface DownloadNotification {
+  title: string
+  text: string
+  /** 0..100; null = tidak diketahui (bar berjalan terus). */
+  percent: number | null
+  /** true = unduhan selesai/gagal: notifikasi tidak lagi "sedang berjalan" dan bisa disapu. */
+  done?: boolean
+}
+
 export interface MusicVerseNativePlugin {
+  /** Notifikasi progres unduhan lagu (satu notifikasi untuk seluruh antrean). */
+  showDownloadProgress(options: DownloadNotification): Promise<void>
+  clearDownloadProgress(): Promise<void>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */
   downloadUpdate(options: { url: string; version: string }): Promise<void>
   /** Membuka installer untuk APK yang sudah diunduh. Menolak dengan code NEED_PERMISSION jika izin pasang belum ada. */

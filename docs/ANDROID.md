@@ -205,3 +205,11 @@ adaptive icon Android 8+ (`mipmap-anydpi-v26/`, latar `#121212` di `values/mv_co
 `drawable-nodpi/mv_icon_foreground.png`, juga dipakai sebagai ikon monokrom Android 13+). `npm run android:setup`
 menyalinnya menimpa ikon bawaan Capacitor. Ganti ikon: ganti berkas-berkas itu, lalu build ulang.
 
+### 9.9 Unduh satu playlist + progres di notifikasi
+Tombol **Unduh semua** ada di halaman playlist (impor) dan di halaman Playlist saya (hanya di APK); lagu yang sudah
+diunduh atau sedang diproses dilewati. Unduhan berjalan satu per satu. Progres tampil di daftar Unduhan (bar + persen,
+atau ukuran terunduh jika server tidak memberi ukuran total) dan di **satu notifikasi** ("Lagu 3 dari 12" + bar).
+Android 13+ meminta izin notifikasi saat unduhan pertama. Folder `download/` dan `download/covers/` kini dibuat
+eksplisit sebelum mengunduh (penyebab error "Error downloading file: /storage/emulated/0/…"); pesan error di daftar
+Unduhan ditampilkan penuh dan bisa disalin.
+
