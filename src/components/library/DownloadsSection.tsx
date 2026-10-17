@@ -1,14 +1,15 @@
-import { AlertCircle, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, Trash2, X } from 'lucide-react'
+import { AlertCircle, Battery, BatteryCharging, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, RotateCw, Trash2, Wifi, WifiOff, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useLongPress } from '../../hooks/useLongPress'
-import { cancelQueued, dismissTransferError } from '../../native/downloads'
+import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, setChargingOnlyEnabled, setWifiOnlyEnabled } from '../../native/downloads'
 import {
   coverSrcFor,
   removeDownload,
+  removeDownloads,
   toPlaylistTrack,
   totalBytes,
   trackKey,
@@ -29,10 +30,10 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function transferLabel(transfer: Transfer): string {
+function transferLabel(transfer: Transfer, paused: boolean, heldText: string | null): string {
   switch (transfer.status) {
     case 'queued':
-      return 'Menunggu antrean'
+      return paused ? 'Dijeda' : heldText ? `Menunggu ${heldText}` : 'Menunggu antrean'
     case 'resolving':
       return 'Menyiapkan…'
     case 'downloading':
@@ -41,6 +42,39 @@ function transferLabel(transfer: Transfer): string {
     case 'error':
       return transfer.message ?? 'Unduhan gagal'
   }
+}
+
+function SettingSwitch({
+  checked,
+  onChange,
+  icon: Icon,
+  label,
+  hint,
+}: {
+  checked: boolean
+  onChange: () => void
+  icon: typeof Wifi
+  label: string
+  hint: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className="flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 text-left text-sm text-ink focus-ring"
+    >
+      <Icon className={`h-4 w-4 shrink-0 ${checked ? 'text-accent' : 'text-ink-muted'}`} aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block">{label}</span>
+        <span className="block text-xs text-ink-muted">{hint}</span>
+      </span>
+      <span aria-hidden="true" className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-white/20'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${checked ? 'left-[1.125rem]' : 'left-0.5'}`} />
+      </span>
+    </button>
+  )
 }
 
 interface DownloadedRowProps {
@@ -158,10 +192,18 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
 
 /** Isi halaman Unduhan (hanya APK): lagu yang bisa diputar offline + progres unduhan. */
 export default function DownloadsSection() {
-  const { items, transfers } = useOffline()
+  const { items, transfers, paused, wifiOnly, cellular, chargingOnly, unplugged, restored } = useOffline()
+  const heldWifi = wifiOnly && cellular
+  const heldCharge = chargingOnly && unplugged
+  const blocked = heldWifi || heldCharge
+  const heldText = !blocked ? null : heldWifi && heldCharge ? 'Wi-Fi dan cas' : heldWifi ? 'Wi-Fi' : 'cas'
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
   const player = useAudioPlayer()
   const tracks = useMemo(() => items.map(toPlaylistTrack), [items])
   const pending = [...transfers.values()]
+  const failed = pending.filter((t) => t.status === 'error').length
+  const waiting = pending.filter((t) => t.status === 'queued').length
+  const working = pending.some((t) => t.status === 'resolving' || t.status === 'downloading')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   // Lagu yang sedang diputar dikenali lewat kunci yang sama dengan unduhan (juga bila diputar dari playlist lain).
   const currentKey = player.currentTrack ? trackKey(player.currentTrack) : null
@@ -224,6 +266,42 @@ export default function DownloadsSection() {
     )
   }
 
+  /** Konfirmasi hapus semua unduhan satu kelompok: playlist-nya tetap ada, hanya berkas lagu yang dihapus. */
+  const renderRemoveConfirm = (name: string, rows: readonly DownloadedTrack[], groupId: string) => {
+    const keys = new Set(rows.map((row) => row.key))
+    // Berkas lagu dipakai bersama: lagu yang juga ada di playlist lain ikut hilang dari sana.
+    const shared = new Set<string>()
+    for (const other of groups) {
+      if (other.id === groupId) continue
+      for (const row of other.rows) if (keys.has(row.key)) shared.add(row.key)
+    }
+    const bytes = totalBytes(rows)
+    return (
+      <div role="group" aria-label={`Konfirmasi hapus unduhan ${name}`} className="mt-1 rounded-lg bg-card px-4 py-3 text-sm text-ink">
+        <p>
+          Hapus {rows.length} lagu ({formatBytes(bytes)}) dari perangkat?{' '}
+          {groupId === '__single' ? '' : `Playlist “${name}” tetap ada dan lagunya bisa diunduh lagi. `}
+          {shared.size > 0 && `${shared.size} lagu juga ada di playlist lain dan ikut terhapus dari sana.`}
+        </p>
+        <div className="mt-2 flex gap-2">
+          <button type="button" onClick={() => setConfirmRemove(null)} className="btn-secondary h-9 px-4">
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmRemove(null)
+              void removeDownloads([...keys]).then((n) => showToast(`${n} unduhan dihapus, ${formatBytes(bytes)} dibebaskan`))
+            }}
+            className="btn-danger h-9 px-4"
+          >
+            Hapus
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <section aria-label="Unduhan">
       <header className="mb-4">
@@ -232,6 +310,62 @@ export default function DownloadsSection() {
           {items.length > 0 ? `${items.length} lagu · ${formatBytes(totalBytes(items))} · bisa diputar offline` : 'Lagu yang disimpan untuk diputar offline'}
         </p>
       </header>
+
+      <div className="mb-3 space-y-2">
+        <SettingSwitch
+          checked={wifiOnly}
+          onChange={() => setWifiOnlyEnabled(!wifiOnly)}
+          icon={wifiOnly ? Wifi : WifiOff}
+          label="Unduh hanya lewat Wi-Fi"
+          hint="Antrean berhenti saat memakai data seluler dan lanjut sendiri saat Wi-Fi tersambung."
+        />
+        <SettingSwitch
+          checked={chargingOnly}
+          onChange={() => setChargingOnlyEnabled(!chargingOnly)}
+          icon={chargingOnly ? BatteryCharging : Battery}
+          label="Unduh hanya saat dicas"
+          hint="Antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok."
+        />
+      </div>
+
+      {(waiting > 0 || failed > 0) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {waiting > 0 && (
+            <button
+              type="button"
+              onClick={paused ? resumeDownloads : pauseDownloads}
+              className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-ink focus-ring"
+            >
+              {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
+              {paused ? 'Lanjutkan unduhan' : 'Jeda unduhan'}
+            </button>
+          )}
+          {failed > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const n = retryAllFailed()
+                showToast(n > 0 ? `Mencoba ulang ${n} lagu` : 'Tidak ada yang bisa dicoba ulang')
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-ink focus-ring"
+            >
+              <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Coba ulang yang gagal ({failed})
+            </button>
+          )}
+          {paused ? (
+            <span className="text-xs text-ink-muted">
+              {restored > 0
+                ? `Antrean dipulihkan (${restored} lagu). Tekan Lanjutkan untuk mulai.`
+                : working
+                  ? 'Dijeda setelah lagu yang berjalan selesai'
+                  : 'Dijeda'}
+            </span>
+          ) : (
+            blocked && <span className="text-xs text-ink-muted">Menunggu {heldText}. Lanjut otomatis saat syaratnya terpenuhi.</span>
+          )}
+        </div>
+      )}
 
       {pending.length > 0 && (
         <ul className="mb-3 space-y-2">
@@ -242,13 +376,21 @@ export default function DownloadsSection() {
               <li key={transfer.key} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
                 {transfer.status === 'error' ? (
                   <AlertCircle className="h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+                ) : transfer.status === 'queued' && paused ? (
+                  <Pause className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+                ) : transfer.status === 'queued' && blocked ? (
+                  heldWifi ? (
+                    <WifiOff className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+                  ) : (
+                    <Battery className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+                  )
                 ) : (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{name ?? 'Lagu'}</span>
                   <span className={`block text-xs ${transfer.status === 'error' ? 'select-text break-words text-danger' : 'truncate text-ink-muted'}`}>
-                    {transferLabel(transfer)}
+                    {transferLabel(transfer, paused, heldText)}
                   </span>
                   {active && (
                     <span
@@ -265,6 +407,18 @@ export default function DownloadsSection() {
                     </span>
                   )}
                 </span>
+                {transfer.status === 'error' && (
+                  <button
+                    type="button"
+                    aria-label="Coba lagi"
+                    onClick={() => {
+                      if (!retryDownload(transfer.key)) showToast('Tidak bisa dicoba ulang. Unduh lagi dari playlistnya.')
+                    }}
+                    className="icon-btn -my-2"
+                  >
+                    <RotateCw className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
                 {(transfer.status === 'queued' || transfer.status === 'error') && (
                   <button
                     type="button"
@@ -294,11 +448,12 @@ export default function DownloadsSection() {
             const open = !collapsed.has(group.id)
             return (
               <section key={group.id} aria-label={`Playlist ${group.name}`}>
+                <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={open}
-                  className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
                 >
                   <ListMusic className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                   <span className="min-w-0 flex-1">
@@ -309,17 +464,28 @@ export default function DownloadsSection() {
                   </span>
                   <ChevronDown className={`h-5 w-5 shrink-0 text-ink-muted transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemove(confirmRemove === group.id ? null : group.id)}
+                  aria-label={`Hapus unduhan playlist ${group.name}`}
+                  className="icon-btn shrink-0 text-ink-muted"
+                >
+                  <Trash2 className="h-5 w-5" aria-hidden="true" />
+                </button>
+                </div>
+                {confirmRemove === group.id && renderRemoveConfirm(group.name, group.rows, group.id)}
                 {open && <div className="mt-1">{renderRows(group.rows, group.id)}</div>}
               </section>
             )
           })}
           {singles.length > 0 && (
             <section aria-label="Lagu satuan">
+              <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => toggleGroup('__single')}
                 aria-expanded={!collapsed.has('__single')}
-                className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
               >
                 <Music2 className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
@@ -330,6 +496,16 @@ export default function DownloadsSection() {
                 </span>
                 <ChevronDown className={`h-5 w-5 shrink-0 text-ink-muted transition-transform ${collapsed.has('__single') ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
+              <button
+                type="button"
+                onClick={() => setConfirmRemove(confirmRemove === '__single' ? null : '__single')}
+                aria-label="Hapus semua lagu satuan"
+                className="icon-btn shrink-0 text-ink-muted"
+              >
+                <Trash2 className="h-5 w-5" aria-hidden="true" />
+              </button>
+              </div>
+              {confirmRemove === '__single' && renderRemoveConfirm('Lagu satuan', singles, '__single')}
               {!collapsed.has('__single') && <div className="mt-1">{renderRows(singles)}</div>}
             </section>
           )}

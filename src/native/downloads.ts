@@ -15,12 +15,20 @@ import {
   writeMeta,
   isTooSmallForDuration,
   srcFor,
+  setCellular,
+  setChargingOnly,
   setItems,
+  setPaused,
+  setRestored,
   setTransfer,
+  setUnplugged,
+  setWifiOnly,
   trackKey,
   type DownloadedTrack,
 } from './offline'
 import { isNativeApp } from './platform'
+import { onConnectionChange, readCharging, readConnectionType } from './connection'
+import { readJson, removeKey, writeJson } from '../utils/safeStorage'
 
 /**
  * Pengunduh lagu untuk diputar offline. Satu unduhan sekali jalan (antrean), supaya tidak membebani
@@ -55,6 +63,98 @@ const REMOTE_LOCAL_DRIFT_S = 3
 let sessionTotal = 0
 let sessionDone = 0
 let sessionFailed = 0
+/** Naik tiap sesi antrean selesai; dipakai agar "coba lagi" tidak mengurangi hitungan gagal sesi yang sudah lewat. */
+let sessionEpoch = 0
+/** Unduhan yang gagal, disimpan agar bisa dicoba lagi tanpa membuka playlist asalnya. */
+const failedJobs = new Map<string, { job: Job; epoch: number }>()
+/** Lagu yang sedang diunduh (sudah keluar dari `queue`); ikut disimpan agar tidak hilang bila aplikasi ditutup. */
+let current: Job | null = null
+let restoring = false
+
+const QUEUE_KEY = 'musicverse:download-queue:v1'
+const SETTINGS_KEY = 'musicverse:download-settings:v1'
+const NET_POLL_MS = 4_000
+
+/** Menyimpan antrean (termasuk yang sedang berjalan) dan daftar gagal ke penyimpanan perangkat. */
+function persistQueue(): void {
+  if (restoring) return
+  const pending = [...(current ? [current.track] : []), ...queue.map((job) => job.track)]
+  const failed = [...failedJobs.values()].map(({ job }) => ({
+    track: job.track,
+    message: getOfflineState().transfers.get(job.key)?.message ?? 'Unduhan gagal.',
+  }))
+  if (pending.length === 0 && failed.length === 0) removeKey(QUEUE_KEY)
+  else writeJson(QUEUE_KEY, { version: 1, queue: pending, failed })
+}
+
+function asTrack(value: unknown): PlaylistTrack | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  const str = (x: unknown) => (typeof x === 'string' ? x : '')
+  if (!str(v.title).trim()) return null
+  return {
+    id: str(v.id) || `restored-${Math.random().toString(36).slice(2, 10)}`,
+    title: str(v.title),
+    artists: str(v.artists),
+    album: str(v.album),
+    duration: str(v.duration),
+    url: str(v.url),
+    cover: str(v.cover),
+  }
+}
+
+/**
+ * Memperbarui syarat unduhan yang menyala: koneksi seluler ("hanya Wi-Fi") dan lepas cas ("hanya saat dicas").
+ * Yang tidak bisa dibaca ('unknown' / null) TIDAK dianggap melanggar syarat, jadi tidak memblokir unduhan.
+ */
+async function refreshConditions(): Promise<void> {
+  const s = getOfflineState()
+  if (s.wifiOnly) setCellular((await readConnectionType()) === 'cellular')
+  if (s.chargingOnly) setUnplugged((await readCharging()) === false)
+}
+
+/** Alasan unduhan ditahan sekarang ('wifi' | 'charging' | keduanya), atau kosong bila boleh jalan. Membaca ulang dulu. */
+async function conditionsBlocked(): Promise<boolean> {
+  const s = getOfflineState()
+  if (!s.wifiOnly && !s.chargingOnly) return false
+  await refreshConditions()
+  return isHeldByConditions()
+}
+
+function isHeldByConditions(): boolean {
+  const s = getOfflineState()
+  return (s.wifiOnly && s.cellular) || (s.chargingOnly && s.unplugged)
+}
+
+/** Teks syarat yang belum terpenuhi untuk label dan notifikasi. */
+function heldReason(): string {
+  const s = getOfflineState()
+  const wifi = s.wifiOnly && s.cellular
+  const charge = s.chargingOnly && s.unplugged
+  if (wifi && charge) return 'Wi-Fi dan cas'
+  return wifi ? 'Wi-Fi' : 'cas'
+}
+
+/** Melanjutkan antrean otomatis bila tidak ada lagi yang menahannya (jeda manual atau syarat belum terpenuhi). */
+function maybeAutoStart(): void {
+  const s = getOfflineState()
+  if (queue.length > 0 && !running && !s.paused && !isHeldByConditions()) void pump()
+}
+
+let netTimer = 0
+function updateWatch(): void {
+  const s = getOfflineState()
+  if (!s.wifiOnly && !s.chargingOnly) {
+    window.clearInterval(netTimer)
+    netTimer = 0
+    return
+  }
+  if (netTimer) return
+  netTimer = window.setInterval(() => {
+    if (queue.length === 0 && !running) return
+    void refreshConditions().then(maybeAutoStart)
+  }, NET_POLL_MS)
+}
 let notifyAt = 0
 let notifyPermissionAsked = false
 
@@ -365,6 +465,7 @@ function finishSession(): void {
   sessionTotal = 0
   sessionDone = 0
   sessionFailed = 0
+  sessionEpoch += 1
 }
 
 async function pump(): Promise<void> {
@@ -372,19 +473,39 @@ async function pump(): Promise<void> {
   running = true
   installProgressListener()
   try {
-    for (let job = queue.shift(); job; job = queue.shift()) {
+    // Dijeda atau (mode hanya Wi-Fi) sedang seluler: lagu yang sedang berjalan diselesaikan dulu, berikutnya tidak dimulai.
+    while (!getOfflineState().paused && !(await conditionsBlocked())) {
+      const job = queue.shift()
+      if (!job) break
+      current = job
       try {
         await downloadOne(job)
         sessionDone += 1
+        failedJobs.delete(job.key)
       } catch (error) {
         console.warn('[MusicVerse] Unduhan gagal:', error)
         sessionFailed += 1
+        failedJobs.set(job.key, { job, epoch: sessionEpoch })
         setTransfer(job.key, { key: job.key, title: job.track.title, status: 'error', percent: null, message: errorText(error) })
       }
+      current = null
+      persistQueue()
     }
   } finally {
     running = false
-    finishSession()
+    current = null
+    const s = getOfflineState()
+    if (queue.length > 0 && s.paused) {
+      notify('Unduhan dijeda', `${queue.length} lagu menunggu. Buka Unduhan untuk melanjutkan.`, null, true, true)
+    } else if (queue.length > 0 && isHeldByConditions()) {
+      const why = heldReason()
+      notify(`Menunggu ${why}`, `${queue.length} lagu menunggu. Lanjut otomatis saat ${why === 'cas' ? 'HP dicas' : why === 'Wi-Fi' ? 'tersambung Wi-Fi' : 'tersambung Wi-Fi dan dicas'}.`, null, true, true)
+    } else {
+      // Antrean habis: jeda tidak boleh "menempel" ke unduhan berikutnya.
+      setPaused(false)
+      setRestored(0)
+      finishSession()
+    }
   }
 }
 
@@ -399,6 +520,7 @@ function enqueue(track: PlaylistTrack): EnqueueResult {
   queue.push({ track, key })
   sessionTotal += 1
   setTransfer(key, { key, title: track.title, status: 'queued', percent: null })
+  persistQueue()
   return 'queued'
 }
 
@@ -460,8 +582,139 @@ export function cancelQueued(key: string): void {
     sessionTotal = Math.max(0, sessionTotal - 1)
   }
   setTransfer(key, null)
+  if (queue.length === 0 && !running) {
+    setPaused(false)
+    setRestored(0)
+  }
+  persistQueue()
 }
 
 export function dismissTransferError(key: string): void {
+  failedJobs.delete(key)
   setTransfer(key, null)
+  persistQueue()
+}
+
+/** Jumlah unduhan gagal yang masih bisa dicoba lagi. */
+export function failedCount(): number {
+  return failedJobs.size
+}
+
+/** Mencoba lagi satu unduhan yang gagal. false jika datanya sudah tidak ada. */
+export function retryDownload(key: string): boolean {
+  const entry = failedJobs.get(key)
+  if (!entry) return false
+  failedJobs.delete(key)
+  // Gagal yang sudah dihitung di sesi berjalan dicabut; sesi yang sudah selesai tidak diubah.
+  if (entry.epoch === sessionEpoch) sessionFailed = Math.max(0, sessionFailed - 1)
+  const result = enqueue(entry.job.track)
+  if (result === 'queued') {
+    askNotificationPermissionOnce()
+    void pump()
+  }
+  persistQueue()
+  return result === 'queued'
+}
+
+/** Mencoba lagi semua unduhan yang gagal. Mengembalikan jumlah yang dimasukkan ke antrean. */
+export function retryAllFailed(): number {
+  let count = 0
+  for (const key of [...failedJobs.keys()]) if (retryDownload(key)) count += 1
+  return count
+}
+
+/** Menjeda antrean: lagu yang sedang diunduh diselesaikan dulu (unduhan berjalan tidak bisa dihentikan di tengah), sisanya menunggu. */
+export function pauseDownloads(): void {
+  if (queue.length === 0) return
+  setPaused(true)
+}
+
+/** Melanjutkan antrean yang dijeda. */
+export function resumeDownloads(): void {
+  setPaused(false)
+  setRestored(0)
+  void pump()
+}
+
+/** Menyalakan/mematikan "Unduh hanya lewat Wi-Fi" (disimpan di perangkat). */
+export function setWifiOnlyEnabled(on: boolean): void {
+  setWifiOnly(on)
+  saveSettings()
+  if (!on) setCellular(false)
+  updateWatch()
+  void refreshConditions().then(maybeAutoStart)
+}
+
+/** Menyalakan/mematikan "Unduh hanya saat dicas" (disimpan di perangkat). */
+export function setChargingOnlyEnabled(on: boolean): void {
+  setChargingOnly(on)
+  saveSettings()
+  if (!on) setUnplugged(false)
+  updateWatch()
+  void refreshConditions().then(maybeAutoStart)
+}
+
+function saveSettings(): void {
+  const s = getOfflineState()
+  writeJson(SETTINGS_KEY, { wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly })
+}
+
+/**
+ * Dipanggil sekali saat start (setelah indeks unduhan siap): memuat pengaturan, memantau perubahan koneksi, dan
+ * memulihkan antrean + daftar gagal dari sesi sebelumnya. Antrean yang dipulihkan DIJEDA dulu (tidak langsung
+ * memakai data); pengguna menekan "Lanjutkan unduhan".
+ */
+export function initDownloads(): void {
+  if (!isNativeApp()) return
+  const settings = readJson(SETTINGS_KEY)
+  if (settings.status === 'ok' && typeof settings.value === 'object' && settings.value !== null) {
+    const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown }
+    if (saved.wifiOnly === true) setWifiOnly(true)
+    if (saved.chargingOnly === true) setChargingOnly(true)
+    updateWatch()
+    void refreshConditions()
+  }
+  onConnectionChange(() => {
+    if (!getOfflineState().wifiOnly) return
+    void refreshConditions().then(maybeAutoStart)
+  })
+
+  const saved = readJson(QUEUE_KEY)
+  if (saved.status !== 'ok' || typeof saved.value !== 'object' || saved.value === null) return
+  const data = saved.value as { queue?: unknown; failed?: unknown }
+  restoring = true
+  try {
+    const have = new Set(getOfflineState().items.map((item) => item.key))
+    if (Array.isArray(data.failed)) {
+      for (const entry of data.failed) {
+        const track = asTrack((entry as { track?: unknown } | null)?.track)
+        if (!track) continue
+        const key = trackKey(track)
+        if (have.has(key) || failedJobs.has(key)) continue
+        const message = typeof (entry as { message?: unknown }).message === 'string' ? (entry as { message: string }).message : 'Unduhan gagal.'
+        failedJobs.set(key, { job: { track, key }, epoch: sessionEpoch })
+        setTransfer(key, { key, title: track.title, status: 'error', percent: null, message })
+      }
+    }
+    let restored = 0
+    if (Array.isArray(data.queue)) {
+      for (const value of data.queue) {
+        const track = asTrack(value)
+        if (!track) continue
+        const key = trackKey(track)
+        if (have.has(key) || failedJobs.has(key) || getOfflineState().transfers.has(key)) continue
+        queue.push({ track, key })
+        sessionTotal += 1
+        restored += 1
+        setTransfer(key, { key, title: track.title, status: 'queued', percent: null })
+      }
+    }
+    if (restored > 0) {
+      setPaused(true)
+      setRestored(restored)
+    }
+  } finally {
+    restoring = false
+  }
+  persistQueue()
 }

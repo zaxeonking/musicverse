@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { installNativeBackButton } from './native/backButton'
+import { initDownloads } from './native/downloads'
 import { initOffline } from './native/offline'
 import { initNativeStorage } from './native/nativeStorage'
 import { startLyricsBackfill } from './native/offlineLyrics'
@@ -17,7 +18,7 @@ async function bootstrap() {
     document.documentElement.classList.add('native-app')
     installNativeBackButton()
     await initNativeStorage()
-    void initOffline().then(startLyricsBackfill)
+    void initOffline().then(initDownloads).then(startLyricsBackfill)
   }
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

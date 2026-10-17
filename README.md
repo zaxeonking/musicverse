@@ -262,7 +262,7 @@ Menu tahan-lama (menu lagu dan menu di panel antrean) bukan bagian dari state ro
   3 detik terakhir lagu diabaikan. Data rusak/tidak konsisten = sesi dibuang. `cleanup()` menghapus sesi.
 - **Sleep timer custom**: selain 15/30/45/60 menit, ada isian menit bulat 1–720 di Sleep timer.
 
-## Catatan rilis v0.2.3
+## Catatan rilis v0.3.0
 
 Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 
@@ -289,6 +289,20 @@ Perbaikan playlist, unduhan, dan bilah progres notifikasi.
 **Tampilan pemutar**
 - **Judul panjang menggulir:** judul/artis yang terpotong di mini player, artis/album di pemutar penuh, dan lagu aktif di antrean menggulir ke samping sampai ujung terlihat, berhenti sebentar (±1,6 dtk), kembali ke awal, berhenti lagi, lalu menggulir lagi (`components/ui/MarqueeText.tsx`). Teks yang muat tetap diam; mode "kurangi gerakan" memakai elipsis biasa.
 - **Lirik mini player per kata:** kata yang sudah/sedang dinyanyikan terang, sisanya redup. LRC hanya punya waktu per baris, jadi waktu tiap kata diperkirakan dari panjang kata dalam baris itu (`LyricLine.tsx`). Baris yang lebih lebar dari strip bergeser agar kata aktif tetap di tengah. Lirik tanpa waktu per baris (mode perkiraan / lirik biasa) tidak disorot per kata; baris panjangnya menggulir seperti judul.
+
+**Unduhan: coba lagi & jeda**
+- **Coba lagi:** unduhan yang gagal punya tombol putar-ulang di barisnya, plus tombol **Coba ulang yang gagal (N)** di atas daftar. Data lagunya disimpan di memori selama aplikasi terbuka (`failedJobs` di `native/downloads.ts`), jadi tidak perlu membuka playlist asalnya. Setelah aplikasi ditutup, daftar gagal hilang; unduh lagi dari playlistnya.
+- **Jeda/Lanjutkan:** tombol **Jeda unduhan** menahan lagu berikutnya. Lagu yang sedang berjalan diselesaikan dulu karena plugin Filesystem tidak bisa menghentikan unduhan di tengah. Lagu yang menunggu ditandai "Dijeda", notifikasi berubah jadi "Unduhan dijeda", dan status jeda otomatis dilepas saat antrean habis atau dikosongkan.
+- Judul bergulir hanya dipakai untuk **lagu yang sedang diputar** (mini player, pemutar penuh, baris lagu aktif di antrean), bukan di daftar lagu.
+
+**Unduhan: hanya Wi-Fi & antrean tahan ditutup**
+- **Unduh hanya lewat Wi-Fi** (tombol di halaman Unduhan, disimpan di perangkat). Saat menyala dan koneksi seluler, lagu berikutnya tidak dimulai (label "Menunggu Wi-Fi", notifikasi "Menunggu Wi-Fi"), dan antrean lanjut sendiri begitu Wi-Fi tersambung (koneksi dicek tiap 4 dtk selama ada antrean, plus saat online/offline berubah). Lagu yang sudah berjalan diselesaikan dulu. Jenis koneksi dibaca native lewat `getNetworkType` (ConnectivityManager, izin `ACCESS_NETWORK_STATE` ditambahkan `setup-android.mjs`). Koneksi yang tidak bisa ditentukan dianggap bukan seluler, jadi unduhan tidak diblokir.
+- **Antrean tersimpan** di `localStorage` kunci `musicverse:download-queue:v1` (ikut tercermin ke `Android/data`): lagu yang menunggu, yang sedang berjalan, dan yang gagal (dengan pesannya). Saat aplikasi dibuka lagi, antrean dipulihkan dalam keadaan **dijeda** supaya tidak langsung memakai data; tekan **Lanjutkan unduhan**. Lagu yang sudah selesai terunduh dilewati. Berkas `.part` sisa dibersihkan saat unduhan berikutnya.
+
+**Unduhan: hanya saat dicas, unduh yang baru, hapus per playlist**
+- **Unduh hanya saat dicas** (tombol di halaman Unduhan, disimpan di perangkat): antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok. Bisa digabung dengan "hanya Wi-Fi"; label dan notifikasi menyebut syarat yang belum terpenuhi ("Menunggu Wi-Fi", "Menunggu cas", atau "Menunggu Wi-Fi dan cas"). Status cas dibaca native lewat `getPowerState` (BatteryManager, tanpa izin tambahan; cadangan `navigator.getBattery()`). Status yang tidak terbaca tidak memblokir unduhan.
+- **Unduh yang baru** (halaman playlist hasil "Unduh semua", hanya APK): mengambil ulang playlist Spotify-nya dari `sourceId`, menambahkan lagu baru ke playlist itu, lalu mengunduh semua yang belum terunduh (lagu lama yang dulu gagal ikut dicoba lagi). Lagu yang dihapus dari Spotify tidak dihapus dari perangkat. Lagu yang sengaja kamu keluarkan dari playlist ini akan muncul lagi bila masih ada di Spotify.
+- **Hapus unduhan per playlist**: tiap kelompok di tab Unduhan (dan *Lagu satuan*) menampilkan jumlah lagu + ukuran, dan tombol tempat sampah untuk menghapus semua berkas lagunya sekaligus (`removeDownloads` di `native/offline.ts`). Playlist-nya tetap ada. Berkas lagu dipakai bersama, jadi lagu yang juga ada di playlist lain ikut hilang dari sana; konfirmasi menyebut jumlahnya.
 
 > Perubahan ini menyentuh kode native, jadi butuh **APK baru** (build web saja tidak cukup).
 
@@ -328,7 +342,7 @@ Judul dan artis disimpan serta ditampilkan **persis seperti dari server**: tidak
 
 Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika semua gagal, unduhan ditandai gagal dan tidak ada berkas tersimpan):
 
-- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul **tidak dipakai untuk menolak** (v0.2.3: server sering menulis judul beda dari playlist), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
+- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul **tidak dipakai untuk menolak** (v0.3.0: server sering menulis judul beda dari playlist), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
   dan **penanda versi** sama: live, remix/edit, instrumental/karaoke, akustik, cover, sped up/slowed/reverb/8D, lofi, demo.
 - **Durasi (dua arah):** durasi file harus dalam +-10 dtk atau 4% dari lagu di playlist (yang lebih besar), baik terlalu pendek maupun terlalu panjang.
   Diperiksa dua kali: dari sumber sebelum diunduh, lalu dari berkas lokal sesudah diunduh (dibaca ulang sampai 3x).

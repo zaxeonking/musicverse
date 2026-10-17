@@ -65,9 +65,21 @@ interface OfflineState {
   items: readonly DownloadedTrack[]
   transfers: ReadonlyMap<string, Transfer>
   ready: boolean
+  /** Antrean unduhan dijeda: lagu berikutnya tidak dimulai (yang sedang berjalan diselesaikan dulu). */
+  paused: boolean
+  /** Pilihan "Unduh hanya lewat Wi-Fi". */
+  wifiOnly: boolean
+  /** Koneksi aktif sekarang seluler (hanya diperbarui saat wifiOnly menyala). */
+  cellular: boolean
+  /** Pilihan "Unduh hanya saat dicas". */
+  chargingOnly: boolean
+  /** HP sedang TIDAK dicas (hanya diperbarui saat chargingOnly menyala). */
+  unplugged: boolean
+  /** Jumlah lagu antrean yang dipulihkan dari sesi sebelumnya dan masih menunggu "Lanjutkan". */
+  restored: number
 }
 
-let state: OfflineState = { items: [], transfers: new Map(), ready: false }
+let state: OfflineState = { items: [], transfers: new Map(), ready: false, paused: false, wifiOnly: false, cellular: false, chargingOnly: false, unplugged: false, restored: 0 }
 const listeners = new Set<() => void>()
 
 function setState(next: Partial<OfflineState>): void {
@@ -140,6 +152,30 @@ function saveIndex(items: readonly DownloadedTrack[]): void {
 export function setItems(items: readonly DownloadedTrack[]): void {
   saveIndex(items)
   setState({ items })
+}
+
+export function setPaused(paused: boolean): void {
+  if (state.paused !== paused) setState({ paused })
+}
+
+export function setWifiOnly(wifiOnly: boolean): void {
+  if (state.wifiOnly !== wifiOnly) setState({ wifiOnly })
+}
+
+export function setCellular(cellular: boolean): void {
+  if (state.cellular !== cellular) setState({ cellular })
+}
+
+export function setChargingOnly(chargingOnly: boolean): void {
+  if (state.chargingOnly !== chargingOnly) setState({ chargingOnly })
+}
+
+export function setUnplugged(unplugged: boolean): void {
+  if (state.unplugged !== unplugged) setState({ unplugged })
+}
+
+export function setRestored(restored: number): void {
+  if (state.restored !== restored) setState({ restored })
 }
 
 export function setTransfer(key: string, transfer: Transfer | null): void {
@@ -312,24 +348,36 @@ export async function resolveOfflinePlayback(track: {
   }
 }
 
-export async function removeDownload(key: string): Promise<void> {
-  const item = state.items.find((entry) => entry.key === key)
-  if (!item) return
-  const targets = [
+function filesOf(item: DownloadedTrack): string[] {
+  return [
     `${DOWNLOAD_DIR}/${item.fileName}`,
     ...(item.coverFileName ? [`${COVER_DIR}/${item.coverFileName}`] : []),
     `${LYRICS_DIR}/${item.key}.json`,
     `${META_DIR}/${item.key}.json`,
   ]
-  // Entri dibuang dulu (sinkron) supaya pemutar tidak lagi menemukannya selagi berkas dihapus.
-  setItems(state.items.filter((entry) => entry.key !== key))
-  for (const path of targets) {
-    try {
-      await Filesystem.deleteFile({ path, directory: Directory.External })
-    } catch {
-      // Sudah tidak ada.
+}
+
+export async function removeDownload(key: string): Promise<void> {
+  await removeDownloads([key])
+}
+
+/** Menghapus banyak unduhan sekaligus (lagu, sampul, lirik, meta). Mengembalikan jumlah lagu yang dihapus. */
+export async function removeDownloads(keys: readonly string[]): Promise<number> {
+  const wanted = new Set(keys)
+  const items = state.items.filter((entry) => wanted.has(entry.key))
+  if (items.length === 0) return 0
+  // Entri dibuang dulu (sinkron, sekali) supaya pemutar tidak lagi menemukannya selagi berkas dihapus.
+  setItems(state.items.filter((entry) => !wanted.has(entry.key)))
+  for (const item of items) {
+    for (const path of filesOf(item)) {
+      try {
+        await Filesystem.deleteFile({ path, directory: Directory.External })
+      } catch {
+        // Sudah tidak ada.
+      }
     }
   }
+  return items.length
 }
 
 export function toPlaylistTrack(item: DownloadedTrack): PlaylistTrack {

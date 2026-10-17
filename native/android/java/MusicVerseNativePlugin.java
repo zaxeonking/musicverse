@@ -10,7 +10,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.database.Cursor;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
@@ -302,6 +306,53 @@ public class MusicVerseNativePlugin extends Plugin {
     } catch (RuntimeException e) {
       call.reject("Notifikasi unduhan gagal: " + e.getMessage());
     }
+  }
+
+  /** Jenis koneksi aktif: dipakai pilihan "Unduh hanya lewat Wi-Fi". Tanpa izin / gagal baca = "unknown" (tidak dianggap seluler). */
+  @PluginMethod
+  public void getNetworkType(PluginCall call) {
+    String type = "unknown";
+    boolean metered = false;
+    try {
+      ConnectivityManager cm = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+      if (cm != null) {
+        Network network = cm.getActiveNetwork();
+        NetworkCapabilities caps = network == null ? null : cm.getNetworkCapabilities(network);
+        if (caps == null) type = "none";
+        else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) type = "wifi";
+        else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) type = "ethernet";
+        else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) type = "cellular";
+        else type = "other";
+        metered = cm.isActiveNetworkMetered();
+      }
+    } catch (RuntimeException e) {
+      type = "unknown";
+    }
+    JSObject result = new JSObject();
+    result.put("type", type);
+    result.put("metered", metered);
+    call.resolve(result);
+  }
+
+  /** Apakah HP sedang dicas (dipakai pilihan "Unduh hanya saat dicas"). Gagal baca = "unknown" (tidak dianggap lepas cas). */
+  @PluginMethod
+  public void getPowerState(PluginCall call) {
+    boolean known = false;
+    boolean charging = false;
+    try {
+      Intent battery = getContext().registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+      if (battery != null) {
+        int plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+        charging = plugged != 0;
+        known = true;
+      }
+    } catch (RuntimeException e) {
+      known = false;
+    }
+    JSObject result = new JSObject();
+    result.put("known", known);
+    result.put("charging", charging);
+    call.resolve(result);
   }
 
   @PluginMethod

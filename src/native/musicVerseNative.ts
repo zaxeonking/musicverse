@@ -47,6 +47,10 @@ export interface MusicVerseNativePlugin {
   /** Notifikasi progres unduhan lagu (satu notifikasi untuk seluruh antrean). */
   showDownloadProgress(options: DownloadNotification): Promise<void>
   clearDownloadProgress(): Promise<void>
+  /** Jenis koneksi aktif (ConnectivityManager). */
+  getNetworkType(): Promise<{ type: 'wifi' | 'ethernet' | 'cellular' | 'other' | 'none' | 'unknown'; metered: boolean }>
+  /** Apakah HP sedang dicas. `known` false = tidak terbaca. */
+  getPowerState(): Promise<{ known: boolean; charging: boolean }>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */
   downloadUpdate(options: { url: string; version: string }): Promise<void>
   /** Membuka installer untuk APK yang sudah diunduh. Menolak dengan code NEED_PERMISSION jika izin pasang belum ada. */

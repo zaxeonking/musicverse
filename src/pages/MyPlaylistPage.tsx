@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Play, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Play, RefreshCw, Trash2, X } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
@@ -8,6 +8,8 @@ import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsConte
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { bulkDownloadText, downloadTracks } from '../native/downloads'
+import { trackKey } from '../native/offline'
+import { describeApiError, fetchPlaylist } from '../services/spotifyApi'
 import { isNativeApp } from '../native/platform'
 import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
@@ -74,7 +76,7 @@ function TrackLine({
 export default function MyPlaylistPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack } = useMyPlaylists()
+  const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack, saveDownloadedPlaylist } = useMyPlaylists()
   const { removePlaylist: removeSaved } = useLibrary()
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
@@ -82,6 +84,7 @@ export default function MyPlaylistPage() {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   if (!playlist) {
     return (
@@ -99,6 +102,33 @@ export default function MyPlaylistPage() {
   const activity = getRowActivity(player.status)
   const playingId = player.currentTrack?.id ?? null
   const fail = (reason: Parameters<typeof myPlaylistErrorText>[0]) => showToast(myPlaylistErrorText(reason))
+
+  /** Playlist hasil "Unduh semua": ambil ulang playlist Spotify-nya, tambah lagu baru, lalu unduh yang belum terunduh. */
+  const syncFromSpotify = async () => {
+    if (!playlist.sourceId || syncing) return
+    setSyncing(true)
+    try {
+      const remote = await fetchPlaylist(`https://open.spotify.com/playlist/${playlist.sourceId}`)
+      const have = new Set(playlist.tracks.map((t) => trackKey(t)))
+      const fresh = remote.tracks.filter((t) => !have.has(trackKey(t)))
+      // Yang sudah terunduh atau sedang diproses dilewati otomatis; lagu lama yang dulu gagal ikut dicoba lagi.
+      const result = downloadTracks(remote.tracks)
+      if (result.unsupported) return showToast(bulkDownloadText(result))
+      if (fresh.length > 0) {
+        const saved = saveDownloadedPlaylist(playlist.sourceId, playlist.name, fresh)
+        if (!saved.ok) return fail(saved.reason)
+      }
+      showToast(
+        fresh.length === 0 && result.queued === 0
+          ? 'Tidak ada lagu baru. Semua sudah diunduh.'
+          : `${fresh.length} lagu baru di Spotify. Mengunduh ${result.queued} lagu.`,
+      )
+    } catch (error) {
+      showToast(describeApiError(error))
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const submitRename = (event: FormEvent) => {
     event.preventDefault()
@@ -183,6 +213,12 @@ export default function MyPlaylistPage() {
           >
             <Download className="h-4 w-4" aria-hidden="true" />
             Unduh semua
+          </button>
+        )}
+        {isNativeApp() && playlist.sourceId && (
+          <button type="button" onClick={() => void syncFromSpotify()} disabled={syncing} className="btn-secondary">
+            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
+            Unduh yang baru
           </button>
         )}
         {confirmDelete ? (
