@@ -22,4 +22,12 @@ public class MainActivity extends BridgeActivity {
       if (webView != null) webView.resumeTimers();
     }
   }
+
+  @Override
+  public void onDestroy() {
+    // Activity benar-benar ditutup (tombol back sampai keluar, finish(), dsb.; bukan sekadar rotasi layar):
+    // WebView ikut hancur sehingga audio berhenti, jadi notifikasi pemutar tidak boleh tertinggal.
+    if (isFinishing()) PlaybackService.stop(getApplicationContext());
+    super.onDestroy();
+  }
 }

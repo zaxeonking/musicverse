@@ -92,7 +92,8 @@ public class PlaybackService extends Service {
     pending = null;
     PlaybackService running = instance;
     if (running != null) running.shutdown();
-    else context.stopService(new Intent(context, PlaybackService.class));
+    // Selalu minta berhenti juga (aman dipanggil walau service tidak jalan).
+    context.stopService(new Intent(context, PlaybackService.class));
   }
 
   private MediaSession session;
@@ -103,6 +104,23 @@ public class PlaybackService extends Service {
   private String metaKey = "";
   private Bitmap metaArt = null;
   private boolean foreground = false;
+  /** True setelah shutdown(): semua pembaruan yang masih antre (dari JS / ticker) diabaikan supaya notifikasi tidak muncul lagi. */
+  private boolean stopped = false;
+  /** Waktu (elapsedRealtime) pembaruan terakhir dari JS. Dasar watchdog: JS mati = tidak ada kabar lagi. */
+  private long lastJsUpdateAt = 0;
+  /** Saat memutar, JS mengirim detak tiap ~2 dtk. Tanpa kabar selama ini berarti WebView/app sudah mati. */
+  private static final long JS_SILENCE_LIMIT_MS = 90L * 1000L;
+  private static final long WATCHDOG_INTERVAL_MS = 15L * 1000L;
+  private final Runnable watchdog = new Runnable() {
+    @Override public void run() {
+      if (stopped) return;
+      if (current.playing && SystemClock.elapsedRealtime() - lastJsUpdateAt > JS_SILENCE_LIMIT_MS) {
+        shutdown();
+        return;
+      }
+      handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
+    }
+  };
   /** Waktu (elapsedRealtime) saat positionMs terakhir dilaporkan JS; dasar penghitungan posisi berjalan. */
   private long positionAt = 0;
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -121,7 +139,7 @@ public class PlaybackService extends Service {
    */
   private final Runnable ticker = new Runnable() {
     @Override public void run() {
-      if (!current.playing || session == null) return;
+      if (stopped || !current.playing || session == null) return;
       pushPlaybackState();
       // ROM yang menggambar bilah dari notifikasi (bukan dari sesi) hanya bergerak jika notifikasinya ikut diperbarui.
       NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -151,7 +169,9 @@ public class PlaybackService extends Service {
       wakeLock.setReferenceCounted(false);
     }
     // Wajib: begitu startForegroundService() dipanggil, startForeground() harus menyusul segera.
+    lastJsUpdateAt = SystemClock.elapsedRealtime();
     startInForeground(buildNotification());
+    handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
   }
 
   @Override
@@ -182,8 +202,12 @@ public class PlaybackService extends Service {
 
   @Override
   public void onDestroy() {
-    handler.removeCallbacks(ticker);
-    instance = null;
+    stopped = true;
+    handler.removeCallbacksAndMessages(null);
+    if (instance == this) instance = null;
+    // Jaring pengaman: pastikan notifikasi benar-benar hilang.
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm != null) nm.cancel(NOTIFICATION_ID);
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     if (session != null) {
       session.setActive(false);
@@ -199,6 +223,8 @@ public class PlaybackService extends Service {
   }
 
   void apply(State next) {
+    if (stopped) return;
+    lastJsUpdateAt = SystemClock.elapsedRealtime();
     current.title = next.title;
     current.artist = next.artist;
     current.album = next.album;
@@ -247,11 +273,19 @@ public class PlaybackService extends Service {
   }
 
   void shutdown() {
-    handler.removeCallbacks(ticker);
-    handler.removeCallbacks(idleStop);
+    if (stopped) return;
+    stopped = true;
+    // Lepas referensi SEKARANG (bukan menunggu onDestroy): detak JS yang masih antre tidak boleh
+    // memanggil apply() lagi dan menghidupkan notifikasi yang baru saja dihapus.
+    if (instance == this) instance = null;
+    pending = null;
+    handler.removeCallbacksAndMessages(null);
     idleScheduled = false;
+    if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     stopForeground(true);
     foreground = false;
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm != null) nm.cancel(NOTIFICATION_ID);
     stopSelf();
   }
 
