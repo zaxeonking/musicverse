@@ -52,7 +52,8 @@ export function parseMyPlaylist(raw: unknown): MyPlaylist | null {
     if (tracks.length >= MAX_MY_PLAYLIST_TRACKS) break
   }
   const createdAt = time(raw.createdAt)
-  return { id, name: clean, createdAt, updatedAt: time(raw.updatedAt) || createdAt, tracks }
+  const sourceId = typeof raw.sourceId === 'string' && raw.sourceId ? raw.sourceId : undefined
+  return { id, name: clean, createdAt, updatedAt: time(raw.updatedAt) || createdAt, tracks, ...(sourceId ? { sourceId } : {}) }
 }
 
 export interface MyPlaylistsRead {
@@ -104,11 +105,23 @@ export function trackIdentity(track: Pick<PlaylistTrack, 'url'>): string {
   return extractTrackId(track.url) ?? track.url
 }
 
-export function createMyPlaylist(list: readonly MyPlaylist[], rawName: string, now = Date.now()): MyPlaylistChange<MyPlaylist> {
+export function createMyPlaylist(
+  list: readonly MyPlaylist[],
+  rawName: string,
+  now = Date.now(),
+  sourceId?: string,
+): MyPlaylistChange<MyPlaylist> {
   const name = cleanPlaylistName(rawName)
   if (!name) return { ok: false, reason: 'invalid' }
   if (list.length >= MAX_MY_PLAYLISTS) return { ok: false, reason: 'limit' }
-  const playlist: MyPlaylist = { id: `my-${uid()}`, name, createdAt: now, updatedAt: now, tracks: [] }
+  const playlist: MyPlaylist = {
+    id: `my-${uid()}`,
+    name,
+    createdAt: now,
+    updatedAt: now,
+    tracks: [],
+    ...(sourceId ? { sourceId } : {}),
+  }
   return { ok: true, list: [playlist, ...list], value: playlist }
 }
 
@@ -146,6 +159,42 @@ export function addTrackToMyPlaylist(list: readonly MyPlaylist[], id: string, tr
     const copy: PlaylistTrack = { ...toStoredTrack(track), id: `${uid()}-${extractTrackId(track.url) ?? 'track'}` }
     return { ...p, tracks: [...p.tracks, copy], updatedAt: now }
   })
+}
+
+export interface BulkAddResult {
+  added: number
+  /** Sudah ada di playlist itu (atau melewati batas jumlah lagu). */
+  skipped: number
+}
+
+/** Menambah banyak lagu sekaligus (satu kali baca-tulis). Lagu yang sudah ada dilewati, bukan error. */
+export function addTracksToMyPlaylist(
+  list: readonly MyPlaylist[],
+  id: string,
+  tracks: readonly PlaylistTrack[],
+  now = Date.now(),
+): MyPlaylistChange<BulkAddResult> {
+  const index = list.findIndex((item) => item.id === id)
+  if (index === -1) return { ok: false, reason: 'missing' }
+  const playlist = list[index]
+  const known = new Set(playlist.tracks.map(trackIdentity))
+  const next = [...playlist.tracks]
+  let added = 0
+  let skipped = 0
+  for (const track of tracks) {
+    const identity = trackIdentity(track)
+    if (known.has(identity) || next.length >= MAX_MY_PLAYLIST_TRACKS) {
+      skipped += 1
+      continue
+    }
+    known.add(identity)
+    next.push({ ...toStoredTrack(track), id: `${uid()}-${extractTrackId(track.url) ?? 'track'}` })
+    added += 1
+  }
+  if (added === 0) return { ok: true, list: [...list], value: { added, skipped } }
+  const copy = [...list]
+  copy[index] = { ...playlist, tracks: next, updatedAt: now }
+  return { ok: true, list: copy, value: { added, skipped } }
 }
 
 export function removeTrackFromMyPlaylist(list: readonly MyPlaylist[], id: string, trackId: string, now = Date.now()) {

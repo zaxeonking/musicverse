@@ -1,7 +1,8 @@
 import { Capacitor } from '@capacitor/core'
-import { Directory, Filesystem } from '@capacitor/filesystem'
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { useSyncExternalStore } from 'react'
 import type { PlaybackInfo, PlaylistTrack } from '../types/spotify'
+import { parseDuration } from '../utils/formatTime'
 import { readJson, writeJson } from '../utils/safeStorage'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
 import { isNativeApp } from './platform'
@@ -18,9 +19,18 @@ import { isNativeApp } from './platform'
 export const DOWNLOAD_DIR = 'download'
 export const COVER_DIR = `${DOWNLOAD_DIR}/covers`
 export const LYRICS_DIR = `${DOWNLOAD_DIR}/lyrics`
+/** Salinan metadata per lagu (<kunci>.json): indeks bisa dibangun ulang dari sini jika data aplikasi hilang. */
+export const META_DIR = `${DOWNLOAD_DIR}/meta`
 const INDEX_KEY = 'musicverse:downloads:v1'
 /** Berkas lebih kecil dari ini dianggap rusak (mis. halaman error HTML yang tersimpan sebagai audio). */
 export const MIN_VALID_BYTES = 100 * 1024
+/** Lagu penuh jarang di bawah ~40 kbps; berkas yang lebih kecil dari ini untuk durasinya hampir pasti cuplikan. */
+export const MIN_BYTES_PER_SEC = 5000
+
+/** True jika ukuran berkas terlalu kecil untuk durasi lagu yang diharapkan (detik). */
+export function isTooSmallForDuration(bytes: number, expectedSeconds: number | null): boolean {
+  return expectedSeconds !== null && expectedSeconds > 0 && bytes < expectedSeconds * MIN_BYTES_PER_SEC
+}
 
 export interface DownloadedTrack {
   key: string
@@ -144,25 +154,109 @@ export function findDownloaded(track: { title: string; artists?: string; url?: s
   return state.items.find((item) => item.key === key)
 }
 
-/** Memuat indeks dan membuang entri yang berkasnya sudah hilang (mis. dihapus lewat pengelola berkas). */
+/** True jika error berarti berkas/folder memang tidak ada (bukan gangguan sesaat seperti izin atau penyimpanan belum siap). */
+function isMissingError(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+  return /not exist|not found|no such file|enoent/i.test(text)
+}
+
+/** Menyimpan salinan metadata lagu di samping berkasnya (usaha terbaik). */
+export async function writeMeta(item: DownloadedTrack): Promise<void> {
+  try {
+    await Filesystem.writeFile({
+      path: `${META_DIR}/${item.key}.json`,
+      directory: Directory.External,
+      data: JSON.stringify(item),
+      encoding: Encoding.UTF8,
+      recursive: true,
+    })
+  } catch {
+    // Tidak kritis: indeks utama tetap ada.
+  }
+}
+
+async function readMeta(key: string): Promise<DownloadedTrack | null> {
+  try {
+    const file = await Filesystem.readFile({ path: `${META_DIR}/${key}.json`, directory: Directory.External, encoding: Encoding.UTF8 })
+    const text = typeof file.data === 'string' ? file.data : await file.data.text()
+    const item = parseItem(JSON.parse(text))
+    return item && item.key === key ? item : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Memuat indeks lalu mencocokkannya dengan isi folder unduhan.
+ *
+ * Prinsip: unduhan TIDAK boleh hilang karena pembaruan aplikasi (hanya karena di-uninstall atau dihapus pengguna).
+ *  - Entri dibuang hanya jika folder berhasil dibaca dan berkasnya memang tidak ada. Jika folder tidak bisa dibaca
+ *    (penyimpanan belum siap, dll.) semua entri dipertahankan.
+ *  - Berkas lagu yang ada di folder tetapi tidak ada di indeks (indeks hilang/rusak) dipulihkan dari salinan
+ *    metadata (`download/meta`), atau minimal dimunculkan lagi supaya tetap bisa diputar dan dihapus.
+ */
 export async function initOffline(): Promise<void> {
   if (!isNativeApp()) return
   const loaded = loadIndex()
   setState({ items: loaded, ready: true })
+
+  let files: Map<string, number | undefined>
+  try {
+    const listing = await Filesystem.readdir({ path: DOWNLOAD_DIR, directory: Directory.External })
+    files = new Map(listing.files.map((file) => [file.name, typeof file.size === 'number' ? file.size : undefined]))
+  } catch {
+    return
+  }
+
+  const known = new Set<string>()
   const alive: DownloadedTrack[] = []
   for (const item of loaded) {
-    try {
-      const info = await Filesystem.stat({ path: `${DOWNLOAD_DIR}/${item.fileName}`, directory: Directory.External })
-      if (info.size >= MIN_VALID_BYTES) alive.push({ ...item, bytes: info.size })
-    } catch {
-      // Berkas hilang: entri dibuang.
-    }
+    known.add(item.key)
+    if (!files.has(item.fileName)) continue
+    const size = files.get(item.fileName)
+    if (size !== undefined && size < MIN_VALID_BYTES) continue
+    alive.push(size !== undefined ? { ...item, bytes: size } : item)
   }
-  if (alive.length !== loaded.length) setItems(alive)
+
+  let recovered = 0
+  for (const [name, size] of files) {
+    const match = /^([A-Za-z0-9_-]+)\.mp3$/.exec(name)
+    if (!match || known.has(match[1])) continue
+    if (size !== undefined && size < MIN_VALID_BYTES) continue
+    const key = match[1]
+    const meta = await readMeta(key)
+    const spotifyId = key.startsWith('sp-') ? key.slice(3) : ''
+    alive.push(
+      meta
+        ? { ...meta, bytes: size ?? meta.bytes }
+        : {
+            key,
+            title: 'Lagu terunduh',
+            artists: '',
+            album: '',
+            duration: '',
+            url: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : '',
+            cover: '',
+            fileName: name,
+            bytes: size ?? 0,
+            savedAt: Date.now(),
+          },
+    )
+    recovered += 1
+  }
+
+  if (alive.length !== loaded.length || recovered > 0 || alive.some((item, index) => item !== loaded[index])) setItems(alive)
+
+  // Isi salinan metadata untuk unduhan lama yang belum punya (di latar belakang).
+  void (async () => {
+    for (const item of alive) {
+      if ((await readMeta(item.key)) === null) await writeMeta(item)
+    }
+  })()
 }
 
 /** URL yang bisa dipakai <audio> untuk berkas di Android/data/.../files/<path>. */
-async function srcFor(path: string): Promise<string> {
+export async function srcFor(path: string): Promise<string> {
   const { uri } = await Filesystem.getUri({ path, directory: Directory.External })
   return Capacitor.convertFileSrc(uri)
 }
@@ -181,14 +275,28 @@ export async function resolveOfflinePlayback(track: {
   title: string
   artists?: string
   url?: string
+  duration?: string
 }): Promise<PlaybackInfo | null> {
   if (!isNativeApp()) return null
   const item = findDownloaded(track)
   if (!item) return null
+  const path = `${DOWNLOAD_DIR}/${item.fileName}`
+  let size: number
   try {
-    const path = `${DOWNLOAD_DIR}/${item.fileName}`
-    const info = await Filesystem.stat({ path, directory: Directory.External })
-    if (info.size < MIN_VALID_BYTES) throw new Error('berkas terlalu kecil')
+    size = (await Filesystem.stat({ path, directory: Directory.External })).size
+  } catch (error) {
+    // Hanya jika berkasnya memang tidak ada indeks dibuang (tidak ada berkas yang perlu dihapus).
+    // Gangguan sesaat tidak boleh menghapus apa pun: cukup putar lewat internet kali ini.
+    if (isMissingError(error)) setItems(state.items.filter((entry) => entry.key !== item.key))
+    return null
+  }
+  // Berkas jelas rusak / cuplikan (terunduh sebelum ada verifikasi): buang dan ambil ulang dari internet.
+  const expected = parseDuration(track.duration) ?? parseDuration(item.duration)
+  if (size < MIN_VALID_BYTES || isTooSmallForDuration(size, expected)) {
+    void removeDownload(item.key)
+    return null
+  }
+  try {
     return {
       title: item.title,
       artist: item.artists,
@@ -200,8 +308,6 @@ export async function resolveOfflinePlayback(track: {
       source: 'offline',
     }
   } catch {
-    // Berkas rusak/hilang: buang entri dan biarkan pemutar memakai internet.
-    setItems(state.items.filter((entry) => entry.key !== item.key))
     return null
   }
 }
@@ -213,7 +319,10 @@ export async function removeDownload(key: string): Promise<void> {
     `${DOWNLOAD_DIR}/${item.fileName}`,
     ...(item.coverFileName ? [`${COVER_DIR}/${item.coverFileName}`] : []),
     `${LYRICS_DIR}/${item.key}.json`,
+    `${META_DIR}/${item.key}.json`,
   ]
+  // Entri dibuang dulu (sinkron) supaya pemutar tidak lagi menemukannya selagi berkas dihapus.
+  setItems(state.items.filter((entry) => entry.key !== key))
   for (const path of targets) {
     try {
       await Filesystem.deleteFile({ path, directory: Directory.External })
@@ -221,7 +330,6 @@ export async function removeDownload(key: string): Promise<void> {
       // Sudah tidak ada.
     }
   }
-  setItems(state.items.filter((entry) => entry.key !== key))
 }
 
 export function toPlaylistTrack(item: DownloadedTrack): PlaylistTrack {

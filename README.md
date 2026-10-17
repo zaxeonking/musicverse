@@ -262,6 +262,59 @@ Menu tahan-lama (menu lagu dan menu di panel antrean) bukan bagian dari state ro
   3 detik terakhir lagu diabaikan. Data rusak/tidak konsisten = sesi dibuang. `cleanup()` menghapus sesi.
 - **Sleep timer custom**: selain 15/30/45/60 menit, ada isian menit bulat 1–720 di Sleep timer.
 
+## Preload lagu berikutnya menurut ping (v0.2.1)
+
+`utils/networkQuality.ts` mengukur ping ke server API (HEAD ke `getBaseUrl()`, sampel pertama dibuang, median sisanya) tiap 20 dtk, saat aplikasi kembali terlihat, dan saat online/offline berubah. Hasilnya menentukan kapan lagu berikutnya dimuat (`crossfadeStep` di `useAudioPlayerController.ts`):
+
+| Ping | Tingkat | Lagu berikutnya dimuat |
+| --- | --- | --- |
+| 1–5 ms | good | setelah lagu selesai (tanpa preload dini) |
+| 6–150 ms | medium | 25 dtk sebelum lagu selesai |
+| > 150 ms / timeout / offline | poor | 60 dtk sebelum lagu selesai |
+
+- Batas dan lead ada di konstanta `GOOD_PING_MAX_MS`, `MEDIUM_PING_MAX_MS`, `PRELOAD_LEAD_BY_TIER_S`.
+- Crossfade menyala + ping good: tetap preload 10 dtk sebelum fade (crossfade butuh lagu cadangan).
+- Crossfade mati + ping medium/poor: lagu yang sudah dimuat dipasang dengan tumpang-tindih 0,6 dtk (nyaris tanpa jeda). Gagal = alur `ended` biasa.
+- Perangkat tanpa kontrol volume (iOS Safari) tidak bisa preload; selalu memakai alur `ended`.
+- Sebelum ada hasil ukur, tingkat dianggap medium.
+- **Coba ulang sampai berhasil:** preload yang gagal (rate limit, timeout, jaringan) dicoba lagi tanpa batas selama lagu masih berjalan (jeda 2,5 dtk naik sampai 6 dtk). `play()` lagu cadangan yang ditolak juga dicoba lagi setelah 2,5 dtk. Saat lagu dimulai (termasuk lanjut otomatis setelah lagu selesai), gagal mengambil URL dicoba lagi tiap 2–8 dtk sampai berhasil; berhenti jika pengguna memilih lagu lain. Pengecualian: `no_audio` dan `clip_only` langsung jadi error karena bukan gangguan sesaat.
+- **Sinyal jelek (lagu):** mengambil URL gagal 6x berturut-turut = berhenti dengan pesan "Sinyal jelek, audio gagal dimuat". Audio putus di tengah jalan (error jaringan) atau tak kunjung mulai (30 dtk) dimuat ulang otomatis dari posisi terakhir sampai 3x sebelum menampilkan pesan yang sama. Hitungan direset saat lagu berhasil jalan atau lagu baru dipilih.
+- **Sinyal jelek (unduhan):** gagal mengambil sumber, unduhan terputus, atau berkas terpotong dicoba lagi sampai 6x (jeda 2 dtk naik sampai 10 dtk; bila offline menunggu online dulu, maks. 1 menit). Setelah itu unduhan ditandai gagal dengan pesan "Sinyal jelek, unduhan gagal". Penolakan karena berkas tidak cocok (klip, durasi/judul beda) tetap langsung pindah sumber, bukan dianggap sinyal.
+
+## Bilah progres notifikasi (v0.2.1)
+
+- Durasi yang dikirim ke notifikasi tidak pernah kembali ke 0 untuk lagu yang sama (sumber berurutan: audio asli, hasil baca sumber, teks durasi, durasi terakhir yang diketahui). Durasi 0 membuat sistem menganggap durasi tak diketahui, bilah rata di kiri.
+- Metadata sesi media dipasang ulang hanya jika berubah; perubahan keadaan dari JS dijalankan di thread utama (bukan thread plugin).
+- Posisi dari elemen audio dikirim tiap 2 dtk; native memperbarui sesi dan notifikasi tiap detik.
+
+## Verifikasi unduhan ketat (v0.2.1)
+
+Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika semua gagal, unduhan ditandai gagal dan tidak ada berkas tersimpan):
+
+- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul cocok kata per kata (>= 0,75), artis cocok (satu artis: nama harus utuh),
+  dan **penanda versi** sama: live, remix/edit, instrumental/karaoke, akustik, cover, sped up/slowed/reverb/8D, lofi, demo.
+- **Durasi (dua arah):** durasi file harus dalam +-10 dtk atau 4% dari lagu di playlist (yang lebih besar), baik terlalu pendek maupun terlalu panjang.
+  Diperiksa dua kali: dari sumber sebelum diunduh, lalu dari berkas lokal sesudah diunduh (dibaca ulang sampai 3x).
+- **Utuh:** ukuran sama dengan Content-Length server (terpotong = ulang sumber yang sama sekali), dan durasi berkas lokal sama dengan durasi sumber (+-3 dtk).
+- **Laju bit wajar:** 88-336 kbps untuk durasinya; dipakai juga bila durasi berkas tidak terbaca. Tanpa durasi acuan sama sekali, berkas ditolak.
+
+## Unduhan aman saat update (v0.2.1)
+
+- Lagu, sampul, lirik, dan `download/meta/<kunci>.json` ada di `Android/data/<paket>/files/download`. Pembaruan APK (tanda tangan sama)
+  tidak menyentuh folder ini; hanya uninstall yang menghapusnya.
+- Berkas pembaruan APK sekarang di folder terpisah `app-update/` (bukan `Download/` yang bisa sama dengan `download/` di penyimpanan tak peka huruf).
+- Saat start, indeks dicocokkan dengan isi folder. Entri hanya dibuang bila folder terbaca dan berkasnya memang tidak ada;
+  berkas yang tidak ada di indeks dipulihkan dari `meta`. Error sesaat saat memutar tidak lagi menghapus berkas.
+- Bilah progres notifikasi/layar kunci: posisi dibaca langsung dari elemen audio tiap 2 dtk, dan notifikasi native diperbarui tiap detik.
+
+## Unduhan per playlist (v0.2.1)
+
+- **Unduh semua** di sebuah playlist: lagunya langsung dimasukkan ke satu playlist di *Playlist saya* dengan nama yang sama
+  (`sourceId` = ID playlist Spotify, jadi unduh ulang memakai playlist yang sama dan hanya menambah lagu baru).
+- **Unduh satu lagu** (menu lagu → *Unduh untuk offline*): hanya lagu itu yang tersimpan, sebagai **Lagu satuan**, tidak masuk playlist mana pun.
+- Tab **Unduhan** dikelompokkan per playlist + *Lagu satuan*. Tombol **Pindahkan** di tiap lagu memindahkannya ke playlist
+  pilihan (atau playlist baru), atau mengeluarkannya kembali jadi lagu satuan. Berkas unduhan tidak disentuh, hanya keanggotaan playlist.
+
 ## Playlist saya (playlist buatan sendiri)
 
 - Dibuat dari **Koleksi → Playlist saya → Buat playlist**, atau langsung dari menu lagu (**Simpan ke playlist saya** → *Playlist baru*).

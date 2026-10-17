@@ -38,3 +38,25 @@ export function durationFit(actual: number | null, expected: number | null): num
   if (diff <= 25 || rel <= 0.1) return 0.3
   return 0
 }
+
+/** Mode unduhan: selisih durasi maksimum antara berkas dan lagu di playlist (detik, atau persen; mana yang lebih besar). */
+export const STRICT_DIFF_S = 10
+export const STRICT_DIFF_RATIO = 0.04
+/** Tanpa durasi acuan dari playlist, berkas sependek ini atau kurang ditolak. */
+export const STRICT_MIN_UNKNOWN_S = 60
+
+/**
+ * Pemeriksaan durasi ketat untuk unduhan (dua arah: lebih pendek DAN lebih panjang ditolak, mis. versi live,
+ * extended, atau lagu lain). null = lolos; selain itu alasan penolakan. `actual` null (tak terbaca) TIDAK dianggap
+ * lolos di sini: pemanggil menentukan cara lain memverifikasinya.
+ */
+export function strictDurationProblem(actual: number | null, expected: number | null): string | null {
+  if (actual === null || !Number.isFinite(actual) || actual <= 0) return 'Durasi berkas tidak bisa dibaca.'
+  if (expected === null || !Number.isFinite(expected) || expected <= 0) {
+    return actual <= STRICT_MIN_UNKNOWN_S ? `Berkas hanya ${Math.round(actual)} dtk, kemungkinan cuplikan.` : null
+  }
+  const diff = Math.abs(actual - expected)
+  const tolerance = Math.max(STRICT_DIFF_S, expected * STRICT_DIFF_RATIO)
+  if (diff <= tolerance) return null
+  return `Durasi audio (${Math.round(actual)} dtk) berbeda ${Math.round(diff)} dtk dari lagu di playlist (${Math.round(expected)} dtk).`
+}

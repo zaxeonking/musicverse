@@ -15,6 +15,7 @@ import type {
 import type { PlayAllHandler, PlaybackInfo, PlaylistTrack, PlayTrackHandler } from '../types/spotify'
 import { clearPlayerSession, loadPlayerSession, savePlayerPosition, savePlayerQueue } from '../utils/playerSession'
 import { isLikelyClip } from '../utils/clipDetect'
+import { getNetworkTier, PRELOAD_LEAD_BY_TIER_S, startNetworkMonitor } from '../utils/networkQuality'
 import { readJson, writeJson } from '../utils/safeStorage'
 import {
   createShuffleOrder,
@@ -34,6 +35,7 @@ import {
   resolveQueueForPlayAll,
   resolveQueueForTrack,
 } from '../utils/playerQueue'
+import { removeDownload, trackKey } from '../native/offline'
 
 /** Batas menunggu event `playing` pertama setelah URL audio didapat. */
 export const START_TIMEOUT_MS = 30_000
@@ -56,6 +58,8 @@ interface StartOptions {
   keepReplay?: boolean
   /** Setelah audio termuat, loncat ke detik ini (lanjut dari sesi tersimpan). */
   resumeAt?: number
+  /** Pemuatan ulang otomatis karena gangguan jaringan (hitungan percobaan tidak direset). */
+  isRetry?: boolean
 }
 
 /** Lagu berikutnya yang sedang/sudah dimuat di elemen cadangan untuk crossfade. */
@@ -71,8 +75,16 @@ interface Preload {
   retryAt: number
 }
 
-const PRELOAD_MAX_ATTEMPTS = 3
+/** Preload gagal dicoba lagi terus sampai berhasil (selama lagu masih berjalan), jeda naik bertahap sampai batas ini. */
 const PRELOAD_RETRY_DELAY_MS = 2_500
+const PRELOAD_RETRY_MAX_DELAY_MS = 6_000
+/** Pemuatan lagu yang gagal mengambil URL dicoba lagi tiap sekian ms (naik bertahap) sampai berhasil. */
+const RESOLVE_RETRY_DELAY_MS = 2_000
+const RESOLVE_RETRY_MAX_DELAY_MS = 8_000
+/** Setelah sekian kali gagal berturut-turut, berhenti dan tampilkan pesan sinyal jelek. */
+const RESOLVE_RETRY_MAX = 6
+/** Audio putus di tengah jalan (error jaringan) / tidak mulai: dimuat ulang dari posisi terakhir sekian kali sebelum menyerah. */
+const STREAM_RETRY_MAX = 3
 
 /** Seek hanya bermakna saat audio sudah memuat dan belum selesai. */
 const SEEKABLE_STATUSES: PlaybackStatus[] = ['playing', 'buffering', 'paused']
@@ -90,13 +102,13 @@ function errorMessage(code: PlayerErrorCode): string {
     case 'blocked':
       return 'Browser memblokir pemutaran. Tekan tombol Play sekali lagi.'
     case 'network':
-      return 'Audio gagal diunduh. Periksa koneksi internet, atau tautan audio sudah kedaluwarsa. Coba lagi untuk mengambil tautan baru.'
+      return 'Sinyal jelek, audio gagal dimuat. Coba lagi saat koneksi lebih baik.'
     case 'unsupported':
       return 'Audio tidak dapat diputar: format tidak didukung, tautan sudah kedaluwarsa, atau tautan bukan file audio langsung (mis. halaman unduhan). Coba lagi untuk mengambil tautan baru.'
     case 'decode':
       return 'File audio rusak atau tidak dapat didekode browser.'
     case 'timeout':
-      return `Audio tidak mulai diputar dalam ${Math.round(START_TIMEOUT_MS / 1000)} detik. Tautan mungkin lambat atau kedaluwarsa. Coba lagi.`
+      return `Sinyal jelek, audio tidak mulai diputar dalam ${Math.round(START_TIMEOUT_MS / 1000)} detik. Coba lagi saat koneksi lebih baik.`
     default:
       return 'Audio gagal diputar karena kesalahan yang tidak diketahui.'
   }
@@ -106,10 +118,15 @@ function errorMessage(code: PlayerErrorCode): string {
 export const CROSSFADE_OPTIONS_S = [0, 3, 5, 8, 12] as const
 const DEFAULT_CROSSFADE_S = 5
 /**
- * Lagu berikutnya mulai dimuat sebanyak ini (detik) SEBELUM crossfade dimulai, supaya URL sempat diambil
- * dan audionya ter-buffer. Tanpa ini crossfade harus menunggu jaringan dan muncul jeda.
+ * Lagu berikutnya mulai dimuat sebelum lagu ini selesai, supaya URL sempat diambil dan audionya ter-buffer.
+ * Berapa detiknya bergantung pada ping (lihat utils/networkQuality.ts): ping buruk = jauh lebih awal,
+ * sedang = menjelang selesai, bagus (1–5 ms) = setelah lagu selesai.
  */
-const PRELOAD_LEAD_S = 30
+/** Ping bagus tetapi crossfade menyala: crossfade tetap butuh lagu cadangan, jadi muat sedikit sebelum fade. */
+const CROSSFADE_MIN_LEAD_S = 10
+/** Crossfade mati tetapi ping sedang/buruk: lagu yang sudah dimuat dipasang dengan tumpang-tindih singkat (nyaris tanpa jeda). */
+const GAPLESS_FADE_S = 0.6
+const GAPLESS_TRIGGER_S = 1
 /** Sleep timer "akhir lagu": volume mulai mengecil pada sekian detik terakhir lagu. */
 const TRACK_END_FADE_S = 8
 
@@ -238,6 +255,11 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const clipGuardRef = useRef<((duration: number) => void) | null>(null)
   /** Id lagu berikutnya yang crossfade-nya sudah gagal (play() ditolak): jangan dicoba berulang tiap timeupdate. */
   const crossfadeGaveUpRef = useRef<string | null>(null)
+  /** Waktu (ms epoch) paling awal untuk mencoba lagi crossfade setelah play() lagu cadangan ditolak. */
+  const crossfadeRetryAtRef = useRef(0)
+  /** Berapa kali lagu aktif dimuat ulang otomatis karena jaringan putus/lambat; direset saat pemutaran jalan atau lagu baru dipilih. */
+  const streamRetryRef = useRef(0)
+  const startPlaybackRef = useRef<(queue: readonly PlaylistTrack[], index: number, options?: StartOptions) => void>(() => {})
   const lastPositionSaveRef = useRef(0)
   // Diisi setelah `persistPosition` didefinisikan; dipanggil dari handler event audio.
   const persistPositionRef = useRef<(force: boolean, position?: number) => void>(() => {})
@@ -272,6 +294,20 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       clearStartTimer()
       // Event `error` dan penolakan play() bisa datang berurutan; ambil yang pertama.
       if (stateRef.current.status === 'error') return
+      // Jaringan putus / audio tak kunjung mulai: muat ulang lagu yang sama dari posisi terakhir beberapa kali
+      // sebelum menyerah dengan pesan sinyal jelek.
+      const current = stateRef.current
+      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX) {
+        streamRetryRef.current += 1
+        console.warn(`[MusicVerse] Audio putus (${code}), memuat ulang (${streamRetryRef.current}/${STREAM_RETRY_MAX}).`)
+        startPlaybackRef.current(current.queue, current.currentIndex, {
+          keepOrder: true,
+          keepReplay: true,
+          isRetry: true,
+          resumeAt: timeRef.current.currentTime,
+        })
+        return
+      }
       audioEngine.stop()
       commit({ status: 'error', error: { code, message: message ?? errorMessage(code) } })
     },
@@ -315,6 +351,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           break
         case 'playing':
           clearStartTimer()
+          streamRetryRef.current = 0
           if (status !== 'playing') commit({ status: 'playing', error: null })
           break
         case 'waiting':
@@ -415,8 +452,10 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
   useEffect(() => {
     const unsubscribe = audioEngine.subscribe(handleEngineEvent)
+    const stopMonitor = startNetworkMonitor() // ukur ping berkala untuk menentukan kapan lagu berikutnya dimuat
     return () => {
       unsubscribe()
+      stopMonitor()
       requestIdRef.current++
       controllerRef.current?.abort()
       controllerRef.current = null
@@ -436,6 +475,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const track = queue[index]
       if (!track) return
       restoredRef.current = false
+      if (!options.isRetry) streamRetryRef.current = 0
       resumeAtRef.current = options.resumeAt !== undefined && options.resumeAt > 0 ? options.resumeAt : null
       if (!options.keepReplay) {
         replayedRef.current = false
@@ -476,10 +516,12 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
       clipGuardRef.current = null
       crossfadeGaveUpRef.current = null
+      crossfadeRetryAtRef.current = 0
       const expectedDuration = parseDurationText(track.duration)
       // API yang terbukti memberi klip ~30 detik untuk lagu ini; dilewati pada percobaan berikutnya.
       const avoid: Array<'kyzz' | 'cadangan'> = []
 
+      let resolveFailures = 0
       const attempt = async (): Promise<void> => {
         // Setiap permintaan play selalu mengambil URL audio terbaru (tanpa cache).
         let info: PlaybackInfo
@@ -489,6 +531,21 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           if (isStale()) return
           if (error instanceof SpotifyApiError) {
             if (error.code === 'aborted') return
+            // Gagal sesaat (jaringan/server/timeout): coba lagi terus sampai berhasil, kecuali pengguna memilih lagu lain.
+            // Lagu tanpa audio / hanya klip bukan gangguan sesaat, jadi tetap dilaporkan sebagai error.
+            if (error.code !== 'no_audio' && error.code !== 'clip_only' && avoid.length === 0) {
+              resolveFailures += 1
+              if (resolveFailures > RESOLVE_RETRY_MAX) {
+                fail('network') // sudah berkali-kali dicoba: sinyal jelek
+                return
+              }
+              const delay = Math.min(RESOLVE_RETRY_MAX_DELAY_MS, RESOLVE_RETRY_DELAY_MS * resolveFailures)
+              console.warn(`[MusicVerse] Gagal mengambil audio (percobaan ${resolveFailures}), dicoba lagi dalam ${delay} ms:`, error)
+              window.setTimeout(() => {
+                if (!isStale()) void attempt()
+              }, delay)
+              return
+            }
             if (error.code === 'clip_only' || avoid.length > 0) {
               // Sumber yang tersisa gagal setelah klip ditolak: jangan memutar klip, beri tahu pengguna.
               fail('clip_only')
@@ -507,6 +564,17 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         clipGuardRef.current = (duration) => {
           if (isStale() || !isLikelyClip(duration, expectedDuration)) return
           clipGuardRef.current = null
+          if (info.source === 'offline') {
+            // Berkas unduhan ternyata cuplikan (terunduh sebelum ada verifikasi): buang, lalu ambil lagi dari internet.
+            console.warn(`[MusicVerse] Unduhan lokal hanya ${duration.toFixed(1)} dtk (seharusnya ~${expectedDuration} dtk): dibuang.`)
+            clearStartTimer()
+            commit({ status: 'resolving', playbackInfo: null, error: null })
+            audioEngine.stop()
+            void removeDownload(trackKey(track)).finally(() => {
+              if (!isStale()) void attempt()
+            })
+            return
+          }
           console.warn(
             `[MusicVerse] Audio dari ${info.apiSource ?? 'sumber tak dikenal'} hanya ${duration.toFixed(1)} dtk ` +
               `(seharusnya ~${expectedDuration} dtk): dianggap cuplikan, mencoba sumber lain.`,
@@ -543,6 +611,10 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
     },
     [clearStartTimer, commit, discardPreload, fail, updateTime],
   )
+
+  useEffect(() => {
+    startPlaybackRef.current = startPlayback
+  }, [startPlayback])
 
   /** Lagu dipilih pengguna: putar langsung, queue disesuaikan dengan playlist aktif. */
   const playTrack = useCallback<PlayTrackHandler>(
@@ -792,18 +864,25 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       }
 
       const fadeSetting = prefsRef.current.crossfadeSeconds
-      if (fadeSetting <= 0 || !audioEngine.supportsVolumeFade()) return
+      if (!audioEngine.supportsVolumeFade()) return
+      const crossfadeOn = fadeSetting > 0
+      const tier = getNetworkTier()
+      // Ping bagus dan tanpa crossfade: tidak ada preload; lagu berikutnya dimuat setelah lagu ini selesai (alur `ended`).
+      if (!crossfadeOn && tier === 'good') return
+      const lead = tier === 'good' ? CROSSFADE_MIN_LEAD_S : PRELOAD_LEAD_BY_TIER_S[tier]
       const { repeat } = prefsRef.current
       // Lagu yang akan diulang tidak bertukar dengan lagu lain.
       if (repeat === 'one' || (repeat === 'once' && !replayedRef.current)) return
       // Lagu pendek: jangan sampai fade memakan lebih dari sepertiganya.
-      const fade = Math.min(fadeSetting, duration / 3)
-      if (remaining > fade + PRELOAD_LEAD_S || remaining <= 0.2) return
+      const fade = Math.min(crossfadeOn ? fadeSetting : GAPLESS_FADE_S, duration / 3)
+      // Kapan peralihan dimulai (sisa detik): saat crossfade = sepanjang fade; tanpa crossfade = sesaat sebelum selesai.
+      const switchAt = crossfadeOn ? fade : Math.min(GAPLESS_TRIGGER_S, duration / 3)
+      if (remaining > switchAt + lead || remaining <= 0.2) return
 
       const nextIndex = getNextIndex(queue, currentIndex, shuffleOrder)
       const nextTrack = nextIndex === null ? null : queue[nextIndex]
       if (nextIndex === null || !nextTrack) return // antrean habis: alur normal (berhenti / putar ulang)
-      if (crossfadeGaveUpRef.current === nextTrack.id) return
+      if (Date.now() < crossfadeRetryAtRef.current) return
 
       let preload = preloadRef.current
       // Daftar "Berikutnya" berubah sejak dimuat: buang dan muat yang baru.
@@ -829,9 +908,9 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
             if (error instanceof SpotifyApiError && error.code === 'aborted') return
             // Gagal sesaat (rate limit / timeout) cukup sering terjadi: coba lagi beberapa kali selama
             // masih ada waktu, baru menyerah ke alur normal (lagu berikutnya mulai saat lagu ini selesai).
-            console.warn(`[MusicVerse] Preload crossfade gagal (percobaan ${entry.attempts}/${PRELOAD_MAX_ATTEMPTS}):`, error)
+            console.warn(`[MusicVerse] Preload lagu berikutnya gagal (percobaan ${entry.attempts}), dicoba lagi:`, error)
             entry.status = 'failed'
-            entry.retryAt = Date.now() + PRELOAD_RETRY_DELAY_MS
+            entry.retryAt = Date.now() + Math.min(PRELOAD_RETRY_MAX_DELAY_MS, PRELOAD_RETRY_DELAY_MS * entry.attempts)
           }
         })()
       }
@@ -852,10 +931,10 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         return
       }
       if (preload.status === 'failed') {
-        if (preload.attempts < PRELOAD_MAX_ATTEMPTS && Date.now() >= preload.retryAt && remaining > 1) startFetch(preload)
+        if (Date.now() >= preload.retryAt && remaining > 1) startFetch(preload)
         return
       }
-      if (preload.status !== 'ready' || !preload.info || remaining > fade) return
+      if (preload.status !== 'ready' || !preload.info || remaining > switchAt) return
       // Saat waktunya tiba, mulai crossfade walau lagu cadangan belum ter-buffer penuh: browser mobile sering
       // mengabaikan preload="auto", sehingga syarat "siap penuh" tidak pernah terpenuhi dan crossfade batal.
       if (!audioEngine.isPreloadReady(preload.info.audioUrl, true)) return
@@ -883,10 +962,11 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         preloadRef.current = null
         if (!switched) {
           // play() ditolak: lagu lama jalan terus, alur normal saat selesai (tanpa mencoba ulang tiap timeupdate).
-          crossfadeGaveUpRef.current = nextTrack.id
+          crossfadeRetryAtRef.current = Date.now() + PRELOAD_RETRY_DELAY_MS
           return
         }
         crossfadeGaveUpRef.current = null
+        crossfadeRetryAtRef.current = 0
         // Lagu baru sudah terdengar: sinkronkan state (urutan acak dipertahankan, antrean sama).
         replayedRef.current = false
         setRepeatingOnce(false)

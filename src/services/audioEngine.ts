@@ -553,6 +553,13 @@ class AudioEngine {
     return Number.isFinite(audio.currentTime) ? audio.currentTime : null
   }
 
+  /** Durasi audio aktif langsung dari elemen audio (null = belum diketahui / stream tanpa durasi). */
+  getLiveDuration(): number | null {
+    const audio = this.audio
+    if (!audio || this.activeSource === null) return null
+    return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null
+  }
+
   /**
    * Memindahkan posisi putar dan mengembalikan posisi yang benar-benar dipakai. Mengembalikan
    * null (tanpa mengubah apa pun) jika tidak ada audio aktif atau audio tidak mendukung seek.

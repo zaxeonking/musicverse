@@ -3,6 +3,7 @@ import type { MyPlaylist, StorageHealth } from '../types/library'
 import type { PlaylistTrack } from '../types/spotify'
 import {
   addTrackToMyPlaylist,
+  addTracksToMyPlaylist,
   createMyPlaylist,
   deleteMyPlaylist,
   moveTrackInMyPlaylist,
@@ -11,6 +12,7 @@ import {
   removeTrackFromMyPlaylist,
   renameMyPlaylist,
   writeMyPlaylists,
+  type BulkAddResult,
   type MyPlaylistChange,
   type MyPlaylistFailure,
 } from '../utils/myPlaylistStorage'
@@ -24,10 +26,17 @@ export interface MyPlaylistsContextValue {
   playlists: readonly MyPlaylist[]
   health: StorageHealth
   getPlaylist: (id: string) => MyPlaylist | undefined
-  createPlaylist: (name: string) => MyPlaylistResult<MyPlaylist>
+  createPlaylist: (name: string, sourceId?: string) => MyPlaylistResult<MyPlaylist>
   renamePlaylist: (id: string, name: string) => MyPlaylistResult<MyPlaylist>
   deletePlaylist: (id: string) => MyPlaylistResult<null>
   addTrack: (playlistId: string, track: PlaylistTrack) => MyPlaylistResult<MyPlaylist>
+  /** Menambah banyak lagu sekaligus; yang sudah ada dilewati. */
+  addTracks: (playlistId: string, tracks: readonly PlaylistTrack[]) => MyPlaylistResult<BulkAddResult>
+  /**
+   * Playlist untuk hasil "Unduh semua": memakai playlist yang sudah dibuat dari playlist Spotify yang sama,
+   * atau membuat yang baru bernama sama. Lagunya langsung dimasukkan.
+   */
+  saveDownloadedPlaylist: (sourceId: string, name: string, tracks: readonly PlaylistTrack[]) => MyPlaylistResult<{ playlist: MyPlaylist } & BulkAddResult>
   removeTrack: (playlistId: string, trackId: string) => MyPlaylistResult<MyPlaylist>
   moveTrack: (playlistId: string, from: number, to: number) => MyPlaylistResult<MyPlaylist>
 }
@@ -96,10 +105,31 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
     [commit],
   )
 
-  const createPlaylist = useCallback((name: string) => mutate((l) => createMyPlaylist(l, name)), [mutate])
+  const createPlaylist = useCallback((name: string, sourceId?: string) => mutate((l) => createMyPlaylist(l, name, Date.now(), sourceId)), [mutate])
   const renamePlaylist = useCallback((id: string, name: string) => mutate((l) => renameMyPlaylist(l, id, name)), [mutate])
   const deletePlaylist = useCallback((id: string) => mutate((l) => deleteMyPlaylist(l, id)), [mutate])
   const addTrack = useCallback((id: string, track: PlaylistTrack) => mutate((l) => addTrackToMyPlaylist(l, id, track)), [mutate])
+  const addTracks = useCallback((id: string, tracks: readonly PlaylistTrack[]) => mutate((l) => addTracksToMyPlaylist(l, id, tracks)), [mutate])
+  const saveDownloadedPlaylist = useCallback(
+    (sourceId: string, name: string, tracks: readonly PlaylistTrack[]) =>
+      mutate((l) => {
+        // Satu kali baca-ubah-tulis: cari playlist asal yang sama, kalau belum ada buat dulu, lalu isi.
+        const existing = l.find((item) => item.sourceId === sourceId)
+        let base: readonly MyPlaylist[] = l
+        let target = existing
+        if (!target) {
+          const made = createMyPlaylist(l, name, Date.now(), sourceId)
+          if (!made.ok) return made
+          base = made.list
+          target = made.value
+        }
+        const filled = addTracksToMyPlaylist(base, target.id, tracks)
+        if (!filled.ok) return filled
+        const playlist = filled.list.find((item) => item.id === target.id) ?? target
+        return { ok: true, list: filled.list, value: { playlist, ...filled.value } }
+      }),
+    [mutate],
+  )
   const removeTrack = useCallback((id: string, trackId: string) => mutate((l) => removeTrackFromMyPlaylist(l, id, trackId)), [mutate])
   const moveTrack = useCallback((id: string, from: number, to: number) => mutate((l) => moveTrackInMyPlaylist(l, id, from, to)), [mutate])
 
@@ -125,10 +155,12 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       renamePlaylist,
       deletePlaylist,
       addTrack,
+      addTracks,
+      saveDownloadedPlaylist,
       removeTrack,
       moveTrack,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, removeTrack, moveTrack],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>

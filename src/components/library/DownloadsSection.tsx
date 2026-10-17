@@ -1,6 +1,7 @@
-import { AlertCircle, Download, Loader2, Pause, Play, Trash2, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
+import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useLongPress } from '../../hooks/useLongPress'
@@ -21,6 +22,7 @@ import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
+import MoveDownloadSheet from './MoveDownloadSheet'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -52,9 +54,11 @@ interface DownloadedRowProps {
   onPlay: () => void
   /** Jeda / lanjutkan lagu aktif. */
   onToggle: () => void
+  /** Membuka pilihan playlist untuk memindahkan lagu ini. */
+  onMove: () => void
 }
 
-function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onToggle }: DownloadedRowProps) {
+function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onToggle, onMove }: DownloadedRowProps) {
   const [cover, setCover] = useState<string | undefined>(item.cover || undefined)
   useEffect(() => {
     let cancelled = false
@@ -130,6 +134,17 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
         type="button"
         onClick={(event) => {
           event.stopPropagation()
+          onMove()
+        }}
+        aria-label={`Pindahkan ${item.title} ke playlist`}
+        className="icon-btn shrink-0 text-ink-muted"
+      >
+        <FolderInput className="h-5 w-5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
           void removeDownload(item.key)
         }}
         aria-label={`Hapus unduhan ${item.title}`}
@@ -151,6 +166,63 @@ export default function DownloadsSection() {
   // Lagu yang sedang diputar dikenali lewat kunci yang sama dengan unduhan (juga bila diputar dari playlist lain).
   const currentKey = player.currentTrack ? trackKey(player.currentTrack) : null
   const currentActivity = getRowActivity(player.status)
+  const { playlists } = useMyPlaylists()
+  const { showToast } = useTrackMenu()
+  const [moving, setMoving] = useState<{ track: PlaylistTrack; fromPlaylistId?: string } | null>(null)
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const toggleGroup = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  // Pengelompokan: setiap playlist (hasil "Unduh semua" atau buatan sendiri) memuat lagunya yang sudah terunduh;
+  // lagu yang tidak ada di playlist mana pun = "Lagu satuan" (unduhan satu per satu).
+  const { groups, singles } = useMemo(() => {
+    const byKey = new Map(items.map((item) => [item.key, item]))
+    const inPlaylist = new Set<string>()
+    const built: Array<{ id: string; name: string; rows: DownloadedTrack[] }> = []
+    for (const playlist of playlists) {
+      const seen = new Set<string>()
+      const rows: DownloadedTrack[] = []
+      for (const t of playlist.tracks) {
+        const key = trackKey(t)
+        const item = byKey.get(key)
+        if (!item || seen.has(key)) continue
+        seen.add(key)
+        inPlaylist.add(key)
+        rows.push(item)
+      }
+      if (rows.length > 0) built.push({ id: playlist.id, name: playlist.name, rows })
+    }
+    return { groups: built, singles: items.filter((item) => !inPlaylist.has(item.key)) }
+  }, [items, playlists])
+
+  const renderRows = (rows: readonly DownloadedTrack[], fromPlaylistId?: string) => {
+    const list = rows.map(toPlaylistTrack)
+    return (
+      <ul className="-mx-2">
+        {rows.map((item, index) => (
+          <DownloadedRow
+            key={`${fromPlaylistId ?? 'single'}-${item.key}`}
+            item={item}
+            track={list[index]}
+            selected={selectedKey === item.key}
+            activity={currentKey === item.key ? currentActivity : 'none'}
+            onSelect={() => setSelectedKey(item.key)}
+            onPlay={() => {
+              setSelectedKey(item.key)
+              player.playList(list, index)
+            }}
+            onToggle={player.togglePlayPause}
+            onMove={() => setMoving({ track: list[index], fromPlaylistId })}
+          />
+        ))}
+      </ul>
+    )
+  }
 
   return (
     <section aria-label="Unduhan">
@@ -214,28 +286,64 @@ export default function DownloadsSection() {
           compact
           icon={Download}
           title="Belum ada unduhan"
-          description="Tahan lama sebuah lagu, lalu pilih “Unduh untuk offline”. Berkasnya disimpan di Android/data/<nama aplikasi>/files/download."
+          description="Tombol “Unduh semua” di playlist menyimpan lagunya langsung ke playlist itu. Unduh satu lagu (tahan lama, lalu “Unduh untuk offline”) jadi lagu satuan, dan bisa dipindah ke playlist mana pun. Berkas disimpan di Android/data/<nama aplikasi>/files/download."
         />
       ) : (
-        <ul className="-mx-2">
-          {items.map((item, index) => (
-            <DownloadedRow
-              key={item.key}
-              item={item}
-              track={tracks[index]}
-              selected={selectedKey === item.key}
-              activity={currentKey === item.key ? currentActivity : 'none'}
-              onSelect={() => setSelectedKey(item.key)}
-              onPlay={() => {
-                setSelectedKey(item.key)
-                player.playList(tracks, index)
-              }}
-              onToggle={player.togglePlayPause}
-            />
-          ))}
-        </ul>
+        <div className="space-y-5">
+          {groups.map((group) => {
+            const open = !collapsed.has(group.id)
+            return (
+              <section key={group.id} aria-label={`Playlist ${group.name}`}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  aria-expanded={open}
+                  className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
+                >
+                  <ListMusic className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-lg font-bold text-ink">{group.name}</span>
+                    <span className="block text-xs text-ink-muted">
+                      {group.rows.length} lagu · {formatBytes(totalBytes(group.rows))}
+                    </span>
+                  </span>
+                  <ChevronDown className={`h-5 w-5 shrink-0 text-ink-muted transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
+                </button>
+                {open && <div className="mt-1">{renderRows(group.rows, group.id)}</div>}
+              </section>
+            )
+          })}
+          {singles.length > 0 && (
+            <section aria-label="Lagu satuan">
+              <button
+                type="button"
+                onClick={() => toggleGroup('__single')}
+                aria-expanded={!collapsed.has('__single')}
+                className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left focus-ring"
+              >
+                <Music2 className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display text-lg font-bold text-ink">Lagu satuan</span>
+                  <span className="block text-xs text-ink-muted">
+                    {singles.length} lagu · {formatBytes(totalBytes(singles))}
+                  </span>
+                </span>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-ink-muted transition-transform ${collapsed.has('__single') ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              {!collapsed.has('__single') && <div className="mt-1">{renderRows(singles)}</div>}
+            </section>
+          )}
+        </div>
       )}
 
+      {moving && (
+        <MoveDownloadSheet
+          track={moving.track}
+          fromPlaylistId={moving.fromPlaylistId}
+          onClose={() => setMoving(null)}
+          onToast={showToast}
+        />
+      )}
     </section>
   )
 }

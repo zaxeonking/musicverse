@@ -7,9 +7,9 @@ import type {
   SpotifyApiPlaylistResponse,
   SpotifyApiTrack,
 } from '../types/spotify'
-import { durationFit, isLikelyClip } from '../utils/clipDetect'
+import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { parseDuration } from '../utils/formatTime'
-import { scoreCandidate } from '../utils/matchTrack'
+import { metadataMismatch, scoreCandidate } from '../utils/matchTrack'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { stripArtistPrefix } from '../utils/trackTitle'
 import { extractSpotifyTrackLink, extractTrackId, isSafeHttpUrl, validateSpotifyPlaylistUrl } from '../utils/spotifyUrl'
@@ -29,7 +29,7 @@ export const PLAYBACK_TIMEOUT_MS = 30_000
  * jadi di situs yang di-deploy (bukan localhost/APK) request lewat proxy `/nexa`.
  * VITE_API_BASE_URL tetap menang jika diisi.
  */
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   const configured = import.meta.env?.VITE_API_BASE_URL?.trim()
   if (configured) return configured.replace(/\/+$/, '')
   if (typeof window !== 'undefined') {
@@ -185,6 +185,11 @@ export interface FetchPlaylistOptions {
   timeoutMs?: number
   /** API yang sudah terbukti memberi klip/cuplikan untuk lagu ini; dilewati. */
   avoid?: ReadonlyArray<'kyzz' | 'cadangan'>
+  /**
+   * Mode unduhan: jangan pakai berkas lokal / hasil hand-off, dan tolak hasil yang judul atau artisnya
+   * tidak cocok dengan lagu di playlist (durasi file diperiksa setelah diunduh).
+   */
+  strict?: boolean
 }
 
 export function buildPlaylistEndpoint(normalizedPlaylistUrl: string): string {
@@ -696,11 +701,11 @@ export async function fetchPlaybackInfo(
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
   // APK: lagu yang sudah diunduh diputar dari berkas lokal (Android/data/<paket>/files/download), tanpa internet.
-  const offline = await resolveOfflinePlayback(track)
+  const offline = options.strict ? null : await resolveOfflinePlayback(track)
   if (offline) return offline
 
   // Hasil hand-off bisa saja klip yang baru ditolak; saat ada API yang dihindari, selalu ambil baru.
-  const handed = options.avoid?.length ? null : takeHandoff(handoffKey(track.title, track.url))
+  const handed = options.avoid?.length || options.strict ? null : takeHandoff(handoffKey(track.title, track.url))
   if (handed) return handed
 
   const external = options.signal
@@ -741,15 +746,33 @@ export async function fetchPlaybackInfo(
       console.warn(`[MusicVerse] Sumber ${name} gagal:`, error)
       continue
     }
+    if (options.strict) {
+      const mismatch = metadataMismatch(wanted, info)
+      if (mismatch) {
+        console.warn(`[MusicVerse] Sumber ${name} ditolak untuk unduhan: ${mismatch}`)
+        lastError = new SpotifyApiError('clip_only', mismatch)
+        continue
+      }
+    }
     const actual = await probeAudioDuration(info.audioUrl, 7000, external)
     if (external?.aborted) throw aborted()
+    if (options.strict && actual !== null) {
+      // Unduhan: durasi file harus sangat dekat dengan lagu di playlist (dua arah). Yang tak terbaca ditangani
+      // setelah berkas terunduh (dibaca ulang dari berkas lokal).
+      const problem = strictDurationProblem(actual, expected)
+      if (problem) {
+        console.warn(`[MusicVerse] Sumber ${name} ditolak untuk unduhan: ${problem}`)
+        lastError = new SpotifyApiError('clip_only', problem)
+        continue
+      }
+    }
     const fit = durationFit(actual, expected)
     const score = scoreCandidate(wanted, info, true, actual)
     console.info(
       `[MusicVerse] Kandidat ${name}: skor ${score.toFixed(2)}, durasi audio ${actual?.toFixed(1) ?? '?'} dtk ` +
         `(playlist ${expected ?? '?'} dtk), judul "${info.title}", artis "${info.artist}"`,
     )
-    candidates.push({ name, info: { ...info, source: name }, score, fit, actual })
+    candidates.push({ name, info: { ...info, source: name, ...(actual !== null ? { probedDuration: actual } : {}) }, score, fit, actual })
     // Cocok (judul, artis, durasi) dan bukan klip: pakai langsung, tidak perlu menunggu sumber lain.
     if ((fit === null || fit >= 0.7) && !isLikelyClip(actual, expected) && score >= ACCEPT_SCORE) break
   }
@@ -764,6 +787,9 @@ export async function fetchPlaybackInfo(
       'clip_only',
       `Audio yang ditemukan (${Math.round(best.actual ?? 0)} dtk) tidak sesuai dengan lagunya (${expected ?? '?'} dtk).`,
     )
+  }
+  if (options.strict && best.score < ACCEPT_SCORE) {
+    throw new SpotifyApiError('clip_only', `Kecocokan audio dengan lagu di playlist terlalu rendah (skor ${best.score.toFixed(2)}).`)
   }
   return best.info
 }

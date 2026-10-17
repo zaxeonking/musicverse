@@ -39,6 +39,7 @@ import com.getcapacitor.annotation.PermissionCallback;
     permissions = {@Permission(strings = {Manifest.permission.POST_NOTIFICATIONS}, alias = "notifications")})
 public class MusicVerseNativePlugin extends Plugin {
   private static final String UPDATE_FILE = "musicverse-update.apk";
+  private static final String UPDATE_DIR = "app-update";
   private static final String PREFS = "musicverse_update";
   private static final String PREF_ID = "download_id";
 
@@ -80,7 +81,9 @@ public class MusicVerseNativePlugin extends Plugin {
   // ---------------------------------------------------------------------------------------------
 
   private File updateFile() {
-    return new File(getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), UPDATE_FILE);
+    // Folder khusus pembaruan. JANGAN memakai "Download": di penyimpanan yang tidak membedakan huruf besar/kecil
+    // namanya sama dengan folder unduhan lagu ("download"), dan folder lagu tidak boleh disentuh pembaruan.
+    return new File(getContext().getExternalFilesDir(UPDATE_DIR), UPDATE_FILE);
   }
 
   private DownloadManager downloadManager() {
@@ -122,7 +125,7 @@ public class MusicVerseNativePlugin extends Plugin {
       request.setDescription("Mengunduh pembaruan");
       request.setMimeType("application/vnd.android.package-archive");
       request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-      request.setDestinationInExternalFilesDir(getContext(), Environment.DIRECTORY_DOWNLOADS, UPDATE_FILE);
+      request.setDestinationInExternalFilesDir(getContext(), UPDATE_DIR, UPDATE_FILE);
       long id = dm.enqueue(request);
       getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(PREF_ID, id).apply();
       autoInstallTried = false;

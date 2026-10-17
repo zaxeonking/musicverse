@@ -75,7 +75,9 @@ public class PlaybackService extends Service {
   public static void update(Context context, State state) {
     PlaybackService running = instance;
     if (running != null) {
-      running.apply(state);
+      // Plugin Capacitor berjalan di thread sendiri; semua perubahan keadaan dijalankan di thread utama
+      // (sama dengan ticker) supaya posisi/durasi tidak saling menimpa setengah jadi.
+      running.handler.post(() -> running.apply(state));
       return;
     }
     pending = state;
@@ -95,6 +97,9 @@ public class PlaybackService extends Service {
   private PowerManager.WakeLock wakeLock;
   private final State current = new State();
   private Bitmap defaultCover;
+  /** Metadata yang terakhir dipasang ke sesi. Dipasang ulang hanya jika berubah: set ulang terus-menerus membuat kartu media sistem memuat ulang dan bilahnya kembali ke awal. */
+  private String metaKey = "";
+  private Bitmap metaArt = null;
   private boolean foreground = false;
   /** Waktu (elapsedRealtime) saat positionMs terakhir dilaporkan JS; dasar penghitungan posisi berjalan. */
   private long positionAt = 0;
@@ -107,6 +112,9 @@ public class PlaybackService extends Service {
     @Override public void run() {
       if (!current.playing || session == null) return;
       pushPlaybackState();
+      // ROM yang menggambar bilah dari notifikasi (bukan dari sesi) hanya bergerak jika notifikasinya ikut diperbarui.
+      NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+      if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
       handler.postDelayed(this, 1000);
     }
   };
@@ -183,7 +191,10 @@ public class PlaybackService extends Service {
     current.title = next.title;
     current.artist = next.artist;
     current.album = next.album;
-    current.durationMs = next.durationMs;
+    // Durasi yang sudah diketahui untuk lagu yang sama tidak boleh kembali ke 0: sistem menganggap durasi tak diketahui
+    // dan bilah progres jadi rata di kiri. (Lagu baru = resetCover.)
+    if (next.durationMs > 0) current.durationMs = next.durationMs;
+    else if (next.resetCover) current.durationMs = 0;
     current.positionMs = next.positionMs;
     positionAt = SystemClock.elapsedRealtime();
     current.playing = next.playing;
@@ -250,14 +261,19 @@ public class PlaybackService extends Service {
   private void updateSession() {
     if (session == null) return;
     Bitmap art = current.cover != null ? current.cover : defaultCover();
-    MediaMetadata.Builder meta = new MediaMetadata.Builder()
-        .putString(MediaMetadata.METADATA_KEY_TITLE, current.title)
-        .putString(MediaMetadata.METADATA_KEY_ARTIST, current.artist)
-        .putString(MediaMetadata.METADATA_KEY_ALBUM, current.album)
-        .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
-        .putBitmap(MediaMetadata.METADATA_KEY_ART, art);
-    if (current.durationMs > 0) meta.putLong(MediaMetadata.METADATA_KEY_DURATION, current.durationMs);
-    session.setMetadata(meta.build());
+    String key = current.title + "\u0001" + current.artist + "\u0001" + current.album + "\u0001" + current.durationMs;
+    if (!key.equals(metaKey) || art != metaArt) {
+      MediaMetadata.Builder meta = new MediaMetadata.Builder()
+          .putString(MediaMetadata.METADATA_KEY_TITLE, current.title)
+          .putString(MediaMetadata.METADATA_KEY_ARTIST, current.artist)
+          .putString(MediaMetadata.METADATA_KEY_ALBUM, current.album)
+          .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
+          .putBitmap(MediaMetadata.METADATA_KEY_ART, art);
+      if (current.durationMs > 0) meta.putLong(MediaMetadata.METADATA_KEY_DURATION, current.durationMs);
+      session.setMetadata(meta.build());
+      metaKey = key;
+      metaArt = art;
+    }
 
     pushPlaybackState();
   }
@@ -276,8 +292,10 @@ public class PlaybackService extends Service {
     if (current.durationMs > 0) actions |= PlaybackState.ACTION_SEEK_TO;
     if (current.hasNext) actions |= PlaybackState.ACTION_SKIP_TO_NEXT;
     if (current.hasPrevious) actions |= PlaybackState.ACTION_SKIP_TO_PREVIOUS;
-    session.setPlaybackState(new PlaybackState.Builder()
-        .setActions(actions)
+    PlaybackState.Builder state = new PlaybackState.Builder().setActions(actions);
+    // Berkas lokal / lagu yang durasinya diketahui: tandai terbuffer penuh (beberapa ROM menggambar bilah dari nilai ini).
+    if (current.durationMs > 0) state.setBufferedPosition(current.durationMs);
+    session.setPlaybackState(state
         .setState(current.playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
             livePosition(), current.playing ? 1f : 0f, SystemClock.elapsedRealtime())
         .build());
@@ -345,6 +363,12 @@ public class PlaybackService extends Service {
         .setShowWhen(false)
         .setOngoing(current.playing)
         .setStyle(style);
+    if (current.durationMs > 0) {
+      builder.setProgress(
+          (int) Math.min(Integer.MAX_VALUE, current.durationMs),
+          (int) Math.min(Integer.MAX_VALUE, livePosition()),
+          false);
+    }
     if (Build.VERSION.SDK_INT >= 31) builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
     return builder.build();
   }

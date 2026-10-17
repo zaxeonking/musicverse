@@ -96,4 +96,6 @@ export interface PlaybackInfo {
   source?: string
   /** API yang menghasilkan audioUrl. Dipakai untuk menghindari API yang memberi klip 30 detik. */
   apiSource?: 'kyzz' | 'cadangan'
+  /** Durasi (detik) yang terbaca dari metadata audio sebelum diunduh/diputar; dipakai mencocokkan ulang dengan berkas hasil unduhan. */
+  probedDuration?: number
 }

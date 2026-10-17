@@ -109,3 +109,59 @@ export function scoreCandidate(
   }
   return score
 }
+
+/** Penanda versi lain dari lagu yang sama (live, remix, dst.). Judul asli dan audio harus sama-sama punya atau sama-sama tidak. */
+const VERSION_MARKERS: ReadonlyArray<[string, RegExp]> = [
+  ['live', /\blive\b|\bunplugged\b|\bkonser\b/],
+  ['remix', /\bremix\b|\bmashup\b|\bbootleg\b|\bedit\b/],
+  ['instrumental', /\binstrumental\b|\bkaraoke\b|\bbacking track\b/],
+  ['acoustic', /\bacoustic\b|\bakustik\b|\bpiano version\b/],
+  ['cover', /\bcover\b|\btribute\b/],
+  ['speed', /\bsped up\b|\bspeed up\b|\bslowed\b|\breverb\b|\b8d\b|\bnightcore\b|\bdaycore\b/],
+  ['lofi', /\blo ?-?fi\b/],
+  ['demo', /\bdemo\b|\bsession\b/],
+]
+
+/** Himpunan penanda versi di sebuah judul; nama artis dibuang dulu supaya nama artis tidak terbaca sebagai penanda. */
+export function versionMarkers(title: string, artists: string): Set<string> {
+  let text = ` ${normalizeSearchText(title)} `
+  for (const name of artistNames(artists)) text = text.split(name).join(' ')
+  text = text.replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  const found = new Set<string>()
+  for (const [name, pattern] of VERSION_MARKERS) if (pattern.test(text)) found.add(name)
+  return found
+}
+
+/**
+ * Pemeriksaan ketat untuk unduhan: null jika identitas audio dari server cocok dengan lagu di playlist,
+ * selain itu pesan alasannya. Yang dibandingkan: ID lagu Spotify (jika kedua sisi punya), judul (kata per kata),
+ * artis (nama harus ditemukan), dan penanda versi (live/remix/instrumental/cover/...). Server yang tidak mengirim
+ * judul atau artis tidak otomatis ditolak, tetapi harus lolos pemeriksaan durasi file yang ketat. Durasi diperiksa
+ * terpisah dari berkas aslinya.
+ */
+export function metadataMismatch(wanted: WantedTrack, info: PlaybackInfo): string | null {
+  const wantedId = extractTrackId(wanted.url ?? '')
+  const gotId = extractTrackId(info.spotifyUrl ?? '')
+  if (wantedId && gotId && wantedId !== gotId) {
+    return 'Audio dari server berasal dari lagu Spotify yang berbeda dengan lagu di playlist.'
+  }
+  const title = titleScore(wanted, info)
+  if (title !== null && title < 0.75) {
+    return `Judul audio dari server ("${info.title}") tidak cocok dengan lagu di playlist ("${wanted.title}").`
+  }
+  const artist = artistScore(wanted, info)
+  // Satu artis: namanya harus ditemukan utuh. Beberapa artis: minimal sebagian cocok.
+  const needed = artistNames(wanted.artists).length > 1 ? 0.5 : 1
+  if (artist !== null && artist < needed) {
+    return `Artis audio dari server ("${info.artist}") tidak cocok dengan lagu di playlist ("${wanted.artists}").`
+  }
+  if (info.title.trim()) {
+    const want = versionMarkers(stripArtistPrefix(wanted.title, wanted.artists), wanted.artists)
+    const got = versionMarkers(info.title, wanted.artists)
+    const differ = [...want, ...got].filter((m) => want.has(m) !== got.has(m))
+    if (differ.length > 0) {
+      return `Versi audio dari server ("${info.title}") berbeda dengan lagu di playlist ("${wanted.title}"): ${[...new Set(differ)].join(', ')}.`
+    }
+  }
+  return null
+}

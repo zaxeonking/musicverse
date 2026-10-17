@@ -46,4 +46,6 @@ export interface MyPlaylist {
   createdAt: number
   updatedAt: number
   tracks: PlaylistTrack[]
+  /** ID playlist Spotify asal jika playlist ini dibuat otomatis oleh "Unduh semua" (supaya unduh ulang memakai playlist yang sama). */
+  sourceId?: string
 }

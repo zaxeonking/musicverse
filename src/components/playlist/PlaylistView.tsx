@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, ListMusic, RotateCw } from 'lucide-react'
 import { useLibrary } from '../../context/LibraryContext'
+import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { usePlaylist } from '../../context/PlaylistContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
@@ -49,6 +50,7 @@ export default function PlaylistView() {
   const player = useAudioPlayer()
   const { notice, savedIdFor, savePlaylist, removePlaylist, dismissNotice } = useLibrary()
   const { showToast } = useTrackMenu()
+  const { saveDownloadedPlaylist } = useMyPlaylists()
 
   const [picking, setPicking] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -101,6 +103,19 @@ export default function PlaylistView() {
     showToast(QUEUE_RESULT_TEXT[player.addToQueue(track, { fromSearch: true })])
   }
 
+  // Unduh per playlist: lagunya langsung masuk ke satu playlist di "Playlist saya" (nama sama dengan playlist asal).
+  // Unduh satu lagu lewat menu lagu TIDAK masuk playlist mana pun; nanti bisa dipindahkan dari tab Unduhan.
+  const handleDownloadAll = () => {
+    const result = downloadTracks(playlist.tracks)
+    const text = bulkDownloadText(result)
+    if (result.unsupported) {
+      showToast(text)
+      return
+    }
+    const saved = saveDownloadedPlaylist(playlist.id, playlist.title, playlist.tracks)
+    showToast(saved.ok ? `${text}. Masuk ke playlist “${saved.value.playlist.name}”` : `${text}. ${myPlaylistErrorText(saved.reason)}`)
+  }
+
   return (
     <section aria-label={`Playlist ${playlist.title}`} className="space-y-6">
       {notice && (
@@ -143,7 +158,7 @@ export default function PlaylistView() {
         // Lagu satuan (hasil cari judul / tautan lagu) tidak bisa masuk Koleksi; simpan lewat "Playlist saya".
         onToggleSaved={playlist.source === 'search' ? undefined : handleToggleSaved}
         // Unduh offline hanya di APK dan hanya untuk playlist (lagu satuan punya menu Unduh sendiri).
-        onDownloadAll={isNativeApp() && playlist.source !== 'search' ? () => showToast(bulkDownloadText(downloadTracks(playlist.tracks))) : undefined}
+        onDownloadAll={isNativeApp() && playlist.source !== 'search' ? handleDownloadAll : undefined}
         onAddToPlaylist={playlist.source === 'search' && playlist.tracks.length > 0 ? () => setPicking(true) : undefined}
         onAddToQueue={isSingleSearch && playlist.tracks.length > 0 ? handleAddToQueue : undefined}
       />
