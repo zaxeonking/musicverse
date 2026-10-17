@@ -195,6 +195,9 @@ const NET_RETRY_MAX = 6
 const NET_RETRY_DELAY_MS = 2_000
 const NET_RETRY_MAX_DELAY_MS = 10_000
 const OFFLINE_WAIT_MS = 60_000
+/** Berkas tidak cocok (klip / durasi / judul beda) di semua sumber: semua sumber dicoba lagi dari awal sampai sekian putaran, karena server sering memberi berkas yang benar di percobaan berikutnya. */
+const MISMATCH_ROUNDS_MAX = 5
+const MISMATCH_RETRY_DELAY_MS = 1_500
 const BAD_SIGNAL_TEXT = 'Sinyal jelek, unduhan gagal. Coba lagi saat koneksi lebih baik.'
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
@@ -226,6 +229,7 @@ async function downloadOne({ track, key }: Job): Promise<void> {
   const expected = parseDuration(track.duration)
   const avoid: Array<'kyzz' | 'cadangan'> = []
   let netFailures = 0
+  let mismatchRounds = 0
 
   // Unduhan HARUS cocok dengan data lagu di playlist: judul + artis (dicek saat memilih sumber) dan durasi
   // (dicek dari berkas yang benar-benar terunduh). Berkas yang tidak cocok dibuang dan sumber lain dicoba.
@@ -237,6 +241,15 @@ async function downloadOne({ track, key }: Job): Promise<void> {
     try {
       info = await fetchPlaybackInfo(track, { strict: true, avoid })
     } catch (error) {
+      // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
+      if (error instanceof SpotifyApiError && error.code === 'clip_only') {
+        mismatchRounds += 1
+        console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
+        if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
+        avoid.length = 0
+        await sleep(MISMATCH_RETRY_DELAY_MS)
+        continue
+      }
       if (!isTransientApiError(error)) throw error
       netFailures += 1
       console.warn(`[MusicVerse] Gagal mengambil sumber unduhan (percobaan ${netFailures}/${NET_RETRY_MAX}):`, error)
@@ -289,8 +302,16 @@ async function downloadOne({ track, key }: Job): Promise<void> {
       await waitBeforeRetry(netFailures)
       continue
     }
-    if (!api || avoid.includes(api)) throw new Error(problem.reason)
-    avoid.push(api)
+    // Berkas tidak cocok: singkirkan sumber itu dan coba sumber lain. Bila semua sudah dicoba, ulangi dari awal
+    // (maks. MISMATCH_ROUNDS_MAX putaran) sebelum menyerah.
+    if (api && !avoid.includes(api)) {
+      avoid.push(api)
+    } else {
+      mismatchRounds += 1
+      if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(problem.reason)
+      avoid.length = 0
+      await sleep(MISMATCH_RETRY_DELAY_MS)
+    }
   }
 
   await safeDelete(finalPath)
