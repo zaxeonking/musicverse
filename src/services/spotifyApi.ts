@@ -122,7 +122,7 @@ function parseTrack(raw: unknown): SpotifyApiTrack | null {
   if (typeof url !== 'string' || !url.trim()) return null
   const artistText = typeof artists === 'string' ? artists : ''
   return {
-    title: stripArtistPrefix(title.trim(), artistText),
+    title: title.trim(), // persis seperti dari server; tidak diubah / ditambah apa pun
     artists: artistText,
     album: typeof album === 'string' ? album : '',
     duration: typeof duration === 'string' ? duration : '',

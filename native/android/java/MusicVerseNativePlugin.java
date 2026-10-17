@@ -278,7 +278,8 @@ public class MusicVerseNativePlugin extends Plugin {
       nm.createNotificationChannel(channel);
     }
     boolean done = Boolean.TRUE.equals(call.getBoolean("done", false));
-    Integer percent = call.getInt("percent");
+    Object percentValue = call.getData().opt("percent");
+    Integer percent = percentValue instanceof Number ? Integer.valueOf((int) Math.round(((Number) percentValue).doubleValue())) : null;
     Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(context, DL_CHANNEL) : new Notification.Builder(context);
     builder
         .setSmallIcon(R.drawable.ic_stat_musicverse)
@@ -310,15 +311,35 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve();
   }
 
+  /** Membaca angka apa pun dari JS (Integer / Long / Double / string angka) sebagai long; 0 jika kosong atau tidak valid. */
+  private static long readLong(PluginCall call, String name) {
+    Object value = call.getData().opt(name);
+    if (value instanceof Number) {
+      double d = ((Number) value).doubleValue();
+      return Double.isNaN(d) || Double.isInfinite(d) ? 0L : Math.max(0L, Math.round(d));
+    }
+    if (value instanceof String) {
+      try {
+        return Math.max(0L, Math.round(Double.parseDouble(((String) value).trim())));
+      } catch (NumberFormatException ignored) {
+        return 0L;
+      }
+    }
+    return 0L;
+  }
+
   @PluginMethod
   public void updateNowPlaying(PluginCall call) {
     PlaybackService.State state = new PlaybackService.State();
     state.title = call.getString("title", "");
     state.artist = call.getString("artist", "");
     state.album = call.getString("album", "");
-    state.durationMs = call.getLong("durationMs", 0L);
-    state.positionMs = call.getLong("positionMs", 0L);
+    // Angka dari JS tiba sebagai Integer (muat di 32-bit) atau Double, BUKAN Long: PluginCall.getLong() hanya mengenali Long
+    // sehingga selalu mengembalikan nilai bawaan 0 => durasi dan posisi notifikasi selalu 0 (tanpa waktu, bilah tidak bergerak).
+    state.durationMs = readLong(call, "durationMs");
+    state.positionMs = readLong(call, "positionMs");
     state.playing = Boolean.TRUE.equals(call.getBoolean("playing", false));
+    state.loading = Boolean.TRUE.equals(call.getBoolean("loading", false));
     state.hasNext = Boolean.TRUE.equals(call.getBoolean("hasNext", false));
     state.hasPrevious = Boolean.TRUE.equals(call.getBoolean("hasPrevious", false));
     state.resetCover = Boolean.TRUE.equals(call.getBoolean("resetCover", false));

@@ -57,6 +57,8 @@ function artistScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   haystack = haystack.replace(/\s+/g, ' ')
   if (wantNames.some((name) => haystack.includes(name))) return 1
   const gotTokens = new Set(haystack.split(' ').filter(Boolean))
+  // Urutan nama beda (\"Kamiya Hiroshi\" vs \"Hiroshi Kamiya\"): semua kata satu nama artis ada di data server = cocok.
+  if (wantNames.some((name) => name.split(' ').filter(Boolean).every((t) => gotTokens.has(t)))) return 1
   const wantTokens = wantNames.flatMap((name) => name.split(' ')).filter(Boolean)
   const overlap = wantTokens.filter((t) => gotTokens.has(t)).length
   return overlap / Math.max(1, wantTokens.length) >= 0.5 ? 0.5 : 0
@@ -149,9 +151,12 @@ export function metadataMismatch(wanted: WantedTrack, info: PlaybackInfo): strin
   if (title !== null && title < 0.75) {
     return `Judul audio dari server ("${info.title}") tidak cocok dengan lagu di playlist ("${wanted.title}").`
   }
-  const artist = artistScore(wanted, info)
-  // Satu artis: namanya harus ditemukan utuh. Beberapa artis: minimal sebagian cocok.
-  const needed = artistNames(wanted.artists).length > 1 ? 0.5 : 1
+  // Artis hanya dipakai untuk MENOLAK jika server benar-benar menyebut artis (field `artist` terisi) dan ID lagu Spotify
+  // tidak bisa dicocokkan. Server yang tidak mengirim nama artis, atau ID lagu yang sudah sama, tidak boleh membuat unduhan ditolak.
+  const idMatches = Boolean(wantedId && gotId && wantedId === gotId)
+  const artist = idMatches || !info.artist.trim() ? null : artistScore(wanted, info)
+  // Sebagian nama artis cocok sudah cukup (penulisan nama antar server sering berbeda); judul + ID + durasi tetap diperiksa ketat.
+  const needed = 0.5
   if (artist !== null && artist < needed) {
     return `Artis audio dari server ("${info.artist}") tidak cocok dengan lagu di playlist ("${wanted.artists}").`
   }

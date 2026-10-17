@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { usePlaybackTime, usePlayerActions, useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { composeNotificationCover } from '../../utils/notificationCover'
 import { fallbackCover } from '../../utils/fallbackCover'
-import { stripArtistPrefix } from '../../utils/trackTitle'
 import { isNativeApp } from '../../native/platform'
 import NativeMediaSync from './NativeMediaSync'
 
@@ -50,7 +49,7 @@ function WebMediaSessionSync() {
 
   const trackId = currentTrack?.id ?? null
   const artists = currentTrack?.artists ?? ''
-  const title = stripArtistPrefix(currentTrack?.title ?? '', artists)
+  const title = currentTrack?.title ?? ''
   const album = currentTrack?.album ?? ''
   const coverUrl = currentTrack?.cover || undefined
 

@@ -52,6 +52,8 @@ public class PlaybackService extends Service {
     long durationMs = 0;
     long positionMs = 0;
     boolean playing = false;
+    /** Mencari/memuat audio (jeda antar lagu / buffering): tampilkan indikator memuat. */
+    boolean loading = false;
     boolean hasNext = false;
     boolean hasPrevious = false;
     boolean resetCover = false;
@@ -198,6 +200,7 @@ public class PlaybackService extends Service {
     current.positionMs = next.positionMs;
     positionAt = SystemClock.elapsedRealtime();
     current.playing = next.playing;
+    current.loading = next.loading;
     current.hasNext = next.hasNext;
     current.hasPrevious = next.hasPrevious;
     if (next.resetCover) current.cover = null;
@@ -261,11 +264,12 @@ public class PlaybackService extends Service {
   private void updateSession() {
     if (session == null) return;
     Bitmap art = current.cover != null ? current.cover : defaultCover();
-    String key = current.title + "\u0001" + current.artist + "\u0001" + current.album + "\u0001" + current.durationMs;
+    String artistLine = artistLine();
+    String key = current.title + "\u0001" + artistLine + "\u0001" + current.album + "\u0001" + current.durationMs;
     if (!key.equals(metaKey) || art != metaArt) {
       MediaMetadata.Builder meta = new MediaMetadata.Builder()
           .putString(MediaMetadata.METADATA_KEY_TITLE, current.title)
-          .putString(MediaMetadata.METADATA_KEY_ARTIST, current.artist)
+          .putString(MediaMetadata.METADATA_KEY_ARTIST, artistLine)
           .putString(MediaMetadata.METADATA_KEY_ALBUM, current.album)
           .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
           .putBitmap(MediaMetadata.METADATA_KEY_ART, art);
@@ -278,10 +282,17 @@ public class PlaybackService extends Service {
     pushPlaybackState();
   }
 
+  /** Baris artis; saat memuat diawali "Memuat lagu…" supaya jeda antar lagu terlihat di notifikasi dan layar kunci. */
+  private String artistLine() {
+    if (!current.loading) return current.artist;
+    return current.artist.isEmpty() ? "Memuat lagu…" : "Memuat lagu… · " + current.artist;
+  }
+
   /** Posisi saat ini: posisi terakhir dari JS + waktu berjalan sejak itu (hanya saat memutar), dijepit ke durasi. */
   private long livePosition() {
     long pos = current.positionMs;
-    if (current.playing) pos += SystemClock.elapsedRealtime() - positionAt;
+    // Saat memuat, posisi tidak berjalan.
+    if (current.playing && !current.loading) pos += SystemClock.elapsedRealtime() - positionAt;
     if (current.durationMs > 0 && pos > current.durationMs) pos = current.durationMs;
     return Math.max(0, pos);
   }
@@ -296,8 +307,9 @@ public class PlaybackService extends Service {
     // Berkas lokal / lagu yang durasinya diketahui: tandai terbuffer penuh (beberapa ROM menggambar bilah dari nilai ini).
     if (current.durationMs > 0) state.setBufferedPosition(current.durationMs);
     session.setPlaybackState(state
-        .setState(current.playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-            livePosition(), current.playing ? 1f : 0f, SystemClock.elapsedRealtime())
+        .setState(!current.playing ? PlaybackState.STATE_PAUSED
+                : current.loading ? PlaybackState.STATE_BUFFERING : PlaybackState.STATE_PLAYING,
+            livePosition(), current.playing && !current.loading ? 1f : 0f, SystemClock.elapsedRealtime())
         .build());
   }
 
@@ -352,7 +364,7 @@ public class PlaybackService extends Service {
     builder
         .setSmallIcon(R.drawable.ic_stat_musicverse)
         .setContentTitle(current.title.isEmpty() ? "MusicVerse" : current.title)
-        .setContentText(current.artist)
+        .setContentText(artistLine())
         .setSubText(current.album.isEmpty() ? null : current.album)
         .setLargeIcon(current.cover != null ? current.cover : defaultCover())
         .setContentIntent(content)
@@ -363,7 +375,10 @@ public class PlaybackService extends Service {
         .setShowWhen(false)
         .setOngoing(current.playing)
         .setStyle(style);
-    if (current.durationMs > 0) {
+    if (current.loading) {
+      // Jeda antar lagu: bilah berjalan terus (indeterminate) menggantikan bilah posisi.
+      builder.setProgress(0, 0, true);
+    } else if (current.durationMs > 0) {
       builder.setProgress(
           (int) Math.min(Integer.MAX_VALUE, current.durationMs),
           (int) Math.min(Integer.MAX_VALUE, livePosition()),

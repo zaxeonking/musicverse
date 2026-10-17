@@ -87,9 +87,14 @@ export default function PlaylistsSection() {
   const activeId = active?.id ?? null
 
   const entries = useMemo<Entry[]>(() => {
+    // Playlist Spotify yang sudah diunduh ("Unduh semua") sudah menjadi playlist buatanmu (sourceId = ID Spotify-nya):
+    // tampilkan satu kartu saja, jangan dobel dengan kartu tersimpannya.
+    const converted = new Set(mine.flatMap((playlist) => (playlist.sourceId ? [playlist.sourceId] : [])))
     const all: Entry[] = [
       ...mine.map((playlist): Entry => ({ kind: 'mine', id: playlist.id, title: playlist.name, at: playlist.updatedAt, playlist })),
-      ...saved.map((playlist): Entry => ({ kind: 'saved', id: playlist.id, title: playlist.title, at: playlist.savedAt, playlist })),
+      ...saved
+        .filter((playlist) => !converted.has(playlist.id))
+        .map((playlist): Entry => ({ kind: 'saved', id: playlist.id, title: playlist.title, at: playlist.savedAt, playlist })),
     ]
     if (prefs.sort === 'name') return all.sort((a, b) => a.title.localeCompare(b.title, 'id', { sensitivity: 'base' }))
     return all.sort((a, b) => b.at - a.at)

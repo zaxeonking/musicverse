@@ -18,10 +18,10 @@ function isArtist(part: string, names: string[]): boolean {
 }
 
 /**
- * Judul di playlist sering berformat "Artis - Judul" (atau "Judul - Artis"). Untuk pencarian audio/lirik,
- * bagian artis harus dibuang: "Vierra - Kesepian" (artis Vierra) -> "Kesepian". Bagian lain di sekitar " - "
- * (mis. "Judul - Remastered 2011") tidak disentuh, dan jika tidak ada bagian yang cocok dengan artis,
- * judul dikembalikan apa adanya.
+ * HANYA untuk pencocokan dan pencarian (lirik, verifikasi unduhan, pencarian audio): judul playlist kadang berformat
+ * "Artis - Judul" sehingga bagian artis dibuang agar perbandingan adil. Hasilnya TIDAK PERNAH disimpan atau ditampilkan;
+ * judul lagu selalu persis seperti dari server. Hanya membuang bagian yang jelas nama artis (nama utuh, minimal 3 huruf)
+ * dan tidak pernah menghasilkan judul yang terlalu pendek (judul seperti "Ho-Kago Tea Time" tidak boleh menjadi "Ho").
  */
 export function stripArtistPrefix(title: string, artists: string): string {
   const trimmed = title.trim()
@@ -30,16 +30,20 @@ export function stripArtistPrefix(title: string, artists: string): string {
   // Pemisah: " - ", " – ", " — ", " | " (dengan spasi di kedua sisi).
   const seps = [...trimmed.matchAll(/\s+[-\u2013\u2014|]\s+/g)]
   if (seps.length === 0) return trimmed
+  const usable = (value: string) => plain(value).length >= 3
   const first = seps[0]
+  const lead = trimmed.slice(0, first.index)
   const rest = trimmed.slice(first.index + first[0].length).trim()
-  if (rest && isArtist(trimmed.slice(0, first.index), names)) return rest
+  // Kedua sisi sama-sama terbaca sebagai artis: ambigu, jangan dipotong.
+  if (rest && usable(rest) && isArtist(lead, names) && !isArtist(rest, names)) return rest
   const last = seps[seps.length - 1]
   const head = trimmed.slice(0, last.index).trim()
-  if (head && isArtist(trimmed.slice(last.index + last[0].length), names)) return head
+  const tail = trimmed.slice(last.index + last[0].length)
+  if (head && usable(head) && isArtist(tail, names) && !isArtist(head, names)) return head
   return trimmed
 }
 
-/** Judul untuk ditampilkan: tanpa nama artis (artis sudah tampil di bawah judul). */
-export function displayTitle(title: string, artists: string): string {
-  return stripArtistPrefix(title, artists)
+/** Judul untuk ditampilkan: persis seperti yang diterima dari server. */
+export function displayTitle(title: string): string {
+  return title.trim()
 }

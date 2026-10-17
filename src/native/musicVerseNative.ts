@@ -17,6 +17,8 @@ export interface NowPlayingUpdate {
   durationMs: number
   positionMs: number
   playing: boolean
+  /** Sedang mencari/memuat audio (jeda antar lagu atau buffering): notifikasi menampilkan indikator memuat. */
+  loading?: boolean
   hasNext: boolean
   hasPrevious: boolean
   /** Lagu berganti: buang sampul lama (kembali ke sampul bawaan APK sampai `coverBase64` tiba). */

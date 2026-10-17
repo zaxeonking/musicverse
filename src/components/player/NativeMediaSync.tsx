@@ -4,7 +4,6 @@ import { MusicVerseNative, type NativeMediaActionEvent, type NowPlayingUpdate } 
 import { audioEngine } from '../../services/audioEngine'
 import { composeNotificationCover } from '../../utils/notificationCover'
 import { fallbackCover } from '../../utils/fallbackCover'
-import { stripArtistPrefix } from '../../utils/trackTitle'
 import { parseDurationText } from '../../hooks/useAudioPlayerController'
 import { parseDuration } from '../../utils/formatTime'
 
@@ -50,11 +49,13 @@ export default function NativeMediaSync() {
 
   const trackId = currentTrack?.id ?? null
   const artists = currentTrack?.artists ?? ''
-  const title = stripArtistPrefix(currentTrack?.title ?? '', artists)
+  const title = currentTrack?.title ?? ''
   const album = currentTrack?.album ?? ''
   // Lagu yang diputar dari unduhan memakai sampul lokal (tetap tampil tanpa internet).
   const coverUrl = (playbackInfo?.source === 'offline' ? playbackInfo.cover : currentTrack?.cover) || undefined
   const playing = status === 'playing' || status === 'buffering' || status === 'loading' || status === 'resolving'
+  // Jeda antar lagu (mencari/memuat audio) atau buffering: notifikasi menampilkan indikator memuat, bukan sekadar gambar diam.
+  const loading = status === 'buffering' || status === 'loading' || status === 'resolving'
 
   // Tombol notifikasi / layar kunci / headset -> pemutar.
   useEffect(() => {
@@ -117,7 +118,7 @@ export default function NativeMediaSync() {
 
   const sentTrack = useRef<string | null>(null)
   const sentCover = useRef<string | null>(null)
-  const reported = useRef<{ position: number; at: number; playing: boolean; duration: number } | null>(null)
+  const reported = useRef<{ position: number; at: number; playing: boolean; loading: boolean; duration: number } | null>(null)
   const lastMeta = useRef('')
   /** Keadaan terakhir yang dikirim ke native (tanpa sampul); dasar untuk detak posisi. */
   const lastPayload = useRef<NowPlayingUpdate | null>(null)
@@ -168,6 +169,7 @@ export default function NativeMediaSync() {
       meta !== lastMeta.current ||
       last === null ||
       last.playing !== playing ||
+      last.loading !== loading ||
       last.duration !== durationS ||
       now - last.at > REFRESH_MS ||
       expected === null ||
@@ -176,7 +178,7 @@ export default function NativeMediaSync() {
 
     sentTrack.current = trackId
     if (coverToSend !== null) sentCover.current = trackId
-    reported.current = { position: currentTime, at: now, playing, duration: durationS }
+    reported.current = { position: currentTime, at: now, playing, loading, duration: durationS }
     lastMeta.current = meta
     const payload: NowPlayingUpdate = {
       title,
@@ -185,6 +187,7 @@ export default function NativeMediaSync() {
       durationMs: Math.round(durationS * 1000),
       positionMs: Math.round(Math.max(0, currentTime) * 1000),
       playing,
+      loading,
       hasNext,
       hasPrevious,
       resetCover: newTrack,
@@ -194,7 +197,7 @@ export default function NativeMediaSync() {
     void MusicVerseNative.updateNowPlaying(payload).catch((error: unknown) => {
       console.warn('[MusicVerse] Notifikasi native gagal diperbarui:', error)
     })
-  }, [trackId, title, artists, album, playing, hasNext, hasPrevious, currentTime, duration, cover, currentTrack])
+  }, [trackId, title, artists, album, playing, loading, hasNext, hasPrevious, currentTime, duration, cover, currentTrack])
 
   // Detak posisi: tidak bergantung pada render React / event `timeupdate` (yang bisa jarang atau berhenti saat layar mati
   // atau saat memutar berkas lokal). Posisi dan durasi dibaca langsung dari elemen audio, sehingga bilah progres
@@ -209,6 +212,7 @@ export default function NativeMediaSync() {
       const next: NowPlayingUpdate = {
         ...base,
         playing: true,
+        loading: false,
         positionMs: Math.round(Math.max(0, live) * 1000),
         durationMs: liveDuration !== null ? Math.round(liveDuration * 1000) : base.durationMs,
       }

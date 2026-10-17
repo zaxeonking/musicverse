@@ -262,6 +262,36 @@ Menu tahan-lama (menu lagu dan menu di panel antrean) bukan bagian dari state ro
   3 detik terakhir lagu diabaikan. Data rusak/tidak konsisten = sesi dibuang. `cleanup()` menghapus sesi.
 - **Sleep timer custom**: selain 15/30/45/60 menit, ada isian menit bulat 1–720 di Sleep timer.
 
+## Catatan rilis v0.2.3
+
+Perbaikan playlist, unduhan, dan bilah progres notifikasi.
+
+**Playlist**
+- **Unduh semua** kini memasukkan lagu ke satu playlist di *Playlist saya* dengan nama yang sama. Unduh ulang memakai playlist itu dan hanya menambah lagu baru.
+- Tab **Playlist** hanya menampilkan satu kartu per playlist (tidak lagi dobel antara *Tersimpan* dan *Buatanmu*). Menghapus playlist juga melepas kartu tersimpannya.
+- Menghapus kartu playlist tidak menghentikan lagu yang sedang diputar.
+- Lagu yang sama tidak ditambahkan dua kali ke satu playlist; penambahan banyak lagu dilakukan satu kali baca-tulis.
+- Tombol **Pindahkan** di tab Unduhan memindahkan lagu ke playlist lain atau mengeluarkannya jadi *Lagu satuan*, tanpa menyentuh berkas.
+
+**Unduhan**
+- Verifikasi lebih ketat: ID Spotify, judul, artis, penanda versi (live, remix, dll.), durasi dua arah, ukuran berkas, dan laju bit. Berkas yang tidak lolos dibuang, lalu sumber lain dicoba.
+- Sinyal jelek: gagal ambil sumber, terputus, atau terpotong dicoba ulang sampai 6x (menunggu online bila offline), baru ditandai gagal.
+- Unduhan aman saat update APK: indeks dicocokkan dengan isi folder dan dipulihkan dari `meta`; berkas update APK dipindah ke folder `app-update/`.
+- Satu notifikasi progres untuk seluruh antrean ("Lagu 2 dari 12"), dengan izin notifikasi diminta otomatis di Android 13+.
+
+**Bilah progres notifikasi**
+- Bilah tidak lagi macet di 0 dan tanpa waktu: durasi/posisi dari JS dibaca dengan `readLong()` di plugin native (sebelumnya `getLong()` selalu terbaca 0).
+- Durasi tidak pernah kembali ke 0 untuk lagu yang sama, sehingga bilah tidak rata di kiri.
+- Posisi dibaca langsung dari elemen audio tiap 2 dtk; native memperbarui sesi dan notifikasi tiap detik, termasuk untuk ROM yang tidak menggerakkan bilah sendiri.
+- Saat memuat lagu atau buffering, notifikasi menampilkan bilah berjalan terus dan teks "Memuat lagu…".
+- Metadata sesi dipasang ulang hanya bila berubah, jadi kartu media tidak berkedip atau bilah kembali ke awal.
+
+> Perubahan ini menyentuh kode native, jadi butuh **APK baru** (build web saja tidak cukup).
+
+## Judul lagu apa adanya (v0.2.1)
+
+Judul dan artis disimpan serta ditampilkan **persis seperti dari server**: tidak ada nama artis yang ditambahkan atau dibuang di daftar lagu, pemutar, notifikasi, maupun penyimpanan. `stripArtistPrefix` (`utils/trackTitle.ts`) hanya dipakai di dalam untuk membandingkan/mencari (verifikasi unduhan, pencarian audio, lirik), hasilnya tidak pernah disimpan atau ditampilkan. Hanya bagian yang jelas nama artis utuh (>= 3 huruf) yang dibuang saat membandingkan, dan tidak pernah menghasilkan judul sependek "Ho" dari "Ho-Kago Tea Time".
+
 ## Preload lagu berikutnya menurut ping (v0.2.1)
 
 `utils/networkQuality.ts` mengukur ping ke server API (HEAD ke `getBaseUrl()`, sampel pertama dibuang, median sisanya) tiap 20 dtk, saat aplikasi kembali terlihat, dan saat online/offline berubah. Hasilnya menentukan kapan lagu berikutnya dimuat (`crossfadeStep` di `useAudioPlayerController.ts`):
@@ -283,15 +313,18 @@ Menu tahan-lama (menu lagu dan menu di panel antrean) bukan bagian dari state ro
 
 ## Bilah progres notifikasi (v0.2.1)
 
+- **Indikator memuat (jeda antar lagu):** saat mencari/memuat audio atau buffering, notifikasi media (APK) menampilkan bilah berjalan terus + teks "Memuat lagu… · artis", dan sesi media memakai status BUFFERING (sistem menampilkan spinner di tombol putar). Bubble mini player menampilkan busur berputar di cincin dan spinner di tengah piringan. Setelah audio mulai, kembali ke bilah/cincin posisi biasa.
+
 - Durasi yang dikirim ke notifikasi tidak pernah kembali ke 0 untuk lagu yang sama (sumber berurutan: audio asli, hasil baca sumber, teks durasi, durasi terakhir yang diketahui). Durasi 0 membuat sistem menganggap durasi tak diketahui, bilah rata di kiri.
 - Metadata sesi media dipasang ulang hanya jika berubah; perubahan keadaan dari JS dijalankan di thread utama (bukan thread plugin).
 - Posisi dari elemen audio dikirim tiap 2 dtk; native memperbarui sesi dan notifikasi tiap detik.
+- **Penyebab bilah macet di 0 dan tanpa waktu (diperbaiki):** plugin native membaca `durationMs`/`positionMs` dengan `call.getLong()`, padahal angka dari JS tiba sebagai `Integer`/`Double` sehingga selalu terbaca 0 (sistem menganggap durasi tak diketahui). Sekarang dibaca lewat `readLong()` di `MusicVerseNativePlugin.java` yang menerima angka apa pun. Perubahan ada di kode native, jadi butuh APK baru (build web saja tidak cukup).
 
 ## Verifikasi unduhan ketat (v0.2.1)
 
 Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika semua gagal, unduhan ditandai gagal dan tidak ada berkas tersimpan):
 
-- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul cocok kata per kata (>= 0,75), artis cocok (satu artis: nama harus utuh),
+- **Identitas:** ID lagu Spotify sama (bila server menyebutkannya), judul cocok kata per kata (>= 0,75), artis cocok (hanya diperiksa jika server mengirim nama artis dan ID Spotify belum sama; urutan nama boleh beda, sebagian nama cocok sudah cukup; server tanpa nama artis tidak ditolak),
   dan **penanda versi** sama: live, remix/edit, instrumental/karaoke, akustik, cover, sped up/slowed/reverb/8D, lofi, demo.
 - **Durasi (dua arah):** durasi file harus dalam +-10 dtk atau 4% dari lagu di playlist (yang lebih besar), baik terlalu pendek maupun terlalu panjang.
   Diperiksa dua kali: dari sumber sebelum diunduh, lalu dari berkas lokal sesudah diunduh (dibaca ulang sampai 3x).
@@ -311,6 +344,7 @@ Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika se
 
 - **Unduh semua** di sebuah playlist: lagunya langsung dimasukkan ke satu playlist di *Playlist saya* dengan nama yang sama
   (`sourceId` = ID playlist Spotify, jadi unduh ulang memakai playlist yang sama dan hanya menambah lagu baru).
+- Di tab **Playlist** hanya muncul satu kartu untuk playlist itu: kartu *Buatanmu* (kartu *Tersimpan*-nya disembunyikan, jadi tidak dobel). Menghapus playlist itu juga melepas kartu tersimpannya.
 - **Unduh satu lagu** (menu lagu → *Unduh untuk offline*): hanya lagu itu yang tersimpan, sebagai **Lagu satuan**, tidak masuk playlist mana pun.
 - Tab **Unduhan** dikelompokkan per playlist + *Lagu satuan*. Tombol **Pindahkan** di tiap lagu memindahkannya ke playlist
   pilihan (atau playlist baru), atau mengeluarkannya kembali jadi lagu satuan. Berkas unduhan tidak disentuh, hanya keanggotaan playlist.

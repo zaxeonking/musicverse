@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
+import { useLibrary } from '../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsContext'
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
@@ -74,6 +75,7 @@ export default function MyPlaylistPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack } = useMyPlaylists()
+  const { removePlaylist: removeSaved } = useLibrary()
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
   const playlist = getPlaylist(id)
@@ -194,6 +196,8 @@ export default function MyPlaylistPage() {
               onClick={() => {
                 const result = deletePlaylist(playlist.id)
                 if (!result.ok) return fail(result.reason)
+                // Playlist hasil "Unduh semua": kartu Spotify-nya yang tadi disembunyikan ikut dilepas, supaya tidak muncul lagi.
+                if (playlist.sourceId) removeSaved(playlist.sourceId)
                 navigate('/library', { replace: true })
               }}
               className="btn-danger px-4"

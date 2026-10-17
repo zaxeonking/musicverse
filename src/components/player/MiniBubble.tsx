@@ -1,4 +1,4 @@
-import { Play } from 'lucide-react'
+import { Loader2, Play } from 'lucide-react'
 import { useRef, useState, type PointerEvent } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { MiniSide } from '../../hooks/useMiniPlayerMode'
@@ -15,11 +15,31 @@ const HOLD_MS = 450
 const FLICK_UP_PX = 48
 
 /** Cincin progres: komponen terpisah supaya hanya ia yang render ulang tiap tick waktu. */
-function ProgressRing({ error }: { error: boolean }) {
+function ProgressRing({ error, loading }: { error: boolean; loading: boolean }) {
   const { currentTime, duration: engineDuration } = usePlaybackTime()
   const { playbackInfo, currentTrack } = useAudioPlayer()
   const duration = engineDuration ?? parseDuration(playbackInfo?.duration) ?? parseDuration(currentTrack?.duration)
   const fraction = duration && duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0
+  if (loading) {
+    // Jeda antar lagu / buffering: busur berputar (bukan cincin posisi yang diam).
+    return (
+      <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+        <circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="3" />
+        <g className="origin-center animate-spin motion-reduce:animate-pulse" style={{ transformOrigin: '28px 28px' }}>
+          <circle
+            cx="28"
+            cy="28"
+            r={RING_R}
+            fill="none"
+            stroke="#1DB954"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={`${CIRC * 0.28} ${CIRC}`}
+          />
+        </g>
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
       <circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="3" />
@@ -61,6 +81,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange }:
   const maxX = Math.max(0, width - SIZE)
   const baseX = side === 'right' ? maxX : 0
   const playing = status === 'playing'
+  const loading = status === 'resolving' || status === 'loading' || status === 'buffering'
   const paused = status === 'paused' || status === 'ended'
   const error = status === 'error'
 
@@ -160,20 +181,21 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange }:
         <span
           aria-hidden="true"
           className="absolute inset-[5px] animate-disc overflow-hidden rounded-full motion-reduce:animate-none"
-          style={{ animationPlayState: playing ? 'running' : 'paused' }}
+          style={{ animationPlayState: playing && !loading ? 'running' : 'paused', opacity: loading ? 0.55 : 1 }}
         >
           <CoverArt cover={now.cover} src={now.coverSrc} round />
           <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgba(255,255,255,0.14),transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%,rgba(255,255,255,0.14))]" />
         </span>
-        <ProgressRing error={error} />
+        <ProgressRing error={error} loading={loading} />
         {/* Lubang tengah piringan; berubah jadi ikon play saat jeda. */}
         <span
           aria-hidden="true"
           className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-[#121212] transition-all ${
-            paused ? 'h-6 w-6 bg-black/70' : 'h-3 w-3'
+            paused || loading ? 'h-6 w-6 bg-black/70' : 'h-3 w-3'
           }`}
         >
           {paused && <Play className="h-3 w-3 text-white" fill="currentColor" />}
+          {loading && <Loader2 className="h-3 w-3 animate-spin text-white motion-reduce:animate-pulse" />}
         </span>
       </button>
     </div>
