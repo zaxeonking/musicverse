@@ -10,8 +10,9 @@ export const SHORT_TOLERANCE_S = 25
 export const SHORT_TOLERANCE_RATIO = 0.12
 
 /**
- * Apakah audio yang benar-benar termuat (`actual`, detik) hanyalah klip/cuplikan atau lagu lain yang
- * jelas lebih pendek dari lagu yang seharusnya (`expected`, detik dari data playlist)?
+ * Apakah audio yang benar-benar termuat (`actual`, detik) BUKAN lagu yang ada di playlist: klip/cuplikan, lagu lain, atau
+ * versi lain (radio edit, live, extended) yang durasinya beda dari lagu di playlist (`expected`, detik dari data playlist)?
+ * Pemutaran harus mengikuti playlist, jadi selisih dihitung dua arah dan toleransinya ketat (sama dengan unduhan).
  * Durasi di metadata API tidak bisa dipercaya untuk ini (sering durasi lagu asli), jadi yang
  * dibandingkan adalah durasi file audio sebenarnya.
  */
@@ -21,27 +22,27 @@ export function isLikelyClip(actual: number | null, expected: number | null): bo
   const gap = expected - actual
   if (actual <= CLIP_MAX_S && gap >= CLIP_MIN_GAP_S) return true
   if (actual < expected * CLIP_MAX_RATIO && gap >= CLIP_FAR_GAP_S) return true
-  return gap > Math.max(SHORT_TOLERANCE_S, expected * SHORT_TOLERANCE_RATIO)
+  return strictDurationProblem(actual, expected) !== null
 }
 
 /**
  * Kecocokan durasi audio sebenarnya dengan durasi lagu di playlist, 0..1 (null jika salah satu tidak diketahui).
- * 1 = selisih <= 5 dtk; 0.7 = <= 12 dtk atau 5%; 0.3 = <= 25 dtk atau 10%; selebihnya 0.
+ * 1 = selisih <= 1,5 dtk (sama); 0.5 = <= 5 dtk; selebihnya 0 (versi lain).
  */
 export function durationFit(actual: number | null, expected: number | null): number | null {
   if (actual === null || expected === null) return null
   if (!Number.isFinite(actual) || !Number.isFinite(expected) || actual <= 0 || expected <= 0) return null
   const diff = Math.abs(actual - expected)
-  const rel = diff / expected
-  if (diff <= 5) return 1
-  if (diff <= 12 || rel <= 0.05) return 0.7
-  if (diff <= 25 || rel <= 0.1) return 0.3
+  if (diff <= STRICT_DIFF_S) return 1
+  if (diff <= 5) return 0.5
   return 0
 }
 
 /** Mode unduhan: selisih durasi maksimum antara berkas dan lagu di playlist (detik, atau persen; mana yang lebih besar). */
-export const STRICT_DIFF_S = 10
-export const STRICT_DIFF_RATIO = 0.04
+/** Tanpa toleransi persentase: durasi audio harus sama dengan playlist. Hanya 1,5 dtk yang diberikan untuk pembulatan
+ * (playlist dalam detik utuh, durasi file berupa desimal) dan padding encoder MP3; selisih lebih dari itu = versi lain. */
+export const STRICT_DIFF_S = 1.5
+export const STRICT_DIFF_RATIO = 0
 /** Tanpa durasi acuan dari playlist, berkas sependek ini atau kurang ditolak. */
 export const STRICT_MIN_UNKNOWN_S = 60
 

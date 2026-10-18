@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchLyrics, LyricsError, type LyricsResult } from '../services/lyricsApi'
 import { readOfflineLyrics, saveOfflineLyrics } from '../native/offlineLyrics'
 import type { PlaylistTrack } from '../types/spotify'
+import { parseDuration } from '../utils/formatTime'
 
 export type LyricsState =
   | { status: 'idle' }
@@ -13,8 +14,33 @@ const CACHE_LIMIT = 40
 /** Lirik yang sudah dicari (termasuk "tidak ditemukan") dipakai ulang selama sesi, tanpa memanggil server lagi. */
 const cache = new Map<string, LyricsResult>()
 
+const prefetching = new Set<string>()
+
+/**
+ * Cari lirik lebih awal (lagu yang baru mulai diputar dan lagu berikutnya) tanpa menunggu panel lirik dibuka,
+ * supaya lirik sudah siap begitu lagu mulai. Hasil masuk ke cache yang sama dengan useLyrics.
+ */
+export function prefetchLyrics(track: PlaylistTrack): void {
+  const key = cacheKey(track)
+  if (cache.has(key) || prefetching.has(key)) return
+  prefetching.add(key)
+  void (async () => {
+    try {
+      const stored = await readOfflineLyrics(track)
+      const result = stored ?? (await fetchLyrics(track, { signal: new AbortController().signal }))
+      if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value as string)
+      cache.set(key, result)
+      if (!stored) void saveOfflineLyrics(track, result)
+    } catch {
+      // Gagal diam-diam: useLyrics akan mencoba lagi dan menampilkan pesan bila perlu.
+    } finally {
+      prefetching.delete(key)
+    }
+  })()
+}
+
 function cacheKey(track: PlaylistTrack): string {
-  return `${track.title}|${track.artists}|${track.album}`.toLowerCase()
+  return `${track.title}|${track.artists}|${track.album}|${Math.round(parseDuration(track.duration) ?? 0)}`.toLowerCase()
 }
 
 /** Mengambil lirik untuk `track` selama `enabled`. Mengganti lagu membatalkan permintaan lama. */

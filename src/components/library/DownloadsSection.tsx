@@ -1,12 +1,13 @@
-import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Pause, Play, RotateCw, Settings, Trash2, WifiOff, X } from 'lucide-react'
+import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Play, RotateCw, Settings, Trash2, WifiOff, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import PauseLines from '../ui/PauseLines'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useLongPress } from '../../hooks/useLongPress'
-import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, downloadNow, holdDownload, resumeHeld } from '../../native/downloads'
+import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, holdDownload, resumeHeld } from '../../native/downloads'
 import {
   coverSrcFor,
   removeDownload,
@@ -83,7 +84,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
   const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true }))
   const isCurrent = activity !== 'none'
   const highlighted = selected || isCurrent
-  const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
+  const Icon = activity === 'playing' ? PauseLines : activity === 'loading' ? Loader2 : Play
   const playLabel =
     activity === 'playing'
       ? `Jeda ${item.title}`
@@ -298,7 +299,7 @@ export default function DownloadsSection() {
               onClick={paused ? resumeDownloads : pauseDownloads}
               className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-ink focus-ring"
             >
-              {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
+              {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <PauseLines className="h-3.5 w-3.5" aria-hidden="true" />}
               {paused ? 'Lanjutkan unduhan' : 'Jeda unduhan'}
             </button>
           )}
@@ -338,16 +339,32 @@ export default function DownloadsSection() {
               <li key={transfer.key} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
                 {transfer.status === 'error' ? (
                   <AlertCircle className="h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
-                ) : transfer.status === 'queued' && transfer.held ? (
-                  <Pause className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-                ) : transfer.status === 'queued' && paused ? (
-                  <Pause className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-                ) : transfer.status === 'queued' && blocked ? (
-                  heldWifi ? (
-                    <WifiOff className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-                  ) : (
-                    <Battery className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-                  )
+                ) : transfer.status === 'queued' || transfer.status === 'resolving' ? (
+                  // Ikon status di kiri sekaligus tombol jeda/lanjut untuk lagu ini.
+                  <button
+                    type="button"
+                    aria-label={transfer.held ? 'Lanjutkan lagu ini' : 'Jeda lagu ini'}
+                    title={transfer.held ? 'Lanjutkan lagu ini' : 'Jeda lagu ini (yang lain jalan terus)'}
+                    onClick={() => (transfer.held ? resumeHeld(transfer.key) : holdDownload(transfer.key))}
+                    className="icon-btn -my-2 -ml-2 shrink-0"
+                  >
+                    {transfer.held ? (
+                      <Play className="h-5 w-5 text-ink" aria-hidden="true" />
+                    ) : transfer.status === 'queued' && paused ? (
+                      <PauseLines className="h-5 w-5 text-ink-muted" aria-hidden="true" />
+                    ) : transfer.status === 'queued' && blocked ? (
+                      heldWifi ? (
+                        <WifiOff className="h-5 w-5 text-ink-muted" aria-hidden="true" />
+                      ) : (
+                        <Battery className="h-5 w-5 text-ink-muted" aria-hidden="true" />
+                      )
+                    ) : (
+                      <span className="relative flex h-6 w-6 items-center justify-center">
+                        <Loader2 className="absolute h-6 w-6 animate-spin text-accent" aria-hidden="true" />
+                        <PauseLines className="h-3 w-3 text-ink" aria-hidden="true" />
+                      </span>
+                    )}
+                  </button>
                 ) : (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
                 )}
@@ -381,28 +398,6 @@ export default function DownloadsSection() {
                     className="icon-btn -my-2"
                   >
                     <RotateCw className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
-                {(transfer.status === 'queued' || transfer.status === 'resolving') && !transfer.held && (
-                  <button
-                    type="button"
-                    aria-label="Tahan lagu ini"
-                    title="Tahan lagu ini (yang lain jalan terus)"
-                    onClick={() => holdDownload(transfer.key)}
-                    className="icon-btn -my-2"
-                  >
-                    <Pause className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
-                {transfer.status === 'queued' && (
-                  <button
-                    type="button"
-                    aria-label={transfer.held ? 'Lanjutkan lagu ini' : 'Unduh lagu ini sekarang'}
-                    title={transfer.held ? 'Lanjutkan lagu ini' : 'Unduh lagu ini sekarang'}
-                    onClick={() => (transfer.held ? resumeHeld(transfer.key) : downloadNow(transfer.key))}
-                    className="icon-btn -my-2"
-                  >
-                    <Play className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
                 {(transfer.status === 'queued' || transfer.status === 'error') && (

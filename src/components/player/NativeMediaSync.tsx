@@ -162,7 +162,8 @@ export default function NativeMediaSync() {
     const now = performance.now()
     const last = reported.current
     const expected = last ? last.position + (last.playing ? (now - last.at) / 1000 : 0) : null
-    const meta = `${trackId}|${title}|${artists}|${album}|${hasNext}|${hasPrevious}`
+    const interrupted = !playing && audioEngine.isInterrupted()
+    const meta = `${trackId}|${title}|${artists}|${album}|${hasNext}|${hasPrevious}|${interrupted}`
     const stale =
       newTrack ||
       coverToSend !== null ||
@@ -190,6 +191,7 @@ export default function NativeMediaSync() {
       loading,
       hasNext,
       hasPrevious,
+      interrupted,
       resetCover: newTrack,
       coverBase64: coverToSend ?? undefined,
     }

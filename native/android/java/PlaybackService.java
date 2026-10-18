@@ -56,6 +56,8 @@ public class PlaybackService extends Service {
     boolean loading = false;
     boolean hasNext = false;
     boolean hasPrevious = false;
+    /** Terhenti karena app lain mengambil audio (bukan jeda pengguna) dan JS sedang menunggu giliran memutar lagi. */
+    boolean interrupted = false;
     boolean resetCover = false;
     Bitmap cover = null;
   }
@@ -106,11 +108,15 @@ public class PlaybackService extends Service {
   private boolean foreground = false;
   /** True setelah shutdown(): semua pembaruan yang masih antre (dari JS / ticker) diabaikan supaya notifikasi tidak muncul lagi. */
   private boolean stopped = false;
+  /** True saat wake lock yang dipegang adalah yang berbatas waktu (menunggu putar-ulang setelah gangguan). */
+  private boolean timedLock = false;
   /** Waktu (elapsedRealtime) pembaruan terakhir dari JS. Dasar watchdog: JS mati = tidak ada kabar lagi. */
   private long lastJsUpdateAt = 0;
   /** Saat memutar, JS mengirim detak tiap ~2 dtk. Tanpa kabar selama ini berarti WebView/app sudah mati. */
   private static final long JS_SILENCE_LIMIT_MS = 90L * 1000L;
   private static final long WATCHDOG_INTERVAL_MS = 15L * 1000L;
+  /** Lama maksimum wake lock saat menunggu putar-ulang otomatis setelah gangguan. */
+  private static final long INTERRUPT_WAKE_MS = 20L * 60L * 1000L;
   private final Runnable watchdog = new Runnable() {
     @Override public void run() {
       if (stopped) return;
@@ -238,6 +244,7 @@ public class PlaybackService extends Service {
     current.loading = next.loading;
     current.hasNext = next.hasNext;
     current.hasPrevious = next.hasPrevious;
+    current.interrupted = next.interrupted;
     if (next.resetCover) current.cover = null;
     if (next.cover != null) current.cover = next.cover;
 
@@ -248,13 +255,31 @@ public class PlaybackService extends Service {
     if (current.playing) {
       handler.removeCallbacks(idleStop);
       idleScheduled = false;
+      if (wakeLock != null && timedLock) {
+        // Lanjut memutar: ganti kunci berbatas waktu (menunggu putar-ulang) dengan kunci biasa.
+        if (wakeLock.isHeld()) wakeLock.release();
+        timedLock = false;
+      }
       if (wakeLock != null && !wakeLock.isHeld()) wakeLock.acquire();
       startInForeground(notification);
     } else {
       // Jeda: wake lock dilepas (hemat baterai), tetapi service tetap foreground dan notifikasi tetap ada sampai
       // IDLE_LIMIT_MS tanpa dipakai. Itu menjaga proses (dan WebView) tetap hidup agar bisa lanjut sendiri setelah
       // diinterupsi app lain. Batas waktu dihitung dari saat mulai dijeda, bukan diperpanjang tiap pembaruan.
-      if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+      // Pengecualian: terhenti karena gangguan (app lain / panggilan) dan JS menunggu untuk memutar lagi. Tanpa wake lock,
+      // CPU tidur saat layar mati dan pengecekan putar-ulang otomatis di JS tidak pernah jalan. Dipegang paling lama
+      // INTERRUPT_WAKE_MS (otomatis lepas sendiri), lalu kembali hemat baterai.
+      if (current.interrupted) {
+        if (wakeLock != null && !timedLock) {
+          // Ganti kunci tanpa batas waktu (dari saat memutar) dengan yang berbatas waktu.
+          if (wakeLock.isHeld()) wakeLock.release();
+          wakeLock.acquire(INTERRUPT_WAKE_MS);
+          timedLock = true;
+        }
+      } else {
+        timedLock = false;
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+      }
       startInForeground(notification);
       if (!idleScheduled) {
         handler.postDelayed(idleStop, IDLE_LIMIT_MS);

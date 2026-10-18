@@ -581,7 +581,25 @@ function askNotificationPermissionOnce(): void {
   if (notifyPermissionAsked) return
   notifyPermissionAsked = true
   // Android 13+: tanpa izin notifikasi, progres hanya tampil di dalam aplikasi.
-  MusicVerseNative.requestNotificationPermission().catch(() => undefined)
+  MusicVerseNative.requestNotificationPermission()
+    .catch(() => undefined)
+    .then(askBatteryExemptionOnce)
+    .catch(() => undefined)
+}
+
+const BATTERY_ASKED_KEY = 'musicverse:batteryExemptionAsked'
+
+/**
+ * Tanpa pengecualian penghemat baterai, Android (terutama ColorOS/Realme, MIUI) membekukan app yang di latar belakang
+ * walau foreground service jalan, sehingga unduhan berhenti sendiri saat layar mati. Minta SEKALI lewat dialog sistem
+ * (satu ketukan "Izinkan"); jika ditolak tidak ditanya lagi.
+ */
+async function askBatteryExemptionOnce(): Promise<void> {
+  if (readJson(BATTERY_ASKED_KEY).status === 'ok') return
+  const { ignoring } = await MusicVerseNative.isIgnoringBatteryOptimizations()
+  if (ignoring) return
+  writeJson(BATTERY_ASKED_KEY, true)
+  await MusicVerseNative.openBatterySettings()
 }
 
 /** Menambahkan lagu ke antrean unduhan. */

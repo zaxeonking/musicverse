@@ -1,3 +1,4 @@
+import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { Music2 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePlaybackTime } from '../../hooks/useAudioPlayer'
@@ -169,13 +170,7 @@ function PlainLine({ lines }: { lines: string[] }) {
 export default function LyricLine() {
   const { currentTrack, playbackInfo } = useAudioPlayer()
   // Lirik dicari untuk lagu yang BENAR-BENAR terdengar (sama seperti pemutar penuh).
-  const track = useMemo(() => {
-    if (!currentTrack) return null
-    if (playbackInfo && !looksLikeSameTrack(currentTrack, playbackInfo)) {
-      return { ...currentTrack, title: playbackInfo.title, artists: playbackInfo.artist, album: playbackInfo.album, duration: playbackInfo.duration }
-    }
-    return currentTrack
-  }, [currentTrack, playbackInfo])
+  const track = useMemo(() => lyricsTrackFor(currentTrack, playbackInfo, looksLikeSameTrack), [currentTrack, playbackInfo])
   const { state } = useLyrics(track, track !== null)
 
   if (!currentTrack) return null

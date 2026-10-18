@@ -12,7 +12,9 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.net.wifi.WifiManager;
 import android.os.PowerManager;
+import android.os.SystemClock;
 
 /**
  * Foreground service (tipe dataSync) yang menjaga unduhan lagu tetap berjalan saat app di latar belakang
@@ -31,6 +33,9 @@ public class DownloadService extends Service {
   static final int NOTIFICATION_ID = 4242;
   /** Wake lock otomatis lepas bila JS berhenti memperbarui (proses mati / macet), supaya tidak bocor. */
   private static final long WAKE_LOCK_MS = 10 * 60 * 1000L;
+  /** Tanpa kabar dari JS selama ini = proses unduhan sudah mati; service ikut berhenti supaya notifikasi tidak menggantung. */
+  private static final long JS_SILENCE_LIMIT_MS = 15 * 60 * 1000L;
+  private static final long WATCHDOG_INTERVAL_MS = 30 * 1000L;
 
   static final String ACTION_PAUSE = "__APP_ID__.download.PAUSE";
   static final String ACTION_RESUME = "__APP_ID__.download.RESUME";
@@ -103,7 +108,21 @@ public class DownloadService extends Service {
 
   private final Handler handler = new Handler(Looper.getMainLooper());
   private PowerManager.WakeLock wakeLock;
+  /** Wi-Fi sering masuk mode hemat daya saat layar mati dan unduhan jadi macet; kunci ini menahannya tetap aktif. */
+  private WifiManager.WifiLock wifiLock;
   private boolean foreground = false;
+  private boolean stopped = false;
+  private long lastJsUpdateAt = 0;
+  private final Runnable watchdog = new Runnable() {
+    @Override public void run() {
+      if (stopped) return;
+      if (SystemClock.elapsedRealtime() - lastJsUpdateAt > JS_SILENCE_LIMIT_MS) {
+        shutdown();
+        return;
+      }
+      handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
+    }
+  };
 
   @Override
   public void onCreate() {
@@ -114,6 +133,17 @@ public class DownloadService extends Service {
       wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MusicVerse:download");
       wakeLock.setReferenceCounted(false);
     }
+    try {
+      WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+      if (wm != null) {
+        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "MusicVerse:download");
+        wifiLock.setReferenceCounted(false);
+      }
+    } catch (RuntimeException ignored) {
+      wifiLock = null;
+    }
+    lastJsUpdateAt = SystemClock.elapsedRealtime();
+    handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
     // Wajib: begitu startForegroundService() dipanggil, startForeground() harus menyusul segera.
     // Tanpa payload = service dimulai oleh tombol notifikasi (bukan foreground): tidak perlu startForeground.
     if (pending != null) {
@@ -150,14 +180,24 @@ public class DownloadService extends Service {
   }
 
   @Override
+  public void onTaskRemoved(Intent rootIntent) {
+    // Aplikasi digeser dari recent apps: WebView (tempat antrean unduhan berjalan) ikut mati, jadi jangan tinggalkan notifikasi yatim.
+    shutdown();
+    super.onTaskRemoved(rootIntent);
+  }
+
+  @Override
   public void onDestroy() {
+    stopped = true;
     releaseWakeLock();
-    instance = null;
+    if (instance == this) instance = null;
     handler.removeCallbacksAndMessages(null);
     super.onDestroy();
   }
 
   private void apply(Payload payload) {
+    if (stopped) return;
+    lastJsUpdateAt = SystemClock.elapsedRealtime();
     Notification notification = buildNotification(this, payload);
     NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     if (payload.done) {
@@ -169,6 +209,9 @@ public class DownloadService extends Service {
         foreground = false;
       }
       if (nm != null) nm.notify(NOTIFICATION_ID, notification);
+      stopped = true;
+      handler.removeCallbacks(watchdog);
+      if (instance == this) instance = null;
       stopSelf();
       return;
     }
@@ -194,18 +237,36 @@ public class DownloadService extends Service {
 
   private void acquireWakeLock() {
     if (wakeLock != null) wakeLock.acquire(WAKE_LOCK_MS);
+    try {
+      if (wifiLock != null && !wifiLock.isHeld()) wifiLock.acquire();
+    } catch (RuntimeException ignored) {
+      // Izin / perangkat tidak mendukung: unduhan tetap jalan tanpa kunci Wi-Fi.
+    }
   }
 
   private void releaseWakeLock() {
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+    try {
+      if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+    } catch (RuntimeException ignored) {
+      // sudah lepas
+    }
   }
 
   void shutdown() {
+    if (stopped) return;
+    stopped = true;
+    // Lepas referensi SEKARANG supaya pembaruan JS yang masih antre tidak menghidupkan lagi notifikasi yang baru dihapus.
+    if (instance == this) instance = null;
+    pending = null;
+    handler.removeCallbacksAndMessages(null);
     releaseWakeLock();
     if (foreground) {
       stopForeground(true);
       foreground = false;
     }
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm != null) nm.cancel(NOTIFICATION_ID);
     stopSelf();
   }
 

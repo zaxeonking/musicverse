@@ -1,3 +1,4 @@
+import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, FolderPlus, Mic2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
@@ -51,13 +52,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
     else if (up && !showLyrics) setShowLyrics(true)
   }
   // Lirik dicari untuk lagu yang BENAR-BENAR terdengar: jika server memberi audio lagu lain, pakai datanya.
-  const lyricsTrack = useMemo(() => {
-    if (!currentTrack) return null
-    if (playbackInfo && !looksLikeSameTrack(currentTrack, playbackInfo)) {
-      return { ...currentTrack, title: playbackInfo.title, artists: playbackInfo.artist, album: playbackInfo.album, duration: playbackInfo.duration }
-    }
-    return currentTrack
-  }, [currentTrack, playbackInfo])
+  const lyricsTrack = useMemo(() => lyricsTrackFor(currentTrack, playbackInfo, looksLikeSameTrack), [currentTrack, playbackInfo])
   const { state: lyrics, retry: retryLyrics } = useLyrics(lyricsTrack, showLyrics)
 
   // Tutup dengan animasi: pemutar meluncur turun ke mini player, baru riwayat dimundurkan.

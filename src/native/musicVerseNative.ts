@@ -21,6 +21,8 @@ export interface NowPlayingUpdate {
   loading?: boolean
   hasNext: boolean
   hasPrevious: boolean
+  /** Terhenti karena app lain mengambil audio dan menunggu diputar ulang otomatis: native menjaga CPU tetap hidup (terbatas waktu). */
+  interrupted?: boolean
   /** Lagu berganti: buang sampul lama (kembali ke sampul bawaan APK sampai `coverBase64` tiba). */
   resetCover?: boolean
   /** PNG/JPEG base64 (tanpa awalan data:). Dikirim sekali per lagu. */

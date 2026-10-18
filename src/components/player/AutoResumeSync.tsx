@@ -4,7 +4,9 @@ import { isNativeApp } from '../../native/platform'
 import { audioEngine } from '../../services/audioEngine'
 
 /** Cek tiap berapa ms apakah gangguan sudah selesai. */
-const POLL_MS = 2_000
+const POLL_MS = 1_500
+/** Jarak minimal antar percobaan memutar ulang (play() yang diterima belum tentu benar-benar berbunyi). */
+const RETRY_GAP_MS = 3_000
 /** Tunggu minimal ini sebelum boleh memutar lagi, supaya tidak berebut dengan app yang baru mengambil audio. */
 const GRACE_MS = 3_000
 /** Bila app lain tidak pernah terdeteksi memutar audio, putar lagi setelah ini (gangguan singkat, mis. suara navigasi). */
@@ -32,6 +34,7 @@ export default function AutoResumeSync() {
     let since = 0
     let sawBusy = false
     let checking = false
+    let lastTry = 0
 
     const stop = () => {
       window.clearInterval(timer)
@@ -55,9 +58,13 @@ export default function AutoResumeSync() {
         // Belum pernah terlihat sibuk dan belum cukup lama: mungkin app lain belum mulai.
         if (!sawBusy && elapsed < NO_SIGNAL_RESUME_MS) return
         if (!audioEngine.isInterrupted()) return
+        if (Date.now() - lastTry < RETRY_GAP_MS) return
+        lastTry = Date.now()
         try {
+          // JANGAN berhenti memantau di sini: play() yang diterima belum berarti audio benar-benar jalan (fokus audio bisa
+          // masih dipegang app lain dan mesin langsung dijeda lagi). Pemantauan baru berhenti di atas, saat
+          // audioEngine melaporkan tidak lagi terinterupsi (event 'playing' tiba) atau waktu tunggu habis.
           await audioEngine.resume()
-          stop()
         } catch {
           // Belum diizinkan / audio masih dipegang app lain: coba lagi di putaran berikutnya.
         }
@@ -68,6 +75,7 @@ export default function AutoResumeSync() {
 
     const begin = () => {
       since = Date.now()
+      lastTry = 0
       sawBusy = false
       if (!timer) timer = window.setInterval(() => void check(), POLL_MS)
     }

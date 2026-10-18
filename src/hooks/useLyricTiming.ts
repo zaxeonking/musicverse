@@ -5,10 +5,10 @@ import type { LyricsResult, SyncedVersion } from '../services/lyricsApi'
 import { findActiveLine } from '../utils/lrc'
 import { readJson } from '../utils/safeStorage'
 
-/** Layar memutakhirkan waktu ±4x/detik; baris disorot sedikit lebih awal agar terasa pas dengan suara. */
-export const LEAD_S = 0.3
+/** Baris disorot sedikit lebih awal: posisi audio selalu mendahului suara yang terdengar (latensi keluaran, apalagi Bluetooth). */
+export const LEAD_S = 0.45
 /** Selisih durasi (detik) lirik vs audio: sampai batas ini waktu lirik dipakai apa adanya. */
-export const TIMING_EXACT_S = 15
+export const TIMING_EXACT_S = 2
 export const SCALE_MIN = 0.8
 export const SCALE_MAX = 1.25
 

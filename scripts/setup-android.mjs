@@ -64,6 +64,8 @@ const permissions = [
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.WAKE_LOCK',
   'android.permission.REQUEST_INSTALL_PACKAGES',
+  // Dialog sistem "izinkan selalu berjalan di latar belakang" untuk unduhan / pemutaran saat layar mati.
+  'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
 ]
 const missing = permissions.filter((name) => !manifest.includes(`android:name="${name}"`))
 if (missing.length > 0) {

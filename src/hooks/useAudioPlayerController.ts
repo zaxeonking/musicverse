@@ -14,6 +14,7 @@ import type {
 } from '../types/player'
 import type { PlayAllHandler, PlaybackInfo, PlaylistTrack, PlayTrackHandler } from '../types/spotify'
 import { clearPlayerSession, loadPlayerSession, savePlayerPosition, savePlayerQueue } from '../utils/playerSession'
+import { prefetchLyrics } from './useLyrics'
 import { isLikelyClip } from '../utils/clipDetect'
 import { getNetworkTier, PRELOAD_LEAD_BY_TIER_S, startNetworkMonitor } from '../utils/networkQuality'
 import { readJson, writeJson } from '../utils/safeStorage'
@@ -90,6 +91,9 @@ const STREAM_RETRY_MAX = 3
 const SEEKABLE_STATUSES: PlaybackStatus[] = ['playing', 'buffering', 'paused']
 /** Di atas ini, tombol Previous mengulang lagu dari awal (jika bisa di-seek). */
 const RESTART_THRESHOLD_S = 3
+/** Berapa kali meminta ulang audio bila semua sumber memberi versi yang durasinya tidak sama dengan playlist. */
+const MISMATCH_RETRY_MAX = 3
+const MISMATCH_RETRY_DELAY_MS = 1500
 
 function errorMessage(code: PlayerErrorCode): string {
   switch (code) {
@@ -98,7 +102,7 @@ function errorMessage(code: PlayerErrorCode): string {
     case 'no_audio':
       return 'Server tidak menyediakan audio untuk lagu ini.'
     case 'clip_only':
-      return 'Audio yang didapat dari server tidak sesuai dengan lagunya (cuplikan atau durasi berbeda jauh), jadi tidak diputar. Coba lagi nanti.'
+      return 'Audio dari server tidak sama dengan lagu di playlist (cuplikan atau versi lain dengan durasi berbeda), jadi tidak diputar. Coba lagi nanti.'
     case 'blocked':
       return 'Browser memblokir pemutaran. Tekan tombol Play sekali lagi.'
     case 'network':
@@ -515,6 +519,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       updateTime(() => (resumeAtRef.current === null ? initialTime : { ...initialTime, currentTime: resumeAtRef.current }))
 
       clipGuardRef.current = null
+      prefetchLyrics(track)
       crossfadeGaveUpRef.current = null
       crossfadeRetryAtRef.current = 0
       const expectedDuration = parseDurationText(track.duration)
@@ -522,6 +527,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const avoid: Array<'kyzz' | 'cadangan'> = []
 
       let resolveFailures = 0
+      // Audio dari semua sumber tidak cocok dengan playlist: minta ulang (server kadang memberi versi lain di permintaan berikutnya).
+      let mismatchRetries = 0
       const attempt = async (): Promise<void> => {
         // Setiap permintaan play selalu mengambil URL audio terbaru (tanpa cache).
         let info: PlaybackInfo
@@ -531,6 +538,14 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           if (isStale()) return
           if (error instanceof SpotifyApiError) {
             if (error.code === 'aborted') return
+            if (error.code === 'clip_only' && avoid.length === 0 && mismatchRetries < MISMATCH_RETRY_MAX) {
+              mismatchRetries += 1
+              console.warn(`[MusicVerse] Audio tidak sama dengan lagu di playlist (percobaan ${mismatchRetries}/${MISMATCH_RETRY_MAX}), meminta ulang.`)
+              window.setTimeout(() => {
+                if (!isStale()) void attempt()
+              }, MISMATCH_RETRY_DELAY_MS)
+              return
+            }
             // Gagal sesaat (jaringan/server/timeout): coba lagi terus sampai berhasil, kecuali pengguna memilih lagu lain.
             // Lagu tanpa audio / hanya klip bukan gangguan sesaat, jadi tetap dilaporkan sebagai error.
             if (error.code !== 'no_audio' && error.code !== 'clip_only' && avoid.length === 0) {
@@ -882,6 +897,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const nextIndex = getNextIndex(queue, currentIndex, shuffleOrder)
       const nextTrack = nextIndex === null ? null : queue[nextIndex]
       if (nextIndex === null || !nextTrack) return // antrean habis: alur normal (berhenti / putar ulang)
+      prefetchLyrics(nextTrack)
       if (Date.now() < crossfadeRetryAtRef.current) return
 
       let preload = preloadRef.current

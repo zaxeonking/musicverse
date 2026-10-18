@@ -387,6 +387,7 @@ public class MusicVerseNativePlugin extends Plugin {
     state.loading = Boolean.TRUE.equals(call.getBoolean("loading", false));
     state.hasNext = Boolean.TRUE.equals(call.getBoolean("hasNext", false));
     state.hasPrevious = Boolean.TRUE.equals(call.getBoolean("hasPrevious", false));
+    state.interrupted = Boolean.TRUE.equals(call.getBoolean("interrupted", false));
     state.resetCover = Boolean.TRUE.equals(call.getBoolean("resetCover", false));
     String cover = call.getString("coverBase64");
     if (cover != null && !cover.isEmpty()) {
@@ -442,6 +443,20 @@ public class MusicVerseNativePlugin extends Plugin {
 
   @PluginMethod
   public void openBatterySettings(PluginCall call) {
+    // Dialog sistem langsung ("Izinkan selalu berjalan di latar belakang?"): satu ketukan, tanpa mencari app di daftar.
+    // Butuh izin REQUEST_IGNORE_BATTERY_OPTIMIZATIONS di manifest; jika ditolak sistem, jatuh ke daftar pengaturan.
+    PowerManager pm = (PowerManager) getContext().getSystemService(android.content.Context.POWER_SERVICE);
+    if (Build.VERSION.SDK_INT >= 23 && pm != null && !pm.isIgnoringBatteryOptimizations(getContext().getPackageName())) {
+      try {
+        Intent direct = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getContext().getPackageName()));
+        direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(direct);
+        call.resolve();
+        return;
+      } catch (RuntimeException ignored) {
+        // lanjut ke daftar pengaturan
+      }
+    }
     Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     try {
