@@ -87,6 +87,13 @@ const RESOLVE_RETRY_MAX_DELAY_MS = 8_000
 const RESOLVE_RETRY_MAX = 6
 /** Audio putus di tengah jalan (error jaringan) / tidak mulai: dimuat ulang dari posisi terakhir sekian kali sebelum menyerah. */
 const STREAM_RETRY_MAX = 3
+/** Jeda sebelum muat-ulang karena error jaringan (dikali nomor percobaan), supaya tidak jadi retry beruntun. */
+const STREAM_RETRY_DELAY_MS = 1_500
+/** `waiting` yang lebih singkat dari ini tidak ditampilkan sebagai "buffering" (hindari tombol kedip-kedip). */
+const BUFFERING_DEBOUNCE_MS = 900
+/** Preload lagu berikutnya ditahan selama buffer lagu aktif di bawah ini (kecuali sisa lagu <= PRELOAD_FORCE_REMAINING_S). */
+const PRELOAD_MIN_AHEAD_S = 3
+const PRELOAD_FORCE_REMAINING_S = 10
 /** Perangkat offline: lagu menunggu internet kembali (tanpa menghabiskan jatah percobaan) selama ini, baru menyerah. */
 const OFFLINE_WAIT_MAX_MS = 10 * 60_000
 
@@ -300,6 +307,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const crossfadingRef = useRef(false)
   const controllerRef = useRef<AbortController | null>(null)
   const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bufferingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const commit = useCallback((patch: Partial<AudioPlayerState>) => {
     stateRef.current = { ...stateRef.current, ...patch }
@@ -317,6 +326,13 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
     if (startTimerRef.current !== null) {
       clearTimeout(startTimerRef.current)
       startTimerRef.current = null
+    }
+  }, [])
+
+  const clearBufferingTimer = useCallback(() => {
+    if (bufferingTimerRef.current !== null) {
+      clearTimeout(bufferingTimerRef.current)
+      bufferingTimerRef.current = null
     }
   }, [])
 
@@ -357,14 +373,27 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         return
       }
       if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX) {
+        // Muat-ulang sudah dijadwalkan: error susulan dari elemen yang sama tidak boleh menghabiskan percobaan.
+        if (retryTimerRef.current !== null) return
         streamRetryRef.current += 1
         console.warn(`[MusicVerse] Audio putus (${code}), memuat ulang (${streamRetryRef.current}/${STREAM_RETRY_MAX}).`)
-        startPlaybackRef.current(current.queue, current.currentIndex, {
-          keepOrder: true,
-          keepReplay: true,
-          isRetry: true,
-          resumeAt: timeRef.current.currentTime,
-        })
+        const retryIndex = current.currentIndex
+        const retryRequestId = requestIdRef.current
+        const resumeAt = timeRef.current.currentTime
+        setStatus('buffering')
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null
+          const now = stateRef.current
+          // Pengguna pindah lagu / jeda / lagu sudah jalan lagi selama menunggu: jangan ganggu.
+          if (requestIdRef.current !== retryRequestId || now.currentIndex !== retryIndex) return
+          if (now.status === 'playing' || now.status === 'paused' || now.status === 'idle') return
+          startPlaybackRef.current(now.queue, retryIndex, {
+            keepOrder: true,
+            keepReplay: true,
+            isRetry: true,
+            resumeAt,
+          })
+        }, STREAM_RETRY_DELAY_MS * streamRetryRef.current)
         return
       }
       audioEngine.stop()
@@ -410,15 +439,23 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           break
         case 'playing':
           clearStartTimer()
+          clearBufferingTimer()
           streamRetryRef.current = 0
           if (status !== 'playing') commit({ status: 'playing', error: null })
           break
         case 'waiting':
-          if (status === 'playing') setStatus('buffering')
+          // Tahan sebentar: stall singkat (proxy sedang menyambung ulang) sembuh sendiri tanpa mengubah tampilan.
+          if (status === 'playing' && bufferingTimerRef.current === null) {
+            bufferingTimerRef.current = setTimeout(() => {
+              bufferingTimerRef.current = null
+              if (stateRef.current.status === 'playing') setStatus('buffering')
+            }, BUFFERING_DEBOUNCE_MS)
+          }
           break
         case 'pause':
           // Saat lagu selesai browser mengirim `pause` lalu `ended`; biarkan `ended` yang menentukan.
           if (event.ended) break
+          clearBufferingTimer()
           persistPositionRef.current(true, event.currentTime)
           if (ACTIVE_STATUSES.includes(status)) {
             clearStartTimer()
@@ -438,6 +475,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
             clipGuardRef.current?.(event.duration)
           }
           if (event.type === 'timeupdate') {
+            clearBufferingTimer()
             crossfadeStepRef.current(event)
             persistPositionRef.current(false, event.currentTime)
           }
@@ -506,7 +544,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         }
       }
     },
-    [clearStartTimer, commit, fail, setStatus, updateTime],
+    [clearBufferingTimer, clearStartTimer, commit, fail, setStatus, updateTime],
   )
 
   useEffect(() => {
@@ -535,6 +573,10 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       if (!track) return
       restoredRef.current = false
       if (!options.isRetry) streamRetryRef.current = 0
+      if (retryTimerRef.current !== null) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
+      }
       resumeAtRef.current = options.resumeAt !== undefined && options.resumeAt > 0 ? options.resumeAt : null
       if (!options.keepReplay) {
         replayedRef.current = false
@@ -976,6 +1018,9 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const nextIndex = getNextIndex(queue, currentIndex, shuffleOrder)
       const nextTrack = nextIndex === null ? null : queue[nextIndex]
       if (nextIndex === null || !nextTrack) return // antrean habis: alur normal (berhenti / putar ulang)
+      // Sinyal lemah: jangan rebutan bandwidth dengan lagu yang sedang diputar. Preload baru jalan setelah buffer lagu
+      // aktif cukup, atau di detik-detik terakhir (supaya pindah lagu tetap mulus).
+      if (!preloadRef.current && remaining > PRELOAD_FORCE_REMAINING_S && audioEngine.bufferedAhead() < PRELOAD_MIN_AHEAD_S) return
       prefetchLyrics(nextTrack)
       if (Date.now() < crossfadeRetryAtRef.current) return
 

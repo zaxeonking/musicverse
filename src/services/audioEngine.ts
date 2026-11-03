@@ -471,6 +471,18 @@ class AudioEngine {
     if (this.standbySource !== null && !this.isCrossfading()) this.releaseStandby()
   }
 
+  /** Detik audio yang sudah ter-buffer di depan posisi putar lagu aktif (0 jika tidak ada). */
+  bufferedAhead(): number {
+    const audio = this.audio
+    if (!audio) return 0
+    const t = audio.currentTime
+    const b = audio.buffered
+    for (let i = 0; i < b.length; i += 1) {
+      if (t >= b.start(i) - 0.25 && t <= b.end(i)) return Math.max(0, b.end(i) - t)
+    }
+    return 0
+  }
+
   /** Durasi (detik) audio yang dimuat di elemen cadangan untuk `url`; null jika belum diketahui. */
   preloadDuration(url: string): number | null {
     const standby = this.standby
