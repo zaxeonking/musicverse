@@ -1,4 +1,5 @@
 import { resolveOfflinePlayback } from '../native/offline'
+import { resolveViaPlugins } from '../plugins/registry'
 import type {
   PlaybackInfo,
   PlaybackResponse,
@@ -714,6 +715,14 @@ export async function fetchPlaybackInfo(
 
   const wanted = { title: track.title, artists: track.artists ?? '', duration: track.duration ?? '', url: track.url }
   const expected = parseDuration(wanted.duration)
+
+  // Plugin (YouTube Music, dst.): ambil stream langsung dari sumbernya, tanpa API perantara. Mode unduhan dan
+  // percobaan ulang (`avoid`) memakai alur API lama; jika plugin gagal atau tidak cocok, lanjut ke alur lama di bawah.
+  if (!options.strict && !options.avoid?.length) {
+    const viaPlugin = await resolveViaPlugins(wanted, { signal: external, expected })
+    if (external?.aborted) throw aborted()
+    if (viaPlugin) return viaPlugin
+  }
 
   let link = extractSpotifyTrackLink(track.url ?? '')
   if (!link) {
