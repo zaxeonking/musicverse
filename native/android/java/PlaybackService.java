@@ -20,16 +20,54 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.media.audiofx.Equalizer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import androidx.annotation.OptIn;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.okhttp.OkHttpDataSource;
+import java.util.concurrent.TimeUnit;
+import okhttp3.OkHttpClient;
+import androidx.media3.database.StandaloneDatabaseProvider;
+import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DataSpec;
+import androidx.media3.datasource.cache.CacheDataSource;
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor;
+import androidx.media3.datasource.cache.SimpleCache;
+import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import java.io.File;
+import androidx.media3.datasource.HttpDataSource;
+import androidx.media3.datasource.ResolvingDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
+import androidx.media3.extractor.DefaultExtractorsFactory;
 
 /**
  * Foreground service (tipe mediaPlayback) untuk MusicVerse.
  *
- * Audio sendiri tetap diputar oleh WebView; service ini:
+ * MESIN AUDIO (v0.4.0): lagu diputar oleh ExoPlayer (Media3) di service ini, bukan lagi <audio> WebView.
+ * Buffer baca-depan besar (sampai ~3 menit) + coba-ulang otomatis saat sinyal putus, jadi sinyal jelek
+ * tidak membuat lagu nyendat. JavaScript hanya remote control (engineLoad/Resume/Pause/Seek/Stop) dan menerima
+ * event pemutaran lewat EngineListener.
+ *
+ * Service ini juga:
  *  1. menjaga proses tetap hidup + CPU menyala saat layar mati / app di latar belakang,
  *  2. menampilkan notifikasi media (judul, artis, sampul, tombol, bilah posisi) yang SELURUH asetnya
  *     (ikon kecil, ikon tombol, sampul bawaan) ada di dalam APK (res/drawable*),
  *  3. meneruskan tombol notifikasi / layar kunci / headset ke JavaScript lewat ActionListener.
  */
+@OptIn(markerClass = UnstableApi.class)
 public class PlaybackService extends Service {
   static final String CHANNEL_ID = "musicverse_playback";
   static final int NOTIFICATION_ID = 4711;
@@ -90,12 +128,666 @@ public class PlaybackService extends Service {
     else context.startService(intent);
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Mesin audio (ExoPlayer): API statis dipanggil plugin (thread lain); semuanya dilempar ke thread utama.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Event pemutaran ke JavaScript. type = nama event ala HTMLAudioElement; duration < 0 = tidak diketahui. */
+  public interface EngineListener {
+    void onEngine(String type, double currentTime, double duration, boolean ended, boolean seekable, int errorCode, double aheadSeconds, String reason);
+  }
+
+  private static final class LoadRequest {
+    final String url;
+    final long startMs;
+    final String cacheKey;
+
+    LoadRequest(String url, long startMs, String cacheKey) {
+      this.url = url;
+      this.startMs = startMs;
+      this.cacheKey = cacheKey;
+    }
+  }
+
+  private static final double[] EQ_FREQS = {32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+  private static volatile EngineListener engineListener;
+  private static LoadRequest pendingLoad;
+  private static volatile float engineVolume = 1f;
+  private static volatile boolean autoAdvance = false;
+  private static volatile boolean eqEnabled = false;
+  private static volatile double[] eqGains = new double[EQ_FREQS.length];
+
+  public static void setEngineListener(EngineListener value) {
+    engineListener = value;
+  }
+
+  public static void engineLoad(Context context, String url, long startMs, String cacheKey) {
+    PlaybackService running = instance;
+    if (running != null) {
+      running.handler.post(() -> running.doLoad(url, startMs, cacheKey));
+      return;
+    }
+    pendingLoad = new LoadRequest(url, startMs, cacheKey);
+    Intent intent = new Intent(context, PlaybackService.class);
+    if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent);
+    else context.startService(intent);
+  }
+
+  /** False bila tidak ada lagu yang dimuat di mesin (service sudah berhenti): pemanggil harus engineLoad ulang. */
+  public static boolean engineResume() {
+    PlaybackService running = instance;
+    if (running == null || !running.hasMedia) return false;
+    running.handler.post(running::doResume);
+    return true;
+  }
+
+  public static void enginePause() {
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(() -> {
+      running.cancelFade(); // jeda di tengah crossfade: selesaikan dulu
+      if (running.player != null) running.player.pause();
+    });
+  }
+
+  public static void engineSeek(long positionMs) {
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(() -> {
+      if (running.player != null && running.hasMedia) running.player.seekTo(Math.max(0, positionMs));
+    });
+  }
+
+  public static void engineStop() {
+    pendingLoad = null;
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(running::doStopEngine);
+  }
+
+  public static void engineSetVolume(float volume) {
+    engineVolume = Math.max(0f, Math.min(1f, volume));
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(running::applyVolumes);
+  }
+
+  /** Memuat lagu berikutnya di pemutar cadangan (tanpa memutar, senyap). Event `standby_ready` / `standby_error` ke JS. */
+  public static void engineStandbyLoad(String url, String cacheKey) {
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(() -> running.doStandbyLoad(url, cacheKey));
+  }
+
+  /**
+   * true = bila lagu aktif selesai dan lagu cadangan sudah dimuat, native langsung pindah sendiri (tanpa menunggu JS /
+   * WebView yang mungkin ditahan di latar belakang) lalu mengirim event `advanced`. JS yang menjamin lagu cadangan itu valid.
+   */
+  public static void engineSetAutoAdvance(boolean on) {
+    autoAdvance = on;
+  }
+
+  public static void engineClearStandby() {
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(running::releaseStandby);
+  }
+
+  public interface Result {
+    void done(boolean ok);
+  }
+
+  /** Memutar lagu cadangan dari 0:00 dengan volume naik sambil lagu aktif memudar (daya sama), lalu cadangan jadi aktif. */
+  public static void engineCrossfade(long durationMs, Result result) {
+    PlaybackService running = instance;
+    if (running == null) {
+      result.done(false);
+      return;
+    }
+    running.handler.post(() -> result.done(running.doCrossfade(Math.max(1, durationMs))));
+  }
+
+  public static void engineSetEq(boolean enabled, double[] gains) {
+    eqEnabled = enabled;
+    if (gains != null && gains.length == EQ_FREQS.length) eqGains = gains;
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(running::applyEq);
+  }
+
   public static void stop(Context context) {
     pending = null;
+    pendingLoad = null;
     PlaybackService running = instance;
     if (running != null) running.shutdown();
     // Selalu minta berhenti juga (aman dipanggil walau service tidak jalan).
     context.stopService(new Intent(context, PlaybackService.class));
+  }
+
+  private ExoPlayer player;
+  private volatile boolean hasMedia = false;
+  private boolean metaSent = false;
+  private int tickCount = 0;
+  private Equalizer equalizer;
+  private int eqSession = -1;
+
+  /** Gagal 4xx (URL kedaluwarsa / ditolak) langsung dilaporkan ke JS agar link diambil ulang; selain itu dicoba ulang. */
+  private static final class RetryPolicy extends DefaultLoadErrorHandlingPolicy {
+    RetryPolicy() {
+      super(12);
+    }
+
+    @Override
+    public long getRetryDelayMsFor(LoadErrorInfo info) {
+      if (info.exception instanceof HttpDataSource.InvalidResponseCodeException) {
+        int code = ((HttpDataSource.InvalidResponseCodeException) info.exception).responseCode;
+        if (code >= 400 && code < 500 && code != 408 && code != 429) return C.TIME_UNSET;
+      }
+      return super.getRetryDelayMsFor(info);
+    }
+  }
+
+  private final Player.Listener playerListener = new Player.Listener() {
+    @Override public void onPlaybackStateChanged(int state) {
+      if (state == Player.STATE_BUFFERING) {
+        emitEngine("waiting", 0, null);
+      } else if (state == Player.STATE_READY) {
+        if (!metaSent) {
+          metaSent = true;
+          emitEngine("durationchange", 0, null);
+          emitEngine("loadedmetadata", 0, null);
+        }
+      } else if (state == Player.STATE_ENDED) {
+        // Lagu cadangan sudah siap dan JS mengizinkan: pindah sendiri tanpa menunggu WebView (bisa ditahan di latar belakang).
+        if (autoAdvance && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
+          autoAdvance = false;
+          emitEngine("advanced", 0, null);
+        } else {
+          emitEngine("ended", 0, null);
+        }
+      }
+    }
+
+    @Override public void onIsPlayingChanged(boolean isPlaying) {
+      if (isPlaying) emitEngine("playing", 0, null);
+    }
+
+    @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+      if (playWhenReady) {
+        emitEngine("play", 0, null);
+      } else {
+        String why = reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS ? "focus"
+            : reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY ? "noisy" : "user";
+        emitEngine("pause", 0, why);
+      }
+    }
+
+    @Override public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+      if (reason == Player.DISCONTINUITY_REASON_SEEK) emitEngine("seeked", 0, null);
+    }
+
+    @Override public void onPlayerError(PlaybackException error) {
+      if (fallbackActive()) return; // gagal langsung (4xx / jaringan): ulang lewat proxy dari posisi yang sama
+      emitEngine("error", mapError(error.errorCode), null);
+    }
+
+    @Override public void onAudioSessionIdChanged(int audioSessionId) {
+      applyEq();
+    }
+  };
+
+  /** Kode galat ala MediaError: 2 jaringan, 3 decode, 4 tidak didukung, 5 lainnya. */
+  private static int mapError(int code) {
+    if (code == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
+        || code == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED) return 4;
+    if (code >= 2000 && code < 3000) return 2;
+    if (code >= 3000 && code < 5000) return 3;
+    if (code >= 5000 && code < 6000) return 3;
+    return 5;
+  }
+
+  private final Runnable engineTicker = new Runnable() {
+    @Override public void run() {
+      if (stopped || player == null || !hasMedia) return;
+      int st = player.getPlaybackState();
+      if (st == Player.STATE_BUFFERING && player.getPlayWhenReady()) {
+        long now = SystemClock.elapsedRealtime();
+        if (bufferingSince == 0) bufferingSince = now;
+        else if (now - bufferingSince > DIRECT_STALL_MS && fallbackActive()) bufferingSince = 0;
+      } else {
+        bufferingSince = 0;
+      }
+      if (st == Player.STATE_READY || st == Player.STATE_BUFFERING) {
+        if (player.isPlaying()) emitEngine("timeupdate", 0, null);
+        else if (++tickCount % 4 == 0) emitEngine("progress", 0, null);
+      }
+      handler.postDelayed(this, 250);
+    }
+  };
+
+  private void emitEngine(String type, int errorCode, String reason) {
+    ExoPlayer p = player;
+    EngineListener l = engineListener;
+    if (p == null || l == null || !hasMedia) return;
+    long dur = p.getDuration();
+    long pos = Math.max(0, p.getCurrentPosition());
+    long buffered = p.getBufferedPosition();
+    l.onEngine(type, pos / 1000.0, dur == C.TIME_UNSET || dur <= 0 ? -1 : dur / 1000.0,
+        p.getPlaybackState() == Player.STATE_ENDED, p.isCurrentMediaItemSeekable(), errorCode,
+        Math.max(0, (buffered - pos) / 1000.0), reason == null ? "" : reason);
+  }
+
+  // ---- Mode langsung: ExoPlayer ambil dari sumber (satu koneksi panjang ala mpv), proxy lokal hanya cadangan ----
+
+  /** User-Agent per URL sumber langsung; dibaca ResolvingDataSource saat membuka koneksi. */
+  private static final Map<String, String> DIRECT_UA = new ConcurrentHashMap<>();
+  /** Domain yang sudah gagal/macet saat langsung: sisa sesi lewat proxy (mis. sumber yang membatasi Range tak terbatas). */
+  private static final Set<String> DIRECT_BLOCKED = ConcurrentHashMap.newKeySet();
+  private static final long DIRECT_STALL_MS = 15_000L;
+
+  private static final class Src {
+    final String proxyUrl;
+    final String directUrl; // null = tidak langsung
+    /** Kunci cache disk (lagu + sumber API); kosong = jangan di-cache (berkas lokal, sumber tanpa kunci). */
+    final String cacheKey;
+    boolean fellBack = false;
+
+    Src(String proxyUrl, String directUrl, String cacheKey) {
+      this.proxyUrl = proxyUrl;
+      this.directUrl = directUrl;
+      this.cacheKey = cacheKey;
+    }
+
+    boolean direct() {
+      return directUrl != null && !fellBack;
+    }
+
+    String playUrl() {
+      return direct() ? directUrl : proxyUrl;
+    }
+  }
+
+  private Src activeSrc;
+  private Src standbySrc;
+  private long bufferingSince = 0;
+
+  private static String domainKey(String url) {
+    try {
+      String host = new java.net.URI(url).getHost();
+      if (host == null) return "";
+      String[] parts = host.split("\\.");
+      return parts.length >= 2 ? parts[parts.length - 2] + "." + parts[parts.length - 1] : host;
+    } catch (Exception e) {
+      return "";
+    }
+  }
+
+  private Src makeSrc(String url, String cacheKey) {
+    try {
+      String[] peeked = StreamProxy.get().peek(url);
+      if (peeked != null && !DIRECT_BLOCKED.contains(domainKey(peeked[0]))) {
+        if (DIRECT_UA.size() > 400) DIRECT_UA.clear();
+        DIRECT_UA.put(peeked[0], peeked[1] == null ? "" : peeked[1]);
+        return new Src(url, peeked[0], cacheKey);
+      }
+    } catch (Exception ignored) {
+      // proxy tidak tersedia: pakai URL apa adanya
+    }
+    return new Src(url, null, cacheKey);
+  }
+
+  // ---- Cache disk (SimpleCache): lagu yang sudah diputar / di-seek balik tidak diunduh lagi ----
+
+  private static final long CACHE_BYTES = 200L * 1024L * 1024L;
+  private static SimpleCache diskCache;
+  private DataSource.Factory plainFactory;
+  private DataSource.Factory cachedFactory;
+  private DefaultExtractorsFactory extractors;
+
+  private static synchronized SimpleCache diskCache(Context context) {
+    if (diskCache == null) {
+      try {
+        diskCache = new SimpleCache(
+            new File(context.getCacheDir(), "exo-audio"),
+            new LeastRecentlyUsedCacheEvictor(CACHE_BYTES),
+            new StandaloneDatabaseProvider(context));
+      } catch (RuntimeException e) {
+        return null; // folder cache bermasalah / sudah dipakai: lanjut tanpa cache
+      }
+    }
+    return diskCache;
+  }
+
+  private void ensureFactories() {
+    if (plainFactory != null) return;
+    // OkHttp: HTTP/2, koneksi dipakai ulang, dan lebih tahan di jaringan lossy daripada HttpURLConnection bawaan.
+    OkHttpClient client = new OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build();
+    OkHttpDataSource.Factory http = new OkHttpDataSource.Factory(client);
+    ResolvingDataSource.Factory resolving = new ResolvingDataSource.Factory(
+        new DefaultDataSource.Factory(this, http),
+        (DataSpec spec) -> {
+          String ua = DIRECT_UA.get(spec.uri.toString());
+          if (ua == null) return spec;
+          Map<String, String> headers = new HashMap<>(spec.httpRequestHeaders);
+          if (!ua.isEmpty()) headers.put("User-Agent", ua);
+          headers.put("Accept", "*/*");
+          return spec.withRequestHeaders(headers);
+        });
+    plainFactory = resolving;
+    SimpleCache cache = diskCache(getApplicationContext());
+    cachedFactory = cache == null ? null : new CacheDataSource.Factory()
+        .setCache(cache)
+        .setUpstreamDataSourceFactory(resolving)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR);
+    extractors = new DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true);
+  }
+
+  private MediaSource mediaSourceFor(Src src) {
+    ensureFactories();
+    boolean cached = cachedFactory != null && src.cacheKey != null && !src.cacheKey.isEmpty();
+    MediaItem.Builder item = new MediaItem.Builder().setUri(src.playUrl());
+    if (cached) item.setCustomCacheKey(src.cacheKey);
+    return new ProgressiveMediaSource.Factory(cached ? cachedFactory : plainFactory, extractors)
+        .setLoadErrorHandlingPolicy(new RetryPolicy())
+        .createMediaSource(item.build());
+  }
+
+  /** Beralih dari sumber langsung ke proxy pada posisi sekarang. False bila tidak ada yang bisa dialihkan. */
+  private boolean fallbackActive() {
+    Src src = activeSrc;
+    ExoPlayer p = player;
+    if (src == null || p == null || !src.direct() || !hasMedia) return false;
+    src.fellBack = true;
+    DIRECT_BLOCKED.add(domainKey(src.directUrl));
+    bufferingSince = 0;
+    long pos = Math.max(0, p.getCurrentPosition());
+    p.setMediaSource(mediaSourceFor(src), pos);
+    p.prepare();
+    return true;
+  }
+
+  private boolean fallbackStandby() {
+    Src src = standbySrc;
+    ExoPlayer p = standby;
+    if (src == null || p == null || !src.direct()) return false;
+    src.fellBack = true;
+    DIRECT_BLOCKED.add(domainKey(src.directUrl));
+    p.setMediaSource(mediaSourceFor(src));
+    p.prepare();
+    return true;
+  }
+
+  private static final AudioAttributes AUDIO_ATTRS = new AudioAttributes.Builder()
+      .setUsage(C.USAGE_MEDIA)
+      .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+      .build();
+  /** Pemutar cadangan (lagu berikutnya, senyap) dan pemutar lama yang sedang memudar saat crossfade. */
+  private ExoPlayer standby;
+  private String standbyUrl;
+  private ExoPlayer fading;
+  private float activeGain = 1f;
+  private float fadingGain = 0f;
+  private long fadeStartAt;
+  private long fadeDurationMs;
+
+  private final Player.Listener standbyListener = new Player.Listener() {
+    @Override public void onPlaybackStateChanged(int state) {
+      if (state == Player.STATE_READY) emitStandby("standby_ready", 0);
+    }
+
+    @Override public void onPlayerError(PlaybackException error) {
+      if (fallbackStandby()) return;
+      emitStandby("standby_error", mapError(error.errorCode));
+    }
+  };
+
+  private void emitStandby(String type, int errorCode) {
+    ExoPlayer p = standby;
+    EngineListener l = engineListener;
+    if (p == null || l == null) return;
+    long dur = p.getDuration();
+    l.onEngine(type, 0, dur == C.TIME_UNSET || dur <= 0 ? -1 : dur / 1000.0, false, p.isCurrentMediaItemSeekable(), errorCode, 0, "");
+  }
+
+  /** Volume tiap pemutar = volume utama (master x akhir-lagu dari JS) x penguatan fade pemutar itu. */
+  void applyVolumes() {
+    if (player != null) player.setVolume(engineVolume * activeGain);
+    if (fading != null) fading.setVolume(engineVolume * fadingGain);
+    if (standby != null) standby.setVolume(0f);
+  }
+
+  private final Runnable fadeTicker = new Runnable() {
+    @Override public void run() {
+      if (stopped || fading == null) return;
+      double t = Math.min(1.0, (SystemClock.elapsedRealtime() - fadeStartAt) / (double) fadeDurationMs);
+      activeGain = (float) Math.sin(t * Math.PI / 2);
+      fadingGain = (float) Math.cos(t * Math.PI / 2);
+      if (t >= 1.0) {
+        cancelFade();
+        return;
+      }
+      applyVolumes();
+      handler.postDelayed(this, 50);
+    }
+  };
+
+  /** Mengakhiri crossfade seketika: pemutar lama dilepas, lagu aktif volume penuh. */
+  void cancelFade() {
+    handler.removeCallbacks(fadeTicker);
+    ExoPlayer old = fading;
+    fading = null;
+    fadingGain = 0f;
+    activeGain = 1f;
+    if (old != null) {
+      old.release();
+    }
+    applyVolumes();
+  }
+
+  void releaseStandby() {
+    ExoPlayer p = standby;
+    standby = null;
+    standbyUrl = null;
+    standbySrc = null;
+    if (p != null) {
+      p.removeListener(standbyListener);
+      p.release();
+    }
+  }
+
+  void doStandbyLoad(String url, String cacheKey) {
+    if (stopped || player == null || !hasMedia || fading != null) return;
+    if (url.equals(standbyUrl) && standby != null) return;
+    releaseStandby();
+    ExoPlayer p = buildPlayer(false, true);
+    // Satu sesi audio dengan pemutar aktif: satu Equalizer berlaku untuk keduanya.
+    int session = player.getAudioSessionId();
+    if (session != C.AUDIO_SESSION_ID_UNSET) p.setAudioSessionId(session);
+    p.setVolume(0f);
+    p.addListener(standbyListener);
+    standby = p;
+    standbyUrl = url;
+    standbySrc = makeSrc(url, cacheKey);
+    p.setMediaSource(mediaSourceFor(standbySrc));
+    p.setPlayWhenReady(false);
+    p.prepare();
+  }
+
+  boolean doCrossfade(long durationMs) {
+    ExoPlayer incoming = standby;
+    ExoPlayer outgoing = player;
+    if (stopped || incoming == null || outgoing == null || !hasMedia) return false;
+    if (incoming.getPlayerError() != null) return false;
+    autoAdvance = false;
+    cancelFade(); // crossfade sebelumnya yang belum selesai dibereskan dulu
+    standby = null;
+    standbyUrl = null;
+    activeSrc = standbySrc;
+    standbySrc = null;
+    bufferingSince = 0;
+    incoming.removeListener(standbyListener);
+    outgoing.removeListener(playerListener);
+    // Fokus audio & "headset dicabut" hanya dipegang pemutar aktif.
+    outgoing.setAudioAttributes(AUDIO_ATTRS, false);
+    outgoing.setHandleAudioBecomingNoisy(false);
+    incoming.setAudioAttributes(AUDIO_ATTRS, true);
+    incoming.setHandleAudioBecomingNoisy(true);
+    incoming.addListener(playerListener);
+    player = incoming;
+    fading = outgoing;
+    activeGain = 0f;
+    fadingGain = 1f;
+    applyVolumes();
+    fadeStartAt = SystemClock.elapsedRealtime();
+    fadeDurationMs = durationMs;
+    incoming.setPlayWhenReady(true);
+    metaSent = false;
+    tickCount = 0;
+    if (incoming.getPlaybackState() == Player.STATE_READY) {
+      metaSent = true;
+      emitEngine("durationchange", 0, null);
+      emitEngine("loadedmetadata", 0, null);
+    }
+    handler.removeCallbacks(fadeTicker);
+    handler.postDelayed(fadeTicker, 50);
+    return true;
+  }
+
+  private ExoPlayer ensurePlayer() {
+    if (player != null) return player;
+    ExoPlayer p = buildPlayer(true, false);
+    p.addListener(playerListener);
+    player = p;
+    applyVolumes();
+    applyEq();
+    return p;
+  }
+
+  private ExoPlayer buildPlayer(boolean handleFocus, boolean forStandby) {
+    // Baca-depan besar: mulai putar setelah 1,5 dtk terisi, terus mengisi sampai 3 menit; setelah stall tunggu 4 dtk.
+    // Pemutar cadangan (lagu berikutnya) hanya mengisi ~20 dtk supaya tidak berebut bandwidth dengan lagu yang berjalan.
+    DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+        .setBufferDurationsMs(forStandby ? 10_000 : 30_000, forStandby ? 20_000 : 180_000, 1_500, 4_000)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build();
+    ExoPlayer p = new ExoPlayer.Builder(this)
+        .setLoadControl(loadControl)
+        .setAudioAttributes(AUDIO_ATTRS, handleFocus)
+        .setHandleAudioBecomingNoisy(handleFocus)
+        .setWakeMode(C.WAKE_MODE_NETWORK)
+        .build();
+    p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon()
+        .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build());
+    return p;
+  }
+
+  void doLoad(String url, long startMs, String cacheKey) {
+    if (stopped) return;
+    ExoPlayer p = ensurePlayer();
+    autoAdvance = false;
+    cancelFade();
+    releaseStandby();
+    metaSent = false;
+    tickCount = 0;
+    hasMedia = true;
+    activeSrc = makeSrc(url, cacheKey);
+    bufferingSince = 0;
+    p.setMediaSource(mediaSourceFor(activeSrc), Math.max(0, startMs));
+    p.setPlayWhenReady(true);
+    p.prepare();
+    handler.removeCallbacks(engineTicker);
+    handler.postDelayed(engineTicker, 250);
+  }
+
+  void doResume() {
+    ExoPlayer p = player;
+    if (p == null || stopped) return;
+    int st = p.getPlaybackState();
+    if (st == Player.STATE_IDLE) p.prepare();
+    else if (st == Player.STATE_ENDED) p.seekToDefaultPosition();
+    p.play();
+  }
+
+  void doStopEngine() {
+    autoAdvance = false;
+    hasMedia = false;
+    handler.removeCallbacks(engineTicker);
+    cancelFade();
+    releaseStandby();
+    if (player != null) {
+      player.stop();
+      player.clearMediaItems();
+    }
+  }
+
+  private void releasePlayer() {
+    hasMedia = false;
+    handler.removeCallbacks(engineTicker);
+    handler.removeCallbacks(fadeTicker);
+    releaseStandby();
+    ExoPlayer old = fading;
+    fading = null;
+    if (old != null) old.release();
+    activeGain = 1f;
+    releaseEq();
+    ExoPlayer p = player;
+    player = null;
+    if (p != null) {
+      p.removeListener(playerListener);
+      p.release();
+    }
+  }
+
+  private void releaseEq() {
+    if (equalizer != null) {
+      try {
+        equalizer.release();
+      } catch (RuntimeException ignored) {
+        // sudah dilepas
+      }
+      equalizer = null;
+    }
+    eqSession = -1;
+  }
+
+  /** Gain (dB) untuk frekuensi hz dari 10 pita JS: interpolasi linear pada skala log frekuensi. */
+  private static double gainAt(double hz) {
+    double[] g = eqGains;
+    if (hz <= EQ_FREQS[0]) return g[0];
+    for (int i = 1; i < EQ_FREQS.length; i++) {
+      if (hz <= EQ_FREQS[i]) {
+        double t = (Math.log(hz) - Math.log(EQ_FREQS[i - 1])) / (Math.log(EQ_FREQS[i]) - Math.log(EQ_FREQS[i - 1]));
+        return g[i - 1] + (g[i] - g[i - 1]) * t;
+      }
+    }
+    return g[g.length - 1];
+  }
+
+  /** Equalizer bawaan Android (android.media.audiofx) pada sesi audio ExoPlayer; pita perangkat (biasanya 5) diisi dari 10 pita JS. */
+  private void applyEq() {
+    ExoPlayer p = player;
+    if (p == null) return;
+    try {
+      int session = p.getAudioSessionId();
+      if (session == C.AUDIO_SESSION_ID_UNSET) return;
+      if (equalizer == null || eqSession != session) {
+        if (!eqEnabled && equalizer == null) return; // jangan membuat efek bila tak dipakai
+        releaseEq();
+        equalizer = new Equalizer(0, session);
+        eqSession = session;
+      }
+      equalizer.setEnabled(eqEnabled);
+      if (!eqEnabled) return;
+      short[] range = equalizer.getBandLevelRange();
+      short bands = equalizer.getNumberOfBands();
+      for (short b = 0; b < bands; b++) {
+        double hz = equalizer.getCenterFreq(b) / 1000.0;
+        int level = (int) Math.round(gainAt(hz) * 100);
+        level = Math.max(range[0], Math.min(range[1], level));
+        equalizer.setBandLevel(b, (short) level);
+      }
+    } catch (RuntimeException e) {
+      releaseEq(); // perangkat tanpa efek audio: lagu tetap jalan tanpa EQ
+    }
   }
 
   private MediaSession session;
@@ -195,7 +887,10 @@ public class PlaybackService extends Service {
     State state = pending;
     pending = null;
     if (state != null) apply(state);
-    // Audio ada di WebView; jika proses mati, service tidak ada gunanya sendirian.
+    LoadRequest load = pendingLoad;
+    pendingLoad = null;
+    if (load != null) doLoad(load.url, load.startMs, load.cacheKey);
+    // Audio ikut proses aplikasi (JS yang mengatur antrean); jika proses mati, service tidak ada gunanya sendirian.
     return START_NOT_STICKY;
   }
 
@@ -215,6 +910,7 @@ public class PlaybackService extends Service {
     NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     if (nm != null) nm.cancel(NOTIFICATION_ID);
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+    releasePlayer();
     if (session != null) {
       session.setActive(false);
       session.release();
@@ -304,8 +1000,10 @@ public class PlaybackService extends Service {
     // memanggil apply() lagi dan menghidupkan notifikasi yang baru saja dihapus.
     if (instance == this) instance = null;
     pending = null;
+    pendingLoad = null;
     handler.removeCallbacksAndMessages(null);
     idleScheduled = false;
+    releasePlayer();
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     stopForeground(true);
     foreground = false;

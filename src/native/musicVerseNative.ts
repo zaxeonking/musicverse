@@ -29,6 +29,21 @@ export interface NowPlayingUpdate {
   coverBase64?: string
 }
 
+/** Event mesin audio ExoPlayer (nama `type` sama dengan event HTMLAudioElement). */
+export interface NativeEngineEvent {
+  type: 'play' | 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'durationchange' | 'loadedmetadata' | 'progress' | 'seeked' | 'ended' | 'error' | 'standby_ready' | 'standby_error' | 'advanced'
+  currentTime: number
+  duration?: number
+  ended: boolean
+  seekable: boolean
+  /** Hanya `error`: 2 jaringan, 3 decode, 4 tidak didukung, 5 lainnya (sama dengan MediaError.code). */
+  errorCode?: number
+  /** Detik audio yang sudah ter-buffer di depan posisi putar. */
+  ahead: number
+  /** Hanya `pause`: `focus` = app lain mengambil audio, `noisy` = headset dicabut, `user` = jeda biasa. */
+  reason?: string
+}
+
 export interface UpdateProgressEvent {
   status: 'downloading' | 'paused' | 'ready' | 'failed'
   downloaded: number
@@ -115,6 +130,25 @@ export interface MusicVerseNativePlugin {
     eventName: 'updateProgress',
     listener: (event: UpdateProgressEvent) => void,
   ): Promise<PluginListenerHandle>
+  /** Mesin audio ExoPlayer di PlaybackService (APK v0.4.0+; APK lama melempar UNIMPLEMENTED). */
+  /** `cacheKey` (lagu + sumber API) mengaktifkan cache disk ExoPlayer; kosong = tanpa cache. */
+  engineLoad(options: { url: string; startMs?: number; cacheKey?: string }): Promise<void>
+  /** `loaded` false = service sudah berhenti dan tidak ada lagu di mesin: pemanggil harus engineLoad ulang. */
+  engineResume(): Promise<{ loaded: boolean }>
+  enginePause(): Promise<void>
+  engineSeek(options: { positionMs: number }): Promise<void>
+  engineStop(): Promise<void>
+  engineSetVolume(options: { volume: number }): Promise<void>
+  /** Memuat lagu berikutnya di pemutar cadangan (senyap). Dibalas event `standby_ready` / `standby_error`. */
+  engineStandbyLoad(options: { url: string; cacheKey?: string }): Promise<void>
+  /** true = native pindah sendiri ke lagu cadangan saat lagu aktif selesai (event `advanced`), tanpa menunggu JS. */
+  engineSetAutoAdvance(options: { on: boolean }): Promise<void>
+  engineClearStandby(): Promise<void>
+  /** Memutar lagu cadangan dengan fade-in sambil lagu aktif fade-out (dikerjakan native). `switched` false = tidak berpindah. */
+  engineCrossfade(options: { durationMs: number }): Promise<{ switched: boolean }>
+  /** 10 pita (EQ_FREQS), dB. Memakai Equalizer bawaan Android pada sesi audio ExoPlayer. */
+  engineSetEq(options: { enabled: boolean; gains: number[] }): Promise<void>
+  addListener(eventName: 'engineEvent', listener: (event: NativeEngineEvent) => void): Promise<PluginListenerHandle>
   /** Memulai/memperbarui foreground service + notifikasi media. */
   updateNowPlaying(options: NowPlayingUpdate): Promise<void>
   /** Menghentikan foreground service dan menghapus notifikasi. */

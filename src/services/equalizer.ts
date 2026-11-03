@@ -69,6 +69,14 @@ export function getEqState(): EqState {
   return state
 }
 
+/** Berlangganan perubahan EQ (dipakai mesin audio native untuk meneruskan ke Equalizer Android). */
+export function subscribeEq(cb: () => void): () => void {
+  listeners.add(cb)
+  return () => {
+    listeners.delete(cb)
+  }
+}
+
 export function useEqState(): EqState {
   return useSyncExternalStore(
     (cb) => {

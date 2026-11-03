@@ -31,6 +31,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Base64;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -76,11 +77,24 @@ public class MusicVerseNativePlugin extends Plugin {
       if (seekMs >= 0) event.put("seekMs", seekMs);
       notifyListeners("mediaAction", event);
     });
+    PlaybackService.setEngineListener((type, currentTime, duration, ended, seekable, errorCode, ahead, reason) -> {
+      JSObject event = new JSObject();
+      event.put("type", type);
+      event.put("currentTime", currentTime);
+      if (duration >= 0) event.put("duration", duration);
+      event.put("ended", ended);
+      event.put("seekable", seekable);
+      if (errorCode > 0) event.put("errorCode", errorCode);
+      event.put("ahead", ahead);
+      event.put("reason", reason);
+      notifyListeners("engineEvent", event);
+    });
   }
 
   @Override
   protected void handleOnDestroy() {
     PlaybackService.setListener(null);
+    PlaybackService.setEngineListener(null);
     DownloadService.setListener(null);
     uiHandler.removeCallbacksAndMessages(null);
     if (downloadReceiver != null) {
@@ -523,6 +537,100 @@ public class MusicVerseNativePlugin extends Plugin {
       // Mis. ForegroundServiceStartNotAllowedException saat app di latar belakang dan service belum jalan.
       call.reject("Service pemutaran tidak bisa dimulai: " + e.getMessage());
     }
+  }
+
+  // ---- Mesin audio ExoPlayer (PlaybackService) ----
+
+  @PluginMethod
+  public void engineLoad(PluginCall call) {
+    String url = call.getString("url");
+    if (url == null || url.isEmpty()) {
+      call.reject("URL audio kosong.");
+      return;
+    }
+    try {
+      PlaybackService.engineLoad(getContext(), url, readLong(call, "startMs"), call.getString("cacheKey"));
+      call.resolve();
+    } catch (RuntimeException e) {
+      call.reject("Mesin audio tidak bisa dimulai: " + e.getMessage());
+    }
+  }
+
+  @PluginMethod
+  public void engineResume(PluginCall call) {
+    JSObject result = new JSObject();
+    result.put("loaded", PlaybackService.engineResume());
+    call.resolve(result);
+  }
+
+  @PluginMethod
+  public void enginePause(PluginCall call) {
+    PlaybackService.enginePause();
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineSeek(PluginCall call) {
+    PlaybackService.engineSeek(readLong(call, "positionMs"));
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineStop(PluginCall call) {
+    PlaybackService.engineStop();
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineStandbyLoad(PluginCall call) {
+    String url = call.getString("url");
+    if (url == null || url.isEmpty()) {
+      call.reject("URL audio kosong.");
+      return;
+    }
+    PlaybackService.engineStandbyLoad(url, call.getString("cacheKey"));
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineSetAutoAdvance(PluginCall call) {
+    PlaybackService.engineSetAutoAdvance(Boolean.TRUE.equals(call.getBoolean("on", false)));
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineClearStandby(PluginCall call) {
+    PlaybackService.engineClearStandby();
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineCrossfade(PluginCall call) {
+    PlaybackService.engineCrossfade(readLong(call, "durationMs"), ok -> {
+      JSObject result = new JSObject();
+      result.put("switched", ok);
+      call.resolve(result);
+    });
+  }
+
+  @PluginMethod
+  public void engineSetVolume(PluginCall call) {
+    Double volume = call.getDouble("volume", 1.0);
+    PlaybackService.engineSetVolume(volume == null ? 1f : volume.floatValue());
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineSetEq(PluginCall call) {
+    boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
+    double[] gains = null;
+    JSArray array = call.getArray("gains");
+    if (array != null && array.length() == 10) {
+      gains = new double[10];
+      for (int i = 0; i < 10; i++) gains[i] = array.optDouble(i, 0.0);
+    }
+    PlaybackService.engineSetEq(enabled, gains);
+    call.resolve();
   }
 
   @PluginMethod

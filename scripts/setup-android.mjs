@@ -4,6 +4,7 @@
 // (sudah otomatis lewat `npm run android:sync`).
 //
 // Yang dilakukan:
+//  0. Menambah dependency androidx.media3 (ExoPlayer) ke app/build.gradle (langkah 3)
 //  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity ke android/app/src/main/java/<appId>/
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
@@ -48,7 +49,15 @@ if (existsSync(gradlePath)) {
   const gradle = readFileSync(gradlePath, 'utf8')
     .replace(/versionName\s*=?\s*"[^"]*"/, `versionName "${pkg.version}"`)
     .replace(/versionCode\s*=?\s*\d+/, `versionCode ${maj * 10000 + min * 100 + pat}`)
-  writeFileSync(gradlePath, gradle)
+  // Mesin audio ExoPlayer (Media3) di PlaybackService.
+  const media3 = '1.8.0'
+  const deps = [`androidx.media3:media3-exoplayer:${media3}`, `androidx.media3:media3-datasource-okhttp:${media3}`]
+  const missingDeps = deps.filter((d) => !gradle.includes(d.split(':').slice(0, 2).join(':')))
+  const withDeps =
+    missingDeps.length > 0 && /^dependencies\s*\{/m.test(gradle)
+      ? gradle.replace(/^dependencies\s*\{/m, (m) => `${m}\n${missingDeps.map((d) => `    implementation "${d}"`).join('\n')}`)
+      : gradle
+  writeFileSync(gradlePath, withDeps)
 }
 
 // 4. Manifest

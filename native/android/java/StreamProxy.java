@@ -134,6 +134,17 @@ public final class StreamProxy {
     return "http://127.0.0.1:" + port() + "/s/" + token;
   }
 
+  /**
+   * Mengembalikan {urlSumber, userAgent} untuk URL lokal hasil register(); null bila bukan URL proxy ini / sudah tidak ada.
+   * Dipakai ExoPlayer untuk mengambil LANGSUNG dari sumber (satu koneksi panjang), dengan proxy sebagai cadangan.
+   */
+  public String[] peek(String localUrl) {
+    String prefix = "http://127.0.0.1:" + port() + "/s/";
+    if (localUrl == null || !localUrl.startsWith(prefix)) return null;
+    Source src = sources.get(localUrl.substring(prefix.length()));
+    return src == null ? null : new String[] {src.url, src.userAgent};
+  }
+
   /* ---------------- penanganan satu koneksi ---------------- */
 
   private static String readLine(InputStream in) throws IOException {

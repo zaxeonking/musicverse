@@ -127,6 +127,12 @@ const RESTART_THRESHOLD_S = 3
 const MISMATCH_RETRY_MAX = 3
 const MISMATCH_RETRY_DELAY_MS = 1500
 
+/** Kunci cache disk ExoPlayer: lagu + sumber API yang sama = berkas yang sama. Tanpa kunci untuk berkas lokal dan sumber plugin. */
+function diskCacheKey(track: { title: string; artists?: string; url?: string }, info: PlaybackInfo): string | undefined {
+  if (info.source === 'offline' || info.apiSource === undefined || info.apiSource === 'plugin') return undefined
+  return `${trackKey(track)}|${info.apiSource}`
+}
+
 function errorMessage(code: PlayerErrorCode): string {
   switch (code) {
     case 'resolve_failed':
@@ -487,6 +493,22 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
               : { currentTime: event.currentTime, duration: event.duration, seekable: event.seekable },
           )
           break
+        case 'advanced': {
+          // Native sudah pindah sendiri ke lagu cadangan (lagu aktif selesai saat JS tertahan): samakan state seperti crossfade.
+          const entry = preloadRef.current
+          const nextTrack = entry ? stateRef.current.queue[entry.index] : undefined
+          if (!entry || entry.status !== 'ready' || !entry.info || !nextTrack) break
+          preloadRef.current = null
+          crossfadingRef.current = false
+          crossfadeGaveUpRef.current = null
+          crossfadeRetryAtRef.current = 0
+          replayedRef.current = false
+          setRepeatingOnce(false)
+          clearStartTimer()
+          requestIdRef.current++
+          commit({ status: 'playing', currentTrack: nextTrack, currentIndex: entry.index, playbackInfo: entry.info, error: null })
+          break
+        }
         case 'ended': {
           clearStartTimer()
           // Lagu selesai: sesi berikutnya mulai dari awal lagu ini (bukan dari detik terakhir).
@@ -734,7 +756,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         }, START_TIMEOUT_MS)
 
         try {
-          await audioEngine.load(info.audioUrl)
+          await audioEngine.load(info.audioUrl, diskCacheKey(track, info))
         } catch (error) {
           if (isStale()) return
           const code = error instanceof AudioEngineError ? error.code : 'unknown'
@@ -995,20 +1017,25 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
       // Sleep timer "akhir lagu": volume mengecil di detik-detik terakhir, tanpa crossfade.
       if (stopAfterTrackRef.current) {
+        audioEngine.setAutoAdvance(false)
         audioEngine.setTrackEndGain(remaining >= TRACK_END_FADE_S ? 1 : Math.max(0, remaining / TRACK_END_FADE_S) ** 2)
         return
       }
 
       const fadeSetting = prefsRef.current.crossfadeSeconds
-      if (!audioEngine.supportsVolumeFade()) return
+      if (!audioEngine.supportsCrossfade()) return
       const crossfadeOn = fadeSetting > 0
       const tier = getNetworkTier()
       // Lagu berikutnya SELALU disiapkan lebih awal (seperti StreamBeats), juga saat ping bagus dan tanpa crossfade,
       // sehingga pindah lagu tanpa jeda.
-      const lead = tier === 'good' ? GOOD_TIER_PRELOAD_LEAD_S : PRELOAD_LEAD_BY_TIER_S[tier]
+      // Mesin native memuat lagu berikutnya lebih awal (45 dtk) supaya cadangan sudah siap walau JS tertahan di latar belakang.
+      const lead = Math.max(tier === 'good' ? GOOD_TIER_PRELOAD_LEAD_S : PRELOAD_LEAD_BY_TIER_S[tier], audioEngine.preloadLeadSeconds())
       const { repeat } = prefsRef.current
       // Lagu yang akan diulang tidak bertukar dengan lagu lain.
-      if (repeat === 'one' || (repeat === 'once' && !replayedRef.current)) return
+      if (repeat === 'one' || (repeat === 'once' && !replayedRef.current)) {
+        audioEngine.setAutoAdvance(false)
+        return
+      }
       // Lagu pendek: jangan sampai fade memakan lebih dari sepertiganya.
       const fade = Math.min(crossfadeOn ? fadeSetting : GAPLESS_FADE_S, duration / 3)
       // Kapan peralihan dimulai (sisa detik): saat crossfade = sepanjang fade; tanpa crossfade = sesaat sebelum selesai.
@@ -1037,7 +1064,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           try {
             const info = await fetchPlaybackInfo(nextTrack, { signal: entry.controller.signal })
             if (preloadRef.current !== entry) return
-            if (!audioEngine.preload(info.audioUrl)) {
+            if (!audioEngine.preload(info.audioUrl, diskCacheKey(nextTrack, info))) {
               preloadRef.current = null // belum bisa dipakai; dicoba lagi pada timeupdate berikutnya
               return
             }
@@ -1073,6 +1100,12 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       if (preload.status === 'failed') {
         if (Date.now() >= preload.retryAt && remaining > 1) startFetch(preload)
         return
+      }
+      // Mesin native boleh pindah sendiri saat lagu selesai bila lagu berikutnya valid (bukan klip ~30 dtk, durasi sudah dikenal).
+      if (preload.status === 'ready' && preload.info) {
+        const expected = parseDurationText(nextTrack.duration)
+        const loaded = audioEngine.preloadDuration(preload.info.audioUrl)
+        audioEngine.setAutoAdvance(!(expected !== null && loaded === null) && !isLikelyClip(loaded, expected))
       }
       if (preload.status !== 'ready' || !preload.info || remaining > switchAt) return
       // Saat waktunya tiba, mulai crossfade walau lagu cadangan belum ter-buffer penuh: browser mobile sering
@@ -1272,7 +1305,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
   const { queue, currentIndex, shuffleOrder } = state
   const { shuffle, repeat, crossfadeSeconds } = prefs
-  const crossfadeSupported = audioEngine.supportsVolumeFade()
+  const crossfadeSupported = audioEngine.supportsCrossfade()
   const queueState = useMemo<PlayerQueueState>(
     () => ({
       hasPrevious: hasPrevious(queue, currentIndex, shuffleOrder),

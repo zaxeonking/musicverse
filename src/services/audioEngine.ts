@@ -1,5 +1,6 @@
 import { isNativeApp } from '../native/platform'
-import { bindEqElement, getEqState, isCorsSafe, isEqBound } from './equalizer'
+import { bindEqElement, getEqState, isCorsSafe, isEqBound, subscribeEq } from './equalizer'
+import { MusicVerseNative, type NativeEngineEvent } from '../native/musicVerseNative'
 import type { PlayerErrorCode } from '../types/player'
 
 /**
@@ -24,6 +25,8 @@ export type AudioEngineEventType =
   | 'seeked'
   | 'ended'
   | 'error'
+  /** Hanya mesin native: pindah ke lagu cadangan terjadi di native (lagu aktif selesai) tanpa menunggu JS. */
+  | 'advanced'
 
 export interface AudioEngineEvent {
   type: AudioEngineEventType
@@ -174,7 +177,44 @@ function getSilentLoopUrl(): string {
   return silentLoopUrl
 }
 
+/** URL file lokal Capacitor (https://localhost/_capacitor_file_/...) -> file:// yang bisa dibaca ExoPlayer. */
+function toNativeUrl(url: string): string {
+  const match = /^https?:\/\/localhost\/_capacitor_file_(\/.*)$/.exec(url)
+  return match ? `file://${match[1]}` : url
+}
+
+function isUnimplemented(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null
+  const text = typeof e?.message === 'string' ? e.message.toLowerCase() : ''
+  return e?.code === 'UNIMPLEMENTED' || text.includes('not implemented') || text.includes('unimplemented')
+}
+
+/** Cermin keadaan ExoPlayer di sisi JS (posisi diekstrapolasi di antara event). */
+interface NativeMirror {
+  pos: number
+  at: number
+  playing: boolean
+  duration: number | null
+  seekable: boolean
+  ahead: number
+  url: string | null
+  cacheKey: string | null
+}
+
 class AudioEngine {
+  /**
+   * true = lagu diputar ExoPlayer di PlaybackService (APK v0.4.0+). null = belum diputuskan; false = web / APK lama
+   * (jatuh ke elemen <audio>). Crossfade hanya ada di jalur <audio>.
+   */
+  private nativeMode: boolean | null = null
+  private nativeListenerReady: Promise<void> | null = null
+  private nativeVolumeSent = 1
+  /** Pemutar cadangan native (lagu berikutnya) dan batas waktu crossfade native yang sedang berjalan. */
+  private readonly nativeStandby = { ready: false, error: false, duration: null as number | null }
+  private nativeFadeUntil = 0
+  private nativeAutoAdvance = false
+  private standbyCacheKey: string | null = null
+  private readonly mirror: NativeMirror = { pos: 0, at: 0, playing: false, duration: null, seekable: false, ahead: 0, url: null, cacheKey: null }
   /** Elemen aktif: satu-satunya yang event-nya diteruskan ke pendengar. */
   private audio: HTMLAudioElement | null = null
   /** Elemen cadangan: memuat lagu berikutnya untuk crossfade; senyap sampai dipakai. */
@@ -228,6 +268,114 @@ class AudioEngine {
     }
     if (event.type === 'ended' || event.type === 'error') this.keeperLinger()
     this.emitFrom(audio, event.type as AudioEngineEventType)
+  }
+
+  private isNative(): boolean {
+    if (this.nativeMode === null) this.nativeMode = isNativeApp()
+    return this.nativeMode
+  }
+
+  private ensureNativeListener(): Promise<void> {
+    if (this.nativeListenerReady) return this.nativeListenerReady
+    const ready = MusicVerseNative.addListener('engineEvent', (event) => this.handleNativeEvent(event)).then(() => {
+      subscribeEq(() => this.pushNativeEq())
+    })
+    this.nativeListenerReady = ready
+    // Gagal mendaftar: izinkan percobaan ulang pada pemuatan berikutnya.
+    ready.catch(() => {
+      if (this.nativeListenerReady === ready) this.nativeListenerReady = null
+    })
+    return ready
+  }
+
+  private pushNativeEq(): void {
+    const eq = getEqState()
+    void MusicVerseNative.engineSetEq({ enabled: eq.enabled, gains: eq.gains }).catch(() => {})
+  }
+
+  private nativeNow(): number {
+    return performance.now() / 1000
+  }
+
+  private handleNativeEvent(event: NativeEngineEvent): void {
+    // Sama dengan handleDomEvent: selama tak ada sumber yang diminta, event sisa lagu lama diabaikan.
+    if (event.type === 'standby_ready' || event.type === 'standby_error') {
+      if (this.standbySource === null) return
+      if (event.type === 'standby_ready') {
+        this.nativeStandby.ready = true
+        this.nativeStandby.duration = typeof event.duration === 'number' && event.duration > 0 ? event.duration : null
+      } else {
+        this.nativeStandby.error = true
+      }
+      return
+    }
+    if (event.type === 'advanced') {
+      const url = this.standbySource
+      if (url === null || this.activeSource === null) return
+      this.adoptNativeStandby(url, 0)
+      this.emit({
+        type: 'advanced',
+        currentTime: 0,
+        duration: this.mirror.duration,
+        ended: false,
+        seekable: event.seekable,
+      })
+      return
+    }
+    if (this.activeSource === null) return
+    const m = this.mirror
+    m.pos = event.currentTime
+    m.at = this.nativeNow()
+    m.duration = typeof event.duration === 'number' && event.duration > 0 ? event.duration : null
+    m.seekable = event.seekable
+    m.ahead = event.ahead
+    if (event.type === 'playing') m.playing = true
+    else if (event.type === 'waiting' || event.type === 'pause' || event.type === 'ended' || event.type === 'error') m.playing = false
+
+    if (event.type === 'play' || event.type === 'playing') {
+      this.userPaused = false
+      this.interrupted = false
+    } else if (event.type === 'pause' && !event.ended) {
+      if (event.reason !== 'focus') {
+        // Jeda biasa / headset dicabut: bukan gangguan, jangan diputar ulang otomatis.
+        this.userPaused = true
+      } else if (!this.userPaused && !this.interrupted) {
+        this.interrupted = true
+        for (const listener of [...this.interruptListeners]) listener()
+      }
+    }
+    this.emit({
+      type: event.type,
+      currentTime: event.currentTime,
+      duration: m.duration,
+      ended: event.ended,
+      seekable: event.seekable,
+      mediaErrorCode: event.type === 'error' ? event.errorCode : undefined,
+    })
+  }
+
+  /** Kirim volume akhir (master x akhir-lagu) ke ExoPlayer; perubahan kecil dilewati agar fade tidak membanjiri jembatan. */
+  private applyNativeVolume(force = false): void {
+    const value = Math.min(1, Math.max(0, this.masterGain * this.trackEndGain))
+    if (!force && Math.abs(value - this.nativeVolumeSent) < 0.01 && !(value === 0 || value === 1)) return
+    if (value === this.nativeVolumeSent) return
+    this.nativeVolumeSent = value
+    void MusicVerseNative.engineSetVolume({ volume: value }).catch(() => {})
+  }
+
+  private async nativeLoad(url: string, startMs: number, cacheKey: string | null): Promise<void> {
+    await this.ensureNativeListener()
+    const nativeUrl = toNativeUrl(url)
+    this.mirror.url = nativeUrl
+    this.mirror.cacheKey = cacheKey
+    this.nativeAutoAdvance = false
+    await MusicVerseNative.engineLoad({ url: nativeUrl, startMs, cacheKey: cacheKey ?? undefined })
+    this.pushNativeEq()
+    this.applyNativeVolume(true)
+  }
+
+  private resetNativeMirror(): void {
+    Object.assign(this.mirror, { pos: 0, at: this.nativeNow(), playing: false, duration: null, seekable: false, ahead: 0 })
   }
 
   private emitFrom(audio: HTMLAudioElement, type: AudioEngineEventType) {
@@ -332,6 +480,7 @@ class AudioEngine {
 
   /** False di perangkat yang mengabaikan `audio.volume` (iOS Safari): fade/crossfade tidak tersedia. */
   supportsVolumeFade(): boolean {
+    if (this.isNative()) return true // volume diatur lewat ExoPlayer.setVolume
     if (this.volumeControl === null) this.volumeControl = detectVolumeControl()
     return this.volumeControl
   }
@@ -344,6 +493,10 @@ class AudioEngine {
   }
 
   private applyAllVolumes() {
+    if (this.isNative()) {
+      this.applyNativeVolume()
+      return
+    }
     if (this.audio) this.applyVolume(this.audio)
     if (this.standby) this.applyVolume(this.standby)
   }
@@ -391,8 +544,14 @@ class AudioEngine {
     }
   }
 
+  /** Crossfade tersedia di kedua jalur: dua elemen <audio> (web) atau dua ExoPlayer (APK). */
+  supportsCrossfade(): boolean {
+    return this.supportsVolumeFade()
+  }
+
   /** True selama dua lagu masih saling memudar. */
   isCrossfading(): boolean {
+    if (this.isNative()) return performance.now() < this.nativeFadeUntil
     return this.ramps.some((item) => item.target !== 'master')
   }
 
@@ -401,7 +560,8 @@ class AudioEngine {
    * Volume dikembalikan penuh SETELAH jeda, jadi saat dilanjutkan suaranya normal.
    */
   fadeOutAndPause(durationMs: number): void {
-    if (!this.audio || this.activeSource === null || this.audio.paused) return
+    if (this.activeSource === null) return
+    if (this.isNative() ? !this.mirror.playing : !this.audio || this.audio.paused) return
     if (!this.supportsVolumeFade() || durationMs <= 0) {
       this.pause()
       return
@@ -430,6 +590,8 @@ class AudioEngine {
   /** Mengembalikan semua volume ke penuh, membatalkan fade, dan melepas elemen cadangan. */
   private resetFades(): void {
     this.epoch++
+    this.nativeFadeUntil = 0
+    this.nativeAutoAdvance = false
     this.clearRamps()
     this.masterGain = 1
     this.trackEndGain = 1
@@ -452,7 +614,18 @@ class AudioEngine {
   }
 
   /** Memuat lagu berikutnya di elemen cadangan (tanpa memutar). False jika belum bisa dipakai. */
-  preload(url: string): boolean {
+  preload(url: string, cacheKey?: string): boolean {
+    if (this.isNative()) {
+      if (this.activeSource === null || this.isCrossfading()) return false
+      if (this.standbySource === url) return true
+      this.standbySource = url
+      Object.assign(this.nativeStandby, { ready: false, error: false, duration: null })
+      this.standbyCacheKey = cacheKey ?? null
+      void MusicVerseNative.engineStandbyLoad({ url: toNativeUrl(url), cacheKey }).catch(() => {
+        if (this.standbySource === url) this.nativeStandby.error = true
+      })
+      return true
+    }
     this.element()
     const standby = this.standby
     if (!standby || this.activeSource === null || this.isCrossfading() || !this.supportsVolumeFade()) return false
@@ -468,11 +641,20 @@ class AudioEngine {
 
   /** Membuang lagu yang sudah dimuat di elemen cadangan. */
   clearPreload(): void {
+    if (this.isNative()) {
+      if (this.standbySource !== null && !this.isCrossfading()) {
+        this.standbySource = null
+        this.setAutoAdvance(false)
+        void MusicVerseNative.engineClearStandby().catch(() => {})
+      }
+      return
+    }
     if (this.standbySource !== null && !this.isCrossfading()) this.releaseStandby()
   }
 
   /** Detik audio yang sudah ter-buffer di depan posisi putar lagu aktif (0 jika tidak ada). */
   bufferedAhead(): number {
+    if (this.isNative()) return this.activeSource === null ? 0 : this.mirror.ahead
     const audio = this.audio
     if (!audio) return 0
     const t = audio.currentTime
@@ -485,6 +667,7 @@ class AudioEngine {
 
   /** Durasi (detik) audio yang dimuat di elemen cadangan untuk `url`; null jika belum diketahui. */
   preloadDuration(url: string): number | null {
+    if (this.isNative()) return this.standbySource === url ? this.nativeStandby.duration : null
     const standby = this.standby
     if (!standby || this.standbySource !== url) return null
     return Number.isFinite(standby.duration) && standby.duration > 0 ? standby.duration : null
@@ -496,6 +679,9 @@ class AudioEngine {
    * elemen yang belum diputar.
    */
   isPreloadReady(url: string, lenient = false): boolean {
+    if (this.isNative()) {
+      return this.standbySource === url && !this.nativeStandby.error && (lenient || this.nativeStandby.ready)
+    }
     const standby = this.standby
     if (standby === null || this.standbySource !== url || standby.error) return false
     return lenient || standby.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
@@ -508,6 +694,7 @@ class AudioEngine {
    * Event dari elemen baru langsung diteruskan setelah berpindah.
    */
   async crossfadeToStandby(durationMs: number): Promise<boolean> {
+    if (this.isNative()) return this.nativeCrossfade(durationMs)
     const incoming = this.standby
     const outgoing = this.audio
     const url = this.standbySource
@@ -538,6 +725,52 @@ class AudioEngine {
     return true
   }
 
+  private async nativeCrossfade(durationMs: number): Promise<boolean> {
+    const url = this.standbySource
+    if (url === null || this.activeSource === null) return false
+    const epoch = this.epoch
+    try {
+      const { switched } = await MusicVerseNative.engineCrossfade({ durationMs: Math.round(durationMs) })
+      if (!switched || epoch !== this.epoch) return false
+    } catch {
+      return false
+    }
+    this.adoptNativeStandby(url, durationMs)
+    return true
+  }
+
+  /** Lagu cadangan menjadi lagu aktif (setelah crossfade dari JS atau pindah otomatis di native). */
+  private adoptNativeStandby(url: string, fadeMs: number): void {
+    this.activeSource = url
+    this.standbySource = null
+    this.nativeAutoAdvance = false
+    this.nativeFadeUntil = performance.now() + fadeMs
+    Object.assign(this.mirror, {
+      pos: 0,
+      at: this.nativeNow(),
+      playing: true,
+      duration: this.nativeStandby.duration,
+      seekable: true,
+      ahead: 0,
+      url: toNativeUrl(url),
+      cacheKey: this.standbyCacheKey,
+    })
+    this.userPaused = false
+    this.interrupted = false
+  }
+
+  /** Detik lagu berikutnya mulai dimuat lebih awal di mesin native (cadangan bisa langsung dipakai walau JS tertahan). */
+  preloadLeadSeconds(): number {
+    return this.isNative() ? 45 : 0
+  }
+
+  /** Mesin native: izinkan/larang native pindah sendiri ke lagu cadangan saat lagu aktif selesai. */
+  setAutoAdvance(on: boolean): void {
+    if (!this.isNative() || this.nativeAutoAdvance === on) return
+    this.nativeAutoAdvance = on
+    void MusicVerseNative.engineSetAutoAdvance({ on }).catch(() => {})
+  }
+
   /** Menyelesaikan crossfade yang sedang berjalan seketika: lagu lama dilepas, lagu baru volume penuh. */
   private settleCrossfade() {
     if (!this.isCrossfading()) return
@@ -557,6 +790,14 @@ class AudioEngine {
    * agar crossfade nanti (tanpa gestur) boleh memutarnya.
    */
   prime(): void {
+    if (this.isNative()) {
+      // ExoPlayer tidak butuh "membuka kunci" gestur; cukup hentikan lagu lama.
+      this.resetFades()
+      this.activeSource = null
+      this.resetNativeMirror()
+      void MusicVerseNative.engineStop().catch(() => {})
+      return
+    }
     const audio = this.element()
     this.keeperPlay()
     this.resetFades()
@@ -574,7 +815,22 @@ class AudioEngine {
   }
 
   /** Memuat dan memutar URL. Resolve = play() diterima; status "playing" tetap menunggu event. */
-  async load(url: string): Promise<void> {
+  async load(url: string, cacheKey?: string): Promise<void> {
+    if (this.isNative()) {
+      this.userPaused = false
+      this.interrupted = false
+      this.activeSource = url
+      this.resetNativeMirror()
+      try {
+        await this.nativeLoad(url, 0, cacheKey ?? null)
+        return
+      } catch (error) {
+        if (!isUnimplemented(error)) throw new AudioEngineError('unknown', 'Mesin audio native gagal memuat lagu.')
+        // APK lama tanpa ExoPlayer: pakai elemen <audio> seperti sebelumnya.
+        this.nativeMode = false
+        console.warn('[MusicVerse] APK ini belum punya mesin ExoPlayer: memakai <audio> WebView. Pasang APK versi terbaru.')
+      }
+    }
     const prepared = this.prepareSource(this.element(), url)
     const audio = prepared.audio
     this.userPaused = false
@@ -591,6 +847,21 @@ class AudioEngine {
   }
 
   async resume(): Promise<void> {
+    if (this.isNative()) {
+      if (this.activeSource === null) throw new AudioEngineError('unknown', 'Tidak ada audio yang dimuat.')
+      this.userPaused = false
+      try {
+        const { loaded } = await MusicVerseNative.engineResume()
+        if (!loaded) {
+          // Service sudah berhenti (jeda lama): muat ulang dari posisi terakhir.
+          const url = this.mirror.url ?? toNativeUrl(this.activeSource)
+          await this.nativeLoad(url, Math.round(Math.max(0, this.getLiveTime() ?? 0) * 1000), this.mirror.cacheKey)
+        }
+      } catch {
+        throw new AudioEngineError('unknown', 'Audio gagal diputar.')
+      }
+      return
+    }
     if (!this.audio || this.activeSource === null) {
       throw new AudioEngineError('unknown', 'Tidak ada audio yang dimuat.')
     }
@@ -604,6 +875,15 @@ class AudioEngine {
   }
 
   pause(): void {
+    if (this.isNative()) {
+      this.userPaused = true
+      this.interrupted = false
+      this.ramps = this.ramps.filter((item) => item.target !== 'master')
+      this.masterGain = 1
+      this.applyNativeVolume()
+      void MusicVerseNative.enginePause().catch(() => {})
+      return
+    }
     // Jeda manual di tengah fade/crossfade: selesaikan dulu, lalu jeda; volume kembali penuh untuk lanjut.
     this.userPaused = true
     this.interrupted = false
@@ -631,6 +911,13 @@ class AudioEngine {
    * dan di WebView Android bisa lebih jarang). Dipakai lirik agar sorotan baris tidak telat. null = tak ada audio aktif.
    */
   getLiveTime(): number | null {
+    if (this.isNative()) {
+      if (this.activeSource === null) return null
+      const m = this.mirror
+      let t = m.pos + (m.playing ? this.nativeNow() - m.at : 0)
+      if (m.duration !== null) t = Math.min(t, m.duration)
+      return Math.max(0, t)
+    }
     const audio = this.audio
     if (!audio || this.activeSource === null) return null
     return Number.isFinite(audio.currentTime) ? audio.currentTime : null
@@ -638,6 +925,7 @@ class AudioEngine {
 
   /** Durasi audio aktif langsung dari elemen audio (null = belum diketahui / stream tanpa durasi). */
   getLiveDuration(): number | null {
+    if (this.isNative()) return this.activeSource === null ? null : this.mirror.duration
     const audio = this.audio
     if (!audio || this.activeSource === null) return null
     return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null
@@ -649,6 +937,15 @@ class AudioEngine {
    * Nilai dijepit ke rentang yang bisa di-seek.
    */
   seek(seconds: number): number | null {
+    if (this.isNative()) {
+      const m = this.mirror
+      if (this.activeSource === null || !Number.isFinite(seconds) || !m.seekable) return null
+      const target = Math.max(0, m.duration !== null ? Math.min(seconds, m.duration) : seconds)
+      m.pos = target
+      m.at = this.nativeNow()
+      void MusicVerseNative.engineSeek({ positionMs: Math.round(target * 1000) }).catch(() => {})
+      return target
+    }
     const audio = this.audio
     if (!audio || this.activeSource === null || !Number.isFinite(seconds) || !isSeekable(audio)) return null
     const last = audio.seekable.length - 1
@@ -662,6 +959,12 @@ class AudioEngine {
     this.userPaused = true
     this.interrupted = false
     this.activeSource = null
+    if (this.isNative()) {
+      this.resetFades()
+      this.resetNativeMirror()
+      void MusicVerseNative.engineStop().catch(() => {})
+      return
+    }
     this.keeperLinger()
     this.resetFades()
     const audio = this.audio
