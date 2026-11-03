@@ -32,16 +32,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # Cache Gradle (unduhan dependensi + build cache): build kedua dan seterusnya jauh lebih cepat.
-      - uses: gradle/actions/setup-gradle@v4
-
-      # Cache npm (tanpa package-lock.json, jadi dikunci pada package.json).
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
-          restore-keys: npm-${{ runner.os }}-
-
       - name: Periksa secret penandatanganan
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -71,7 +61,7 @@ jobs:
 
       - name: Build APK release (belum bertanda tangan)
         working-directory: android
-        run: ./gradlew assembleRelease --build-cache --parallel
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Tanda tangani APK
         env:
