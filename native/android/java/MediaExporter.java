@@ -64,7 +64,7 @@ final class MediaExporter {
       done.put(MediaStore.MediaColumns.IS_PENDING, 0);
       resolver.update(uri, done, null, null);
       return null;
-    } catch (RuntimeException | IOException e) {
+    } catch (RuntimeException e) {
       return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
     }
   }
