@@ -216,3 +216,64 @@ export function moveTrackInMyPlaylist(list: readonly MyPlaylist[], id: string, f
     return { ...p, tracks, updatedAt: now }
   })
 }
+
+export interface TransferResult {
+  /** Lagu yang benar-benar ditambahkan ke playlist tujuan. */
+  added: number
+  /** Lagu yang sudah ada di playlist tujuan (tidak ditambah dua kali). */
+  duplicates: number
+  /** Lagu yang tidak bisa masuk karena playlist tujuan penuh; tetap di playlist asal. */
+  kept: number
+}
+
+/**
+ * Menyalin (`copy`) atau memindahkan (`move`) lagu dari satu playlist ke playlist lain dalam SATU perubahan,
+ * jadi pindah tidak pernah menghilangkan lagu di tengah jalan. `trackIds` = ID lagu di playlist asal; null = semua.
+ * Pada `move`, lagu yang sudah ada di tujuan ikut dihapus dari asal (hasil akhirnya sama dengan memindahkan);
+ * lagu yang tak muat (batas jumlah lagu tercapai) tetap di asal.
+ */
+export function transferTracks(
+  list: readonly MyPlaylist[],
+  fromId: string,
+  toId: string,
+  trackIds: readonly string[] | null,
+  mode: 'copy' | 'move',
+  now = Date.now(),
+): MyPlaylistChange<TransferResult> {
+  if (fromId === toId) return { ok: false, reason: 'invalid' }
+  const from = list.find((item) => item.id === fromId)
+  const to = list.find((item) => item.id === toId)
+  if (!from || !to) return { ok: false, reason: 'missing' }
+  const wanted = trackIds === null ? from.tracks : from.tracks.filter((track) => trackIds.includes(track.id))
+  if (wanted.length === 0) return { ok: false, reason: 'missing' }
+
+  const known = new Set(to.tracks.map(trackIdentity))
+  const nextTo = [...to.tracks]
+  const leaving = new Set<string>()
+  let added = 0
+  let duplicates = 0
+  let kept = 0
+  for (const track of wanted) {
+    const identity = trackIdentity(track)
+    if (known.has(identity)) {
+      duplicates += 1
+      leaving.add(track.id)
+    } else if (nextTo.length >= MAX_MY_PLAYLIST_TRACKS) {
+      kept += 1
+    } else {
+      known.add(identity)
+      nextTo.push({ ...toStoredTrack(track), id: `${uid()}-${extractTrackId(track.url) ?? 'track'}` })
+      added += 1
+      leaving.add(track.id)
+    }
+  }
+
+  const next = list.map((item) => {
+    if (item.id === toId) return added > 0 ? { ...item, tracks: nextTo, updatedAt: now } : item
+    if (item.id === fromId && mode === 'move' && leaving.size > 0) {
+      return { ...item, tracks: item.tracks.filter((track) => !leaving.has(track.id)), updatedAt: now }
+    }
+    return item
+  })
+  return { ok: true, list: next, value: { added, duplicates, kept } }
+}

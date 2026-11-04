@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { useLibrary } from '../../context/LibraryContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useLongPress } from '../../hooks/useLongPress'
 import { useLyrics } from '../../hooks/useLyrics'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { noticeMessage } from '../../utils/libraryNotice'
@@ -27,6 +28,10 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const now = useNowPlaying()
   const { notice, dismissNotice } = useLibrary()
   const { openTrackMenu } = useTrackMenu()
+  // Tahan lama pada sampul atau judul = menu lagu yang sedang diputar.
+  const press = useLongPress(() => {
+    if (currentTrack) openTrackMenu(currentTrack, { place: 'player' })
+  })
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
@@ -265,14 +270,14 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} />
             </div>
           ) : (
-            <div className="w-[min(100%,38dvh,26rem)] shadow-2xl shadow-black/50">
+            <div {...press} className="w-[min(100%,38dvh,26rem)] select-none shadow-2xl shadow-black/50 [-webkit-touch-callout:none]">
               <CoverArt cover={now.cover} src={now.coverSrc} />
             </div>
           )}
         </div>
 
         <div className="space-y-4 sm:space-y-5">
-          <div className="min-w-0">
+          <div {...press} className="min-w-0 select-none [-webkit-touch-callout:none]">
             <h2 title={now.title} className="line-clamp-2 break-words font-display text-2xl font-bold leading-tight text-ink">
               {now.title}
             </h2>
@@ -296,7 +301,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
-              onClick={() => openTrackMenu(currentTrack)}
+              onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
               aria-haspopup="dialog"
               className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-ink transition-colors hover:border-accent active:bg-white/10 focus-ring"
             >

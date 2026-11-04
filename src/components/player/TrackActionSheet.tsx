@@ -1,5 +1,5 @@
 import { isNativeApp } from '../../native/platform'
-import { ArrowDownToLine, ArrowUpToLine, ExternalLink, Play, Trash2 } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, ExternalLink, MoreHorizontal, Play, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
@@ -19,6 +19,8 @@ interface TrackActionSheetProps {
   onPlayNext: () => void
   onMoveToEnd: () => void
   onRemove: () => void
+  /** Membuka menu lagu umum (simpan ke playlist, unduh, ...) untuk lagu ini. Bila kosong, barisnya tidak tampil. */
+  onMore?: () => void
   onClose: () => void
 }
 
@@ -34,6 +36,7 @@ export default function TrackActionSheet({
   onPlayNext,
   onMoveToEnd,
   onRemove,
+  onMore,
   onClose,
 }: TrackActionSheetProps) {
   useOverlayHistory(true, onClose)
@@ -105,6 +108,7 @@ export default function TrackActionSheet({
               </a>
             </li>
           )}
+          {onMore && <Action icon={MoreHorizontal} label="Opsi lainnya" hint="Simpan ke playlist, unduh, dan lainnya" onClick={onMore} />}
           <Action icon={Trash2} label="Hapus dari antrean" onClick={onRemove} danger />
         </ul>
       </div>

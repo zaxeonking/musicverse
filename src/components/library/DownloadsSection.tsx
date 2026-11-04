@@ -83,7 +83,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
   const { openFullPlayer } = usePlayerUiActions()
   // Tahan lama: menu lagu yang sama dengan di playlist (tambah ke playlist, antrean, hapus unduhan, dst.).
   // Lagu unduhan berdiri sendiri, jadi boleh dimasukkan ke antrean mana pun (seperti hasil Cari).
-  const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true }))
+  const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true, place: 'downloads' }))
   const isCurrent = activity !== 'none'
   const highlighted = selected || isCurrent
   const Icon = activity === 'playing' ? PauseLines : activity === 'loading' ? Loader2 : Play

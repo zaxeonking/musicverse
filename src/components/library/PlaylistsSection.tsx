@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { usePlaylist } from '../../context/PlaylistContext'
+import { useTrackMenu } from '../../context/TrackMenuContext'
+import { useLongPress } from '../../hooks/useLongPress'
 import { isNativeApp } from '../../native/platform'
 import type { LibrarySort, LibraryView, MyPlaylist, SavedPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
@@ -13,6 +15,7 @@ import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
 import NewPlaylistForm from './NewPlaylistForm'
+import PlaylistMenuSheet from './PlaylistMenuSheet'
 import SavedPlaylistCard from './SavedPlaylistCard'
 
 const sortOptions: { id: LibrarySort; label: string }[] = [
@@ -29,14 +32,16 @@ type Entry =
   | { kind: 'mine'; id: string; title: string; at: number; playlist: MyPlaylist }
   | { kind: 'saved'; id: string; title: string; at: number; playlist: SavedPlaylist }
 
-function MyPlaylistCard({ playlist, layout }: { playlist: MyPlaylist; layout: LibraryView }) {
+function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; layout: LibraryView; onMenu: (playlist: MyPlaylist) => void }) {
+  // Tahan lama (atau klik kanan) membuka menu kecil; klik/ketukan yang menyusul tidak ikut membuka playlist.
+  const press = useLongPress(() => onMenu(playlist))
   const fallback = useMemo(() => fallbackCover(playlist.name), [playlist.name])
   const count = playlist.tracks.length
   const subtitle = `Buatanmu · ${count === 0 ? 'kosong' : `${count} lagu`}`
 
   if (layout === 'list') {
     return (
-      <li>
+      <li {...press}>
         <Link
           to={`/my/${playlist.id}`}
           className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-raised focus-ring"
@@ -56,7 +61,7 @@ function MyPlaylistCard({ playlist, layout }: { playlist: MyPlaylist; layout: Li
   }
 
   return (
-    <li>
+    <li {...press}>
       <Link
         to={`/my/${playlist.id}`}
         className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised focus-ring"
@@ -82,7 +87,10 @@ export default function PlaylistsSection() {
   const { playlist: active, restorePlaylist } = usePlaylist()
   const { saved, prefs, removePlaylist, setPrefs } = useLibrary()
   const { playlists: mine, createPlaylist } = useMyPlaylists()
+  const { showToast } = useTrackMenu()
   const [creating, setCreating] = useState(false)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const menuPlaylist = menuId === null ? undefined : mine.find((item) => item.id === menuId)
   const sectionRef = useRef<HTMLDivElement>(null)
   const activeId = active?.id ?? null
 
@@ -206,7 +214,7 @@ export default function PlaylistsSection() {
           >
             {entries.map((entry) =>
               entry.kind === 'mine' ? (
-                <MyPlaylistCard key={entry.id} playlist={entry.playlist} layout={prefs.view} />
+                <MyPlaylistCard key={entry.id} playlist={entry.playlist} layout={prefs.view} onMenu={(item) => setMenuId(item.id)} />
               ) : (
                 <SavedPlaylistCard
                   key={entry.id}
@@ -220,6 +228,10 @@ export default function PlaylistsSection() {
             )}
           </ul>
 
+          {entries.some((entry) => entry.kind === 'mine') && (
+            <p className="text-xs text-ink-faint">Tahan lama playlist buatanmu untuk menyalin atau memindahkan semua lagunya.</p>
+          )}
+
           {saved.length > 0 && (
             <p className="text-xs text-ink-faint">
               {isNativeApp()
@@ -229,6 +241,7 @@ export default function PlaylistsSection() {
           )}
         </div>
       )}
+      {menuPlaylist && <PlaylistMenuSheet playlist={menuPlaylist} onClose={() => setMenuId(null)} onToast={showToast} />}
     </section>
   )
 }

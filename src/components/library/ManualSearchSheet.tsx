@@ -1,5 +1,6 @@
-import { AlertCircle, Loader2, Music2, RotateCw, Video } from 'lucide-react'
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { AlertCircle, Loader2, Music2, RotateCw } from 'lucide-react'
+import { Component, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import { downloadWithPick, findManualCandidates } from '../../native/downloads'
 import type { ManualCandidate } from '../../plugins/types'
@@ -12,6 +13,34 @@ interface ManualSearchSheetProps {
   title: string
   onClose: () => void
   onToast: (message: string) => void
+}
+
+/** Galat saat menampilkan hasil muncul DI DALAM sheet (bukan layar gelap tanpa isi), lengkap dengan tombol tutup. */
+class SheetBoundary extends Component<{ children: ReactNode; onClose: () => void }, { message: string | null }> {
+  state: { message: string | null } = { message: null }
+
+  static getDerivedStateFromError(error: unknown): { message: string } {
+    return { message: error instanceof Error ? error.message : String(error) }
+  }
+
+  componentDidCatch(error: unknown): void {
+    console.error('[MusicVerse] Cari manual gagal ditampilkan:', error)
+  }
+
+  render(): ReactNode {
+    if (this.state.message === null) return this.props.children
+    return (
+      <div className="px-4 py-4">
+        <p className="flex items-start gap-2 text-sm text-danger">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          Terjadi galat: {this.state.message}
+        </p>
+        <button type="button" onClick={this.props.onClose} className="btn-secondary mt-3 h-11 w-full text-sm">
+          Tutup
+        </button>
+      </div>
+    )
+  }
 }
 
 type SearchState = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; results: ManualCandidate[] }
@@ -54,21 +83,23 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-[62]">
-      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
+  // Portal ke <body>: lepas dari wadah halaman (transform / overflow) yang bisa menyembunyikan sheet di luar layar.
+  return createPortal(
+    <div className="fixed inset-0 z-[80]" style={{ position: 'fixed', inset: 0 }}>
+      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-black/60" />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Cari manual untuk ${title}`}
         onKeyDown={onKeyDown}
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
       >
         <div className="px-4 pb-3 pt-4">
           <p className="text-sm font-semibold text-ink">Pilih sumber yang benar</p>
           <p className="truncate text-xs text-ink-muted">{title}</p>
         </div>
         <div className="border-t border-line">
+          <SheetBoundary onClose={onClose}>
           {state.status === 'loading' && (
             <p className="flex items-center gap-3 px-4 py-5 text-sm text-ink-muted">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -96,7 +127,7 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
                 {state.results.map((hit) => (
                   <Action
                     key={`${hit.pluginId}:${hit.id}`}
-                    icon={hit.pluginId === 'ytvideo' ? Video : Music2}
+                    icon={Music2}
                     label={hit.title}
                     hint={[hit.artist, hit.durationSec !== null ? formatTime(hit.durationSec) : 'durasi ?', hit.pluginName].filter(Boolean).join(' · ')}
                     onClick={() => choose(hit)}
@@ -108,8 +139,10 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
               </p>
             </>
           )}
+          </SheetBoundary>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

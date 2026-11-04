@@ -36,7 +36,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const { openTrackMenu } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
-  const longPress = useLongPress(() => openTrackMenu(track, { fromSearch }))
+  const longPress = useLongPress(() => openTrackMenu(track, { fromSearch, place: fromSearch ? 'search' : 'playlist' }))
   const number = index + 1
   const isCurrent = activity !== 'none'
   const highlighted = selected || isCurrent

@@ -7,6 +7,7 @@ import {
   createMyPlaylist,
   deleteMyPlaylist,
   moveTrackInMyPlaylist,
+  transferTracks as transferTracksIn,
   MY_PLAYLISTS_KEY,
   readMyPlaylists,
   removeTrackFromMyPlaylist,
@@ -15,6 +16,7 @@ import {
   type BulkAddResult,
   type MyPlaylistChange,
   type MyPlaylistFailure,
+  type TransferResult,
 } from '../utils/myPlaylistStorage'
 
 /** Alasan gagal: kegagalan aturan (lihat MyPlaylistFailure) atau penyimpanan perangkat. */
@@ -39,6 +41,11 @@ export interface MyPlaylistsContextValue {
   saveDownloadedPlaylist: (sourceId: string, name: string, tracks: readonly PlaylistTrack[]) => MyPlaylistResult<{ playlist: MyPlaylist } & BulkAddResult>
   removeTrack: (playlistId: string, trackId: string) => MyPlaylistResult<MyPlaylist>
   moveTrack: (playlistId: string, from: number, to: number) => MyPlaylistResult<MyPlaylist>
+  /**
+   * Menyalin (`copy`) atau memindahkan (`move`) lagu antar playlist buatanmu dalam satu perubahan.
+   * `trackIds` = ID lagu di playlist asal; null = semua lagunya.
+   */
+  transferTracks: (fromId: string, toId: string, trackIds: readonly string[] | null, mode: 'copy' | 'move') => MyPlaylistResult<TransferResult>
 }
 
 const MyPlaylistsContext = createContext<MyPlaylistsContextValue | null>(null)
@@ -132,6 +139,11 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
   )
   const removeTrack = useCallback((id: string, trackId: string) => mutate((l) => removeTrackFromMyPlaylist(l, id, trackId)), [mutate])
   const moveTrack = useCallback((id: string, from: number, to: number) => mutate((l) => moveTrackInMyPlaylist(l, id, from, to)), [mutate])
+  const transferTracks = useCallback(
+    (fromId: string, toId: string, trackIds: readonly string[] | null, mode: 'copy' | 'move') =>
+      mutate((l) => transferTracksIn(l, fromId, toId, trackIds, mode)),
+    [mutate],
+  )
 
   /* Tab lain mengubah playlist: ikuti. */
   useEffect(() => {
@@ -159,8 +171,9 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       saveDownloadedPlaylist,
       removeTrack,
       moveTrack,
+      transferTracks,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>
