@@ -1,6 +1,13 @@
 import { resolveOfflinePlayback } from '../native/offline'
 import type { DownloadQuality } from '../plugins/quality'
 import { resolveViaPluginsDetailed } from '../plugins/registry'
+import {
+  ImporterError,
+  importSpotifyPlaylist,
+  importSpotifyTrack,
+  searchSpotifyTrack,
+  type TrackMeta,
+} from '../plugins/spotifyImporter'
 import type {
   ApiSourceName,
   PlaybackInfo,
@@ -274,6 +281,80 @@ async function requestJson(endpoint: string, options: RequestJsonOptions): Promi
   return body
 }
 
+/** Berapa kali importer langsung ke Spotify diulang (setelah percobaan pertama) sebelum jatuh ke API pihak ketiga. */
+export const IMPORTER_MAX_RETRIES = 5
+const IMPORTER_RETRY_BASE_MS = 800
+const IMPORTER_RETRY_MAX_MS = 5_000
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve()
+    const timer = setTimeout(done, ms)
+    function done(): void {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
+
+/**
+ * Menjalankan importer langsung ke Spotify, diulang sampai IMPORTER_MAX_RETRIES kali dengan jeda naik. Mengembalikan
+ * null bila semua percobaan gagal (atau tak ada gunanya diulang), sehingga pemanggil boleh memakai API pihak ketiga
+ * sebagai cadangan terakhir. Pembatalan melempar SpotifyApiError('aborted').
+ */
+async function withImporterRetry<T>(
+  label: string,
+  run: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T | null> {
+  for (let attempt = 0; attempt <= IMPORTER_MAX_RETRIES; attempt += 1) {
+    if (signal?.aborted) throw new SpotifyApiError('aborted', 'Permintaan dibatalkan.')
+    try {
+      return await run()
+    } catch (error) {
+      if (signal?.aborted || (error instanceof ImporterError && error.aborted)) {
+        throw new SpotifyApiError('aborted', 'Permintaan dibatalkan.', { originalError: error })
+      }
+      const retryable = !(error instanceof ImporterError) || error.retryable
+      console.warn(
+        `[MusicVerse] ${label} langsung gagal (${attempt + 1}/${IMPORTER_MAX_RETRIES + 1}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      if (!retryable || attempt === IMPORTER_MAX_RETRIES) return null
+      await sleep(Math.min(IMPORTER_RETRY_BASE_MS * 2 ** attempt, IMPORTER_RETRY_MAX_MS), signal)
+    }
+  }
+  return null
+}
+
+async function importPlaylistDirect(
+  playlistId: string,
+  signal: AbortSignal | undefined,
+): Promise<SpotifyApiPlaylistResponse | null> {
+  return withImporterRetry(
+    'Impor Spotify',
+    async () => parsePlaylistResponse(await importSpotifyPlaylist(playlistId, { signal })),
+    signal,
+  )
+}
+
+function toPlaybackInfo(meta: TrackMeta): PlaybackInfo {
+  return {
+    title: meta.title,
+    artist: meta.artist,
+    album: meta.album,
+    duration: meta.duration,
+    year: meta.year,
+    cover: meta.cover,
+    spotifyUrl: meta.spotifyUrl,
+    // Hanya info lagu; audio selalu dari plugin (YouTube) saat diputar/diunduh.
+    audioUrl: '',
+  }
+}
+
 export async function fetchPlaylist(
   playlistUrl: string,
   options: FetchPlaylistOptions = {},
@@ -285,13 +366,17 @@ export async function fetchPlaylist(
     throw new SpotifyApiError('invalid_url', validation.message)
   }
 
-  const body = await requestJson(buildPlaylistEndpoint(validation.normalizedUrl), {
-    signal,
-    timeoutMs,
-    httpMessage: httpErrorMessage,
-  })
-
-  const parsed = parsePlaylistResponse(body)
+  // 1) Langsung ke Spotify (importer). 2) Hanya jika semua percobaan gagal: api.nexadev.my.id sebagai cadangan.
+  let parsed = await importPlaylistDirect(validation.playlistId, signal)
+  if (!parsed) {
+    console.warn('[MusicVerse] Importer Spotify gagal; memakai API pihak ketiga sebagai cadangan.')
+    const body = await requestJson(buildPlaylistEndpoint(validation.normalizedUrl), {
+      signal,
+      timeoutMs,
+      httpMessage: httpErrorMessage,
+    })
+    parsed = parsePlaylistResponse(body)
+  }
 
   const tracks: PlaylistTrack[] = parsed.tracks.map((track, index) => ({
     ...track,
@@ -493,6 +578,12 @@ export async function searchTrackByTitle(
   query: string,
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
+  const text = query.trim()
+  if (!text) throw new SpotifyApiError('invalid_query', 'Judul lagu kosong, audio tidak bisa dicari.')
+  // 1) Pencarian langsung di Spotify. 2) Hanya jika gagal (setelah retry): endpoint play nexadev sebagai cadangan.
+  const meta = await withImporterRetry('Pencarian judul', () => searchSpotifyTrack(text, { signal: options.signal }), options.signal)
+  if (meta) return toPlaybackInfo(meta)
+  console.warn('[MusicVerse] Pencarian Spotify langsung gagal; memakai API pihak ketiga sebagai cadangan.')
   return requestPlayback(query, options)
 }
 
@@ -503,6 +594,12 @@ export async function searchTrackByLink(
 ): Promise<PlaybackInfo> {
   const link = extractSpotifyTrackLink(trackUrl)
   if (!link) throw new SpotifyApiError('invalid_url', 'Tautan lagu Spotify tidak valid.')
+  const trackId = extractTrackId(link)
+  if (trackId) {
+    const meta = await withImporterRetry('Info lagu', () => importSpotifyTrack(trackId, { signal: options.signal }), options.signal)
+    if (meta) return toPlaybackInfo(meta)
+    console.warn('[MusicVerse] Info lagu langsung dari Spotify gagal; memakai API pihak ketiga sebagai cadangan.')
+  }
   return requestTrack(link, options)
 }
 

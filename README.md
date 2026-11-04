@@ -63,7 +63,7 @@ Tombol X di form menghapus playlist (termasuk cache).
 Sumber audio saat memutar atau mengunduh lagu (sama seperti StreamBeats, tanpa API pihak ketiga):
 1. Plugin `ytmusic`: cari di YouTube Music, lalu ambil stream langsung dari YouTube (klien ANDROID, lalu IOS).
 2. Plugin `ytvideo`: bila YouTube Music tidak punya lagunya, cari video biasa di YouTube dengan pengambil stream yang sama.
-3. `api.nexadev.my.id` hanya untuk info playlist/lagu Spotify (judul, artis, durasi, sampul); audionya TIDAK pernah dipakai.
+3. Spotify (judul, artis, durasi, sampul; audionya TIDAK pernah dipakai): impor playlist, info satu lagu dari tautan, dan pencarian judul langsung ke Spotify lewat importer (token -> API partner -> API resmi -> embed; hanya di APK). `api.nexadev.my.id` hanya cadangan setelah importer gagal 6x (1 + 5 retry); galat yang pasti sama bila diulang (400/403/404, hasil kosong) langsung ke cadangan.
 
 Bila kedua plugin gagal, pemutaran/unduhan memberi galat yang jelas (jaringan, waktu habis, tidak ditemukan, atau tidak cocok) dan
 mengulang di sumber yang sama; tidak ada pindah ke layanan lain. Plugin memakai HTTP native (`CapacitorHttp`), jadi audio hanya jalan di APK;

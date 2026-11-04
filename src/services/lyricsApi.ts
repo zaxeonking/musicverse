@@ -36,7 +36,7 @@ export class LyricsError extends Error {
   }
 }
 
-interface LrclibRecord {
+export interface LrclibRecord {
   trackName: string
   artistName: string
   duration: number | null
@@ -165,17 +165,37 @@ export function matchesTrack(record: { trackName: string; artistName: string }, 
 }
 
 /** Kandidat yang cocok judul + artis, diurutkan: durasi paling dekat dulu, yang bertanda waktu diutamakan. */
-function rankCandidates(records: LrclibRecord[], durationS: number | null, title: string, artist: string): LrclibRecord[] {
+/** Jumlah baris lirik yang berisi (bertanda waktu atau polos); dipakai menilai kelengkapan antar-sumber. */
+function lyricLineCount(record: LrclibRecord): number {
+  if (record.syncedLyrics) {
+    const n = parseLrc(record.syncedLyrics).length
+    if (n > 0) return n
+  }
+  return record.plainLyrics ? record.plainLyrics.split(/\r?\n/).filter((line) => line.trim() !== '').length : 0
+}
+
+/** Penalti skor untuk lirik yang jauh lebih pendek dari versi terpanjang sumber lain (kemungkinan tidak lengkap). */
+export function incompletenessPenalty(lines: number, maxLines: number): number {
+  if (maxLines <= 0 || lines <= 0) return 0
+  const ratio = lines / maxLines
+  return ratio < 0.6 ? 25 : ratio < 0.8 ? 10 : 0
+}
+
+export function rankCandidates(records: LrclibRecord[], durationS: number | null, title: string, artist: string): LrclibRecord[] {
   const candidates = records
     .filter((r) => r.instrumental || r.syncedLyrics || r.plainLyrics)
     .filter((r) => matchesTrack(r, title, artist))
     .filter((r) => durationS === null || r.duration === null || Math.abs(r.duration - durationS) <= MAX_DURATION_DIFF_S)
     // NetEase tanpa durasi tidak bisa diverifikasi waktunya: lebih baik dilewati daripada lirik ngaco.
     .filter((r) => r.source !== 'netease' || r.duration !== null)
+  // Hybrid: sumber yang jauh lebih pendek dari yang terlengkap (mis. hanya satu bait) dikalahkan, walau bertanda waktu.
+  const counts = new Map(candidates.map((r) => [r, lyricLineCount(r)] as const))
+  const maxLines = Math.max(0, ...counts.values())
   const score = (r: LrclibRecord) =>
     (durationS !== null && r.duration !== null ? Math.abs(r.duration - durationS) : 5) +
     (r.syncedLyrics ? 0 : 20) +
-    (r.source === 'netease' ? 4 : 0) // LRCLIB menang jika kualitasnya kira-kira sama
+    (r.source === 'netease' ? 4 : 0) + // LRCLIB menang jika kualitasnya kira-kira sama
+    (r.instrumental ? 0 : incompletenessPenalty(counts.get(r) ?? 0, maxLines))
   return [...candidates].sort((a, b) => score(a) - score(b))
 }
 

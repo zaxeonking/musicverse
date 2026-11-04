@@ -1,6 +1,7 @@
 import { ClipboardPaste, Link2, Loader2, X } from 'lucide-react'
-import { useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { usePlaylist } from '../../context/PlaylistContext'
+import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
 
 export default function PlaylistImportForm() {
@@ -12,6 +13,33 @@ export default function PlaylistImportForm() {
   const loading = status === 'loading'
   const inputKind = classifyImportInput(value).kind
   const inputRef = useRef<HTMLInputElement>(null)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [focused, setFocused] = useState(false)
+
+  // Saran judul (YouTube Music) saat mengetik judul; ditunda 300 ms dan dibatalkan bila teks berubah lagi.
+  useEffect(() => {
+    if (!focused || loading || inputKind !== 'search') {
+      setSuggestions([])
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      void getSearchSuggestions(value, { signal: controller.signal, limit: 6 }).then((found) => {
+        if (!controller.signal.aborted) setSuggestions(found)
+      })
+    }, 300)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [value, focused, loading, inputKind])
+
+  async function pickSuggestion(text: string) {
+    setSuggestions([])
+    setValue(text)
+    setValidationError(null)
+    await loadPlaylist(text)
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -84,6 +112,8 @@ export default function PlaylistImportForm() {
               setValue(next)
               if (validationError) setValidationError(null)
             }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder="Judul lagu, tautan lagu, atau tautan playlist"
             autoComplete="off"
             spellCheck={false}
@@ -111,6 +141,26 @@ export default function PlaylistImportForm() {
             >
               <ClipboardPaste className="h-5 w-5" aria-hidden="true" />
             </button>
+          )}
+          {suggestions.length > 0 && (
+            <ul
+              role="listbox"
+              aria-label="Saran judul"
+              className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl bg-raised py-1 shadow-lg ring-1 ring-white/10"
+            >
+              {suggestions.map((text) => (
+                <li key={text} role="option" aria-selected={false}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void pickSuggestion(text)}
+                    className="block w-full truncate px-4 py-2.5 text-left text-sm text-ink active:bg-white/10"
+                  >
+                    {text}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
         <div className="flex gap-2">
