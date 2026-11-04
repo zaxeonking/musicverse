@@ -60,12 +60,16 @@ Tombol X di form menghapus playlist (termasuk cache).
 
 ## Playback (tahap 4)
 
-Urutan sumber audio saat memutar lagu:
-1. API download `app.kyzznekoo.my.id` (`/api/download/spotify?url=`) → `data.url` (audio).
-2. Cadangan: `GET {BASE}/api/spotify?url={ENCODED_URL_LAGU}` → `data.url` (audio penuh; `data.preview` = cuplikan 30 dtk, TIDAK PERNAH dipakai; `url` kosong = error "tidak ada audio").
-3. Tanpa tautan lagu: `GET {BASE}/api/spotifyplay?q=...` hanya untuk MENEMUKAN tautan lagu; `data.mp3_url` (cuplikan ±30 dtk) TIDAK dipakai sebagai audio.
+Sumber audio saat memutar atau mengunduh lagu (sama seperti StreamBeats, tanpa API pihak ketiga):
+1. Plugin `ytmusic`: cari di YouTube Music, lalu ambil stream langsung dari YouTube (klien ANDROID, lalu IOS).
+2. Plugin `ytvideo`: bila YouTube Music tidak punya lagunya, cari video biasa di YouTube dengan pengambil stream yang sama.
+3. `api.nexadev.my.id` hanya untuk info playlist/lagu Spotify (judul, artis, durasi, sampul); audionya TIDAK pernah dipakai.
 
-**Deteksi klip.** `data.url` dari API kadang tetap klip ±30 dtk. Setelah `loadedmetadata`, durasi file audio yang sebenarnya dibandingkan dengan durasi lagu di playlist (`utils/clipDetect.ts`: ≤35 dtk dan selisih ≥20 dtk = klip). Klip dibuang, API itu dilewati, lalu sumber lain dicoba; jika semua hanya klip, status `error` dengan kode `clip_only`. Pengecekan yang sama berlaku untuk preload crossfade.
+Bila kedua plugin gagal, pemutaran/unduhan memberi galat yang jelas (jaringan, waktu habis, tidak ditemukan, atau tidak cocok) dan
+mengulang di sumber yang sama; tidak ada pindah ke layanan lain. Plugin memakai HTTP native (`CapacitorHttp`), jadi audio hanya jalan di APK;
+di browser biasa YouTube menolak CORS.
+
+**Deteksi klip.** `data.url` dari API kadang tetap klip ±30 dtk. Setelah `loadedmetadata`, durasi file audio yang sebenarnya dibandingkan dengan durasi lagu di playlist (`utils/clipDetect.ts`: ≤35 dtk dan selisih ≥20 dtk = klip). Klip dibuang, plugin itu dilewati, lalu plugin berikutnya dicoba; jika semuanya klip, status `error` dengan kode `clip_only`. Pengecekan yang sama berlaku untuk preload crossfade.
 
 - **Satu engine.** `services/audioEngine.ts` memegang satu `HTMLAudioElement`. `AudioPlayerProvider`
   (di dalam `PlaylistProvider`) memanggil `useAudioPlayerController` sekali. Komponen cukup memakai

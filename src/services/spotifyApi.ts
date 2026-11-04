@@ -1,6 +1,6 @@
 import { resolveOfflinePlayback } from '../native/offline'
 import type { DownloadQuality } from '../plugins/quality'
-import { proxyRemoteUrl, resolveViaPlugins } from '../plugins/registry'
+import { resolveViaPluginsDetailed } from '../plugins/registry'
 import type {
   ApiSourceName,
   PlaybackInfo,
@@ -10,17 +10,13 @@ import type {
   SpotifyApiPlaylistResponse,
   SpotifyApiTrack,
 } from '../types/spotify'
-import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { parseDuration } from '../utils/formatTime'
-import { metadataMismatch, scoreCandidate } from '../utils/matchTrack'
-import { probeAudioDuration } from '../utils/probeAudio'
-import { stripArtistPrefix } from '../utils/trackTitle'
 import { extractSpotifyTrackLink, extractTrackId, isSafeHttpUrl, validateSpotifyPlaylistUrl } from '../utils/spotifyUrl'
 
 const DEFAULT_BASE_URL = 'https://api.nexadev.my.id'
 const PLAYLIST_PATH = '/api/spotifypl'
 const PLAYBACK_PATH = '/api/spotifyplay'
-/** API cadangan untuk memutar lagu lewat tautan Spotify-nya, dipakai jika API download (kyzz) gagal. */
+/** Metadata satu lagu lewat tautan Spotify-nya (HANYA info lagu untuk pencarian; audionya tidak pernah dipakai). */
 const TRACK_PATH = '/api/spotify'
 
 export const DEFAULT_TIMEOUT_MS = 15_000
@@ -40,19 +36,6 @@ export function getBaseUrl(): string {
     if (host && host !== 'localhost' && host !== '127.0.0.1') return '/nexa'
   }
   return DEFAULT_BASE_URL
-}
-
-/* API download berbasis URL lagu (UTAMA; akurat: memutar persis lagu yang ditautkan). API cadangan jadi cadangannya. */
-const DEFAULT_DOWNLOAD_BASE_URL = 'https://app.kyzznekoo.my.id'
-const DOWNLOAD_PATH = '/api/download/spotify'
-/** Nama parameter query untuk tautan lagu. ASUMSI: `url`. Ubah di sini jika API memakai nama lain. */
-const DOWNLOAD_URL_PARAM = 'url'
-
-function getDownloadBaseUrl(): string {
-  const configured = import.meta.env?.VITE_DOWNLOAD_API_BASE_URL?.trim()
-  if (configured) return configured.replace(/\/+$/, '')
-  // Jika API utama dipasang lewat proxy (/nexa), API download otomatis ikut lewat proxy (/kyzz).
-  return getBaseUrl() === '/nexa' ? '/kyzz' : DEFAULT_DOWNLOAD_BASE_URL
 }
 
 /* ------------------------------------------------------------------ */
@@ -422,7 +405,8 @@ async function requestPlayback(
     year: data.year,
     cover: data.cover,
     spotifyUrl: data.spotify_url,
-    audioUrl: data.mp3_url,
+    // `mp3_url` adalah cuplikan ~30 detik dari pihak ketiga dan TIDAK dipakai: audio hanya dari plugin (YouTube).
+    audioUrl: '',
   }
 }
 
@@ -451,64 +435,7 @@ export function describeApiError(error: unknown): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* API download berbasis URL lagu                                      */
-/* ------------------------------------------------------------------ */
-
-export function buildDownloadEndpoint(trackUrl: string): string {
-  return `${getDownloadBaseUrl()}${DOWNLOAD_PATH}?${DOWNLOAD_URL_PARAM}=${encodeURIComponent(trackUrl)}`
-}
-
-/**
- * Memeriksa respons API download. `status: true` saja tidak cukup: `data.url` (audio) harus ada dan
- * berupa URL http(s). Metadata (`data.metadata`) opsional; field yang null dibaca sebagai teks kosong.
- */
-export function parseDownloadResponse(body: unknown, trackUrl: string): PlaybackInfo {
-  if (!isRecord(body)) {
-    throw new SpotifyApiError('invalid_response', 'Respons server bukan objek JSON yang valid.')
-  }
-  if (typeof body.status !== 'boolean') {
-    throw new SpotifyApiError('invalid_response', 'Respons server tidak memiliki field "status".')
-  }
-  if (!body.status) {
-    throw new SpotifyApiError('api', readMessage(body) ?? 'API download melaporkan permintaan gagal.')
-  }
-  const { data } = body
-  if (!isRecord(data)) {
-    throw new SpotifyApiError('invalid_response', 'Data lagu pada respons tidak lengkap.')
-  }
-  const audioUrl = readString(data.url).trim()
-  if (!audioUrl) {
-    throw new SpotifyApiError('no_audio', 'Server tidak menyediakan audio untuk lagu ini.')
-  }
-  if (!isSafeHttpUrl(audioUrl)) {
-    throw new SpotifyApiError('invalid_response', 'URL audio dari server tidak valid.')
-  }
-  const meta = isRecord(data.metadata) ? data.metadata : {}
-  return {
-    title: readString(meta.name),
-    artist: readString(meta.artist),
-    album: readString(meta.album),
-    duration: readString(meta.duration),
-    cover: readString(meta.image),
-    spotifyUrl: trackUrl,
-    audioUrl,
-    apiSource: 'kyzz',
-  }
-}
-
-/** Meminta audio + metadata untuk satu lagu lewat tautan Spotify-nya (selalu permintaan baru). */
-async function requestDownload(trackUrl: string, options: FetchPlaylistOptions = {}): Promise<PlaybackInfo> {
-  const { signal, timeoutMs = PLAYBACK_TIMEOUT_MS } = options
-  const body = await requestJson(buildDownloadEndpoint(trackUrl), {
-    signal,
-    timeoutMs,
-    httpMessage: playbackHttpMessage,
-  })
-  return parseDownloadResponse(body, trackUrl)
-}
-
-/* ------------------------------------------------------------------ */
-/* API cadangan: /api/spotify?url={tautan lagu}                */
+/* Info lagu dari tautan Spotify: /api/spotify?url={tautan lagu}   */
 /* ------------------------------------------------------------------ */
 
 export function buildTrackEndpoint(trackUrl: string): string {
@@ -516,9 +443,8 @@ export function buildTrackEndpoint(trackUrl: string): string {
 }
 
 /**
- * Memeriksa respons /api/spotify. `data.url` = audio penuh (URL bertoken, bisa kedaluwarsa);
- * `data.preview` (cuplikan ~30 detik) SENGAJA diabaikan: hanya audio penuh yang boleh diputar.
- * Melempar SpotifyApiError jika `url` kosong atau bukan URL http(s) yang valid.
+ * Memeriksa respons /api/spotify dan mengambil HANYA info lagunya (judul, artis, durasi, sampul). `data.url` dan
+ * `data.preview` SENGAJA diabaikan: audio hanya berasal dari plugin yang langsung ke YouTube.
  */
 export function parseTrackResponse(body: unknown, trackUrl: string): PlaybackInfo {
   if (!isRecord(body)) {
@@ -535,14 +461,6 @@ export function parseTrackResponse(body: unknown, trackUrl: string): PlaybackInf
     throw new SpotifyApiError('invalid_response', 'Data lagu pada respons tidak lengkap.')
   }
 
-  const fullUrl = readString(data.url).trim()
-  if (fullUrl === '') {
-    throw new SpotifyApiError('no_audio', 'Server tidak menyediakan audio untuk lagu ini.')
-  }
-  if (!isSafeHttpUrl(fullUrl)) {
-    throw new SpotifyApiError('invalid_response', 'URL audio dari server tidak valid.')
-  }
-
   // Judul API cadangan berformat "Judul - Artis"; pakai apa adanya (UI sudah punya judul dari playlist).
   return {
     title: readString(data.title),
@@ -551,12 +469,11 @@ export function parseTrackResponse(body: unknown, trackUrl: string): PlaybackInf
     duration: readString(data.duration),
     cover: readString(data.thumbnail),
     spotifyUrl: trackUrl,
-    audioUrl: fullUrl,
-    apiSource: 'cadangan',
+    audioUrl: '',
   }
 }
 
-/** Meminta audio + metadata satu lagu ke API cadangan (selalu permintaan baru). */
+/** Meminta info (metadata) satu lagu lewat tautan Spotify-nya (selalu permintaan baru). */
 async function requestTrack(trackUrl: string, options: FetchPlaylistOptions = {}): Promise<PlaybackInfo> {
   const { signal, timeoutMs = PLAYBACK_TIMEOUT_MS } = options
   const body = await requestJson(buildTrackEndpoint(trackUrl), {
@@ -567,152 +484,45 @@ async function requestTrack(trackUrl: string, options: FetchPlaylistOptions = {}
   return parseTrackResponse(body, trackUrl)
 }
 
-/**
- * Mengambil info audio lewat tautan lagu: API download (kyzz) dulu, lalu API cadangan.
- * Pembatalan (`aborted`) tidak pernah memicu cadangan.
- */
-async function requestByLink(trackUrl: string, options: FetchPlaylistOptions = {}): Promise<PlaybackInfo> {
-  const avoid = options.avoid ?? []
-  const skipKyzz = avoid.includes('kyzz')
-  const skipBackup = avoid.includes('cadangan')
-  if (skipKyzz && skipBackup) {
-    throw new SpotifyApiError('clip_only', 'Semua sumber hanya menyediakan cuplikan lagu, bukan audio penuh.')
-  }
-  // kyzz (audio penuh) dicoba sampai 3 kali sebelum pindah ke cadangan, karena permintaan kedua dan
-  // seterusnya kadang gagal sesaat (rate limit/timeout).
-  let lastError: unknown
-  if (!skipKyzz) {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        return await requestDownload(trackUrl, options)
-      } catch (error) {
-        if (error instanceof SpotifyApiError && error.code === 'aborted') throw error
-        lastError = error
-        console.warn(`[MusicVerse] API download (kyzz) gagal (percobaan ${attempt}/3):`, error)
-        if (attempt < 3) await new Promise((r) => setTimeout(r, 600 * attempt))
-      }
-    }
-  }
-  if (skipBackup) throw lastError
-  console.warn('[MusicVerse] Memakai API cadangan /spotify:', lastError)
-  return requestTrack(trackUrl, options)
-}
-
 /* ------------------------------------------------------------------ */
-/* Hand-off pencarian → pemutaran                                      */
+/* Pencarian lagu (HANYA info lagu; audio selalu dari plugin)           */
 /* ------------------------------------------------------------------ */
 
-/**
- * Hasil pencarian sudah memuat URL audio. Agar menekan Play tidak memanggil API untuk kedua kalinya,
- * hasilnya disimpan sebentar dan dipakai SEKALI oleh pemutaran berikutnya untuk lagu yang sama.
- * Setelah itu (atau lewat 2 menit) selalu ambil URL audio baru, karena URL bisa bersifat sementara
- * (API download memakai token yang kedaluwarsa).
- * Kunci: tautan lagu Spotify jika ada, jika tidak judul (huruf kecil).
- */
-const HANDOFF_TTL_MS = 2 * 60_000
-const handoff = new Map<string, { info: PlaybackInfo; at: number }>()
-
-function handoffKey(title: string, url: string | undefined): string {
-  return extractSpotifyTrackLink(url ?? '') ?? `judul:${title.trim().toLowerCase()}`
-}
-
-function putHandoff(key: string, info: PlaybackInfo): void {
-  const now = Date.now()
-  for (const [k, entry] of handoff) if (now - entry.at > HANDOFF_TTL_MS) handoff.delete(k)
-  handoff.set(key, { info, at: now })
-}
-
-function takeHandoff(key: string): PlaybackInfo | null {
-  const entry = handoff.get(key)
-  if (!entry) return null
-  handoff.delete(key)
-  return Date.now() - entry.at <= HANDOFF_TTL_MS ? entry.info : null
-}
-
-/** Mencari lagu lewat judul (endpoint play lama; server memilih lagu terdekat, TIDAK selalu akurat). */
+/** Mencari lagu lewat judul (endpoint play lama; server memilih lagu terdekat). Hanya info lagunya yang dipakai. */
 export async function searchTrackByTitle(
   query: string,
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
-  // Endpoint judul (spotifyplay) hanya dipakai untuk menemukan lagu + tautannya. `mp3_url`-nya
-  // adalah cuplikan ~30 detik, jadi TIDAK dipakai: audio selalu diambil ulang lewat tautan lagu
-  // (API download kyzz -> API cadangan /api/spotify), yaitu audio penuh.
-  const found = await requestPlayback(query, options)
-  const link = extractSpotifyTrackLink(found.spotifyUrl ?? '')
-  if (!link) throw new SpotifyApiError('no_audio', 'Tautan lagu tidak ditemukan, audio penuh tidak bisa diambil.')
-  const full = await requestByLink(link, options)
-  const info: PlaybackInfo = {
-    ...full,
-    title: full.title || found.title,
-    artist: full.artist || found.artist,
-    album: full.album || found.album,
-    duration: full.duration || found.duration,
-    year: found.year,
-    cover: full.cover || found.cover,
-    spotifyUrl: link,
-  }
-  putHandoff(handoffKey(info.title || query, link), info)
-  return info
+  return requestPlayback(query, options)
 }
 
-/** Memuat satu lagu lewat tautan Spotify-nya (akurat). Urutan: API download (kyzz) → API cadangan /spotify. */
+/** Memuat info satu lagu lewat tautan Spotify-nya. Audionya diambil terpisah oleh plugin saat diputar/diunduh. */
 export async function searchTrackByLink(
   trackUrl: string,
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
   const link = extractSpotifyTrackLink(trackUrl)
   if (!link) throw new SpotifyApiError('invalid_url', 'Tautan lagu Spotify tidak valid.')
-  const info = await requestByLink(link, options)
-  putHandoff(handoffKey(info.title, link), info)
-  return info
+  return requestTrack(link, options)
 }
 
-/** Skor minimum agar kandidat langsung dipakai tanpa mencoba sumber lain. */
-const ACCEPT_SCORE = 0.7
-
-interface Candidate {
-  name: 'kyzz' | 'cadangan'
-  info: PlaybackInfo
-  score: number
-  fit: number | null
-  actual: number | null
-}
-
-/** API download (kyzz) dicoba sampai 3 kali: permintaan kedua dst. kadang gagal sesaat (rate limit/timeout). */
-async function requestDownloadWithRetry(link: string, options: FetchPlaylistOptions): Promise<PlaybackInfo> {
-  let lastError: unknown
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      return await requestDownload(link, options)
-    } catch (error) {
-      if (error instanceof SpotifyApiError && error.code === 'aborted') throw error
-      lastError = error
-      console.warn(`[MusicVerse] API download (kyzz) gagal (percobaan ${attempt}/3):`, error)
-      if (attempt < 3) await new Promise((r) => setTimeout(r, 600 * attempt))
-    }
-  }
-  throw lastError
+/** Kunci sumber untuk `avoid` (mis. `plugin:ytmusic`); undefined bila tidak diketahui (mis. lagu offline). */
+export function avoidKeyOf(info: PlaybackInfo): ApiSourceName | undefined {
+  if (info.source?.startsWith('plugin:')) return info.source as ApiSourceName
+  return undefined
 }
 
 /**
- * Info playback untuk pemutaran. Sumber dicoba berurutan (kyzz, lalu API cadangan). Setiap hasil DIVERIFIKASI
- * terhadap data lagu di playlist: judul, artis, dan durasi file audio yang sebenarnya (metadata audio dibaca
- * langsung, bukan durasi dari JSON API yang tidak bisa dipercaya). Hasil yang cocok langsung dipakai; jika
- * tidak, sumber berikutnya dicoba dan yang paling cocok dipilih. Audio yang durasinya jelas tidak sesuai
- * (cuplikan atau lagu lain) tidak pernah diputar.
+ * Info playback untuk pemutaran/unduhan. Audio HANYA dari plugin yang langsung ke sumbernya (YouTube Music, lalu
+ * YouTube), seperti StreamBeats; tidak ada API pihak ketiga. Setiap hasil DIVERIFIKASI: judul, artis, dan durasi file
+ * audio yang sebenarnya (metadata audio dibaca langsung). Audio yang durasinya jelas tidak sesuai (cuplikan atau lagu
+ * lain) tidak pernah diputar.
  */
 export async function fetchPlaybackInfo(
   track: { title: string; url?: string; artists?: string; duration?: string },
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
-  const info = await resolvePlaybackInfo(track, options)
-  // Pemutaran: audio dari API pihak ketiga ikut lewat proxy lokal native supaya sinyal putus sebentar tidak menghentikan
-  // lagu (proxy menyambung dari byte terakhir). Unduhan memakai pengunduh native sendiri; lagu offline tidak perlu.
-  if (!options.strict && info.source !== 'offline' && info.apiSource !== 'plugin') {
-    const proxied = await proxyRemoteUrl(info.audioUrl)
-    if (proxied !== info.audioUrl) return { ...info, audioUrl: proxied }
-  }
-  return info
+  return resolvePlaybackInfo(track, options)
 }
 
 async function resolvePlaybackInfo(
@@ -723,10 +533,6 @@ async function resolvePlaybackInfo(
   const offline = options.strict ? null : await resolveOfflinePlayback(track)
   if (offline) return offline
 
-  // Hasil hand-off bisa saja klip yang baru ditolak; saat ada API yang dihindari, selalu ambil baru.
-  const handed = options.avoid?.length || options.strict ? null : takeHandoff(handoffKey(track.title, track.url))
-  if (handed) return handed
-
   const external = options.signal
   const aborted = () => new SpotifyApiError('aborted', 'Permintaan dibatalkan.')
   if (external?.aborted) throw aborted()
@@ -734,91 +540,24 @@ async function resolvePlaybackInfo(
   const wanted = { title: track.title, artists: track.artists ?? '', duration: track.duration ?? '', url: track.url }
   const expected = parseDuration(wanted.duration)
 
-  // Plugin (YouTube Music, dst.): ambil stream langsung dari sumbernya, tanpa API perantara. Dulu mode unduhan dan
-  // percobaan ulang (`avoid`) SELALU melewati plugin, jadi setiap unduhan memakai API pihak ketiga. Sekarang plugin ikut
-  // dipakai di unduhan (dengan pemeriksaan ketat), dan baru dilewati bila plugin sendiri yang terbukti memberi hasil salah
-  // (`avoid` memuat 'plugin'). Jika plugin gagal atau tidak cocok, lanjut ke alur API lama di bawah.
-  if (!options.avoid?.includes('plugin')) {
-    const viaPlugin = await resolveViaPlugins(wanted, { signal: external, expected, strict: options.strict, quality: options.quality })
-    if (external?.aborted) throw aborted()
-    if (viaPlugin) return viaPlugin
-  }
+  const { info, outcome } = await resolveViaPluginsDetailed(wanted, {
+    signal: external,
+    expected,
+    strict: options.strict,
+    quality: options.quality,
+    avoid: options.avoid,
+  })
+  if (external?.aborted || outcome === 'aborted') throw aborted()
+  if (info) return info
 
-  let link = extractSpotifyTrackLink(track.url ?? '')
-  if (!link) {
-    // Tanpa tautan: cari lewat judul hanya untuk menemukan tautan lagu, lalu ambil audio penuhnya.
-    // `mp3_url` dari endpoint judul adalah cuplikan ~30 detik, jadi tidak pernah dipakai.
-    const titleQuery = [stripArtistPrefix(track.title, track.artists ?? ''), track.artists?.split(/\s*[,&;]\s*/)[0]]
-      .filter(Boolean)
-      .join(' ')
-    const found = await requestPlayback(titleQuery, options)
-    link = extractSpotifyTrackLink(found.spotifyUrl ?? '')
-    if (!link) throw new SpotifyApiError('no_audio', 'Tautan lagu tidak ditemukan.')
+  switch (outcome) {
+    case 'timeout':
+      throw new SpotifyApiError('timeout', 'Sinyal lambat: sumber audio (YouTube) belum menjawab. Coba lagi.')
+    case 'failed':
+      throw new SpotifyApiError('network', 'Sumber audio (YouTube) tidak bisa dihubungi. Periksa koneksi lalu coba lagi.')
+    case 'rejected':
+      throw new SpotifyApiError('clip_only', 'Audio yang ditemukan di YouTube tidak sesuai dengan lagunya (durasi/judul).')
+    default:
+      throw new SpotifyApiError('no_audio', 'Lagu ini tidak ditemukan di YouTube Music maupun YouTube.')
   }
-
-  const avoid = options.avoid ?? []
-  const order = (['kyzz', 'cadangan'] as const).filter((name) => !avoid.includes(name))
-  if (order.length === 0) {
-    throw new SpotifyApiError('clip_only', 'Semua sumber hanya menyediakan audio yang tidak sesuai dengan lagunya.')
-  }
-
-  const candidates: Candidate[] = []
-  let lastError: unknown
-  for (const name of order) {
-    if (external?.aborted) throw aborted()
-    let info: PlaybackInfo
-    try {
-      info = name === 'kyzz' ? await requestDownloadWithRetry(link, options) : await requestTrack(link, options)
-    } catch (error) {
-      if (error instanceof SpotifyApiError && error.code === 'aborted') throw error
-      lastError = error
-      console.warn(`[MusicVerse] Sumber ${name} gagal:`, error)
-      continue
-    }
-    if (options.strict) {
-      const mismatch = metadataMismatch(wanted, info)
-      if (mismatch) {
-        console.warn(`[MusicVerse] Sumber ${name} ditolak untuk unduhan: ${mismatch}`)
-        lastError = new SpotifyApiError('clip_only', mismatch)
-        continue
-      }
-    }
-    const actual = await probeAudioDuration(info.audioUrl, 7000, external)
-    if (external?.aborted) throw aborted()
-    if (options.strict && actual !== null) {
-      // Unduhan: durasi file harus sangat dekat dengan lagu di playlist (dua arah). Yang tak terbaca ditangani
-      // setelah berkas terunduh (dibaca ulang dari berkas lokal).
-      const problem = strictDurationProblem(actual, expected)
-      if (problem) {
-        console.warn(`[MusicVerse] Sumber ${name} ditolak untuk unduhan: ${problem}`)
-        lastError = new SpotifyApiError('clip_only', problem)
-        continue
-      }
-    }
-    const fit = durationFit(actual, expected)
-    const score = scoreCandidate(wanted, info, true, actual, Boolean(options.strict))
-    console.info(
-      `[MusicVerse] Kandidat ${name}: skor ${score.toFixed(2)}, durasi audio ${actual?.toFixed(1) ?? '?'} dtk ` +
-        `(playlist ${expected ?? '?'} dtk), judul "${info.title}", artis "${info.artist}"`,
-    )
-    candidates.push({ name, info: { ...info, source: name, ...(actual !== null ? { probedDuration: actual } : {}) }, score, fit, actual })
-    // Cocok (judul, artis, durasi) dan bukan klip: pakai langsung, tidak perlu menunggu sumber lain.
-    if ((fit === null || fit >= 0.7) && !isLikelyClip(actual, expected) && score >= ACCEPT_SCORE) break
-  }
-
-  if (candidates.length === 0) throw lastError ?? aborted()
-
-  // Terbaik = skor tertinggi; skor sama: sumber yang lebih awal (kyzz) menang.
-  const best = candidates.reduce((a, b) => (b.score > a.score ? b : a))
-  // Durasi audio jelas tidak sesuai (cuplikan atau lagu lain): jangan diputar, lebih baik beri tahu.
-  if (best.fit === 0 || isLikelyClip(best.actual, expected)) {
-    throw new SpotifyApiError(
-      'clip_only',
-      `Audio yang ditemukan (${Math.round(best.actual ?? 0)} dtk) tidak sesuai dengan lagunya (${expected ?? '?'} dtk).`,
-    )
-  }
-  if (options.strict && best.score < ACCEPT_SCORE) {
-    throw new SpotifyApiError('clip_only', `Kecocokan audio dengan lagu di playlist terlalu rendah (skor ${best.score.toFixed(2)}).`)
-  }
-  return best.info
 }

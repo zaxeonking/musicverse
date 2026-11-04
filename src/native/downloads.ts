@@ -1,5 +1,5 @@
 import { Directory, Filesystem } from '@capacitor/filesystem'
-import { fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
+import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
 import { forgetResolved, isNativeUnimplemented } from '../plugins/registry'
 import type { ApiSourceName, PlaybackInfo, PlaylistTrack } from '../types/spotify'
@@ -7,7 +7,7 @@ import { isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { parseDuration } from '../utils/formatTime'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { isSafeHttpUrl } from '../utils/spotifyUrl'
-import { MusicVerseNative, type NativeDownloadResult } from './musicVerseNative'
+import { MusicVerseNative, type NativeDownloadResult, type NativeQueueJob, type NativeQueueResult } from './musicVerseNative'
 import { fetchAndSaveLyrics } from './offlineLyrics'
 import {
   COVER_DIR,
@@ -55,10 +55,15 @@ import { readJson, removeKey, writeJson } from '../utils/safeStorage'
  * artis, album, dan sampul ke dalam berkas (M4A/MP3), mengganti nama .part secara atomik, menulis metadata (jurnal
  * pemulihan) dan, bila dipilih, menyalin ke Music/MusicVerse. APK lama tanpa fungsi ini memakai jalur lama (.mp3, tanpa tag).
  *
- * BATAS: antrean (urutan lagu, verifikasi, penyimpanan metadata) masih di JS dalam proses aplikasi. Bila aplikasi digeser
- * dari recent apps atau dimatikan sistem, lagu yang sedang berjalan berhenti, tetapi `.part` + catatan ukurannya TETAP ada
- * dan disambung saat unduhan lagu itu dijalankan lagi (bukan diulang dari 0). Pada APK lama (tanpa pengunduh native)
- * perilaku lama dipakai: sisa `.part` dibuang dan unduhan diulang. */
+ * ANTREAN NATIVE (v0.4.4, tahap 1): JS tetap menyusun urutan dan me-resolve link (kode plugin ada di JS), tetapi lagu yang
+ * URL-nya siap diserahkan ke `DownloadQueue` (Java). Native mengunduh, memeriksa isi, memverifikasi, menyematkan tag,
+ * menyimpan, menulis metadata, dan mencatat hasilnya di jurnal sendiri. Lagu yang sedang berjalan + `NATIVE_LOOKAHEAD`
+ * lagu di depannya karena itu tetap selesai walau aplikasi digeser dari recent apps; hasilnya dibaca JS saat dibuka lagi
+ * (`syncNative`). APK lama tanpa antrean native memakai jalur JS di bawah, persis seperti sebelumnya.
+ *
+ * BATAS: lagu yang BELUM diserahkan (di luar lookahead, atau yang perlu di-resolve ulang) menunggu aplikasi dibuka lagi, karena
+ * resolve link masih di JS. Memindahkan resolve link ke native adalah tahap 2. Pada APK tanpa antrean native, lagu yang
+ * sedang berjalan berhenti saat app digeser, tetapi `.part` + catatan ukurannya TETAP ada dan disambung saat diunduh lagi. */
 
 interface Job {
   track: PlaylistTrack
@@ -67,6 +72,23 @@ interface Job {
   forced?: boolean
   /** Ditahan satu per satu oleh pengguna: dilewati antrean sampai dilanjutkan. */
   held?: boolean
+  /** Sumber yang sudah dilewati untuk lagu ini (dipakai saat me-resolve ulang). */
+  avoid?: ApiSourceName[]
+  /** Lagu ini sudah (atau sedang) diserahkan ke antrean native lebih awal; `downloadOne` tinggal menunggu hasilnya. */
+  handoff?: Handoff
+}
+
+/** Hasil penyerahan ke antrean native: hasilnya + info sumber yang dipakai (untuk menyingkirkan sumber yang tidak cocok). */
+interface HandoffOutcome {
+  result: NativeQueueResult
+  info: PlaybackInfo
+}
+
+interface Handoff {
+  /** null = penyerahan gagal / dicabut sebelum mulai: lagu diproses dengan jalur biasa. */
+  pending: Promise<HandoffOutcome | null>
+  /** Selesai (true bila sudah diterima native) setelah URL di-resolve dan diserahkan. */
+  ready: Promise<boolean>
 }
 
 /** Dilempar di titik aman saat antrean dijeda; lagunya dikembalikan ke depan antrean, BUKAN dihitung gagal. */
@@ -92,6 +114,15 @@ const activeById = new Map<string, { key: string; title: string; total: number }
 let nativeDownloaderMissing = false
 /** True bila APK belum punya pemeriksa/penyelesai unduhan native (v0.4.1+): jalur lama (.mp3, tanpa tag). */
 let nativeFinalizerMissing = false
+/** True bila APK belum punya antrean native (v0.4.4+): semua langkah unduhan dikerjakan JS seperti sebelumnya. */
+let nativeQueueMissing = false
+/** Berapa lagu di depan yang boleh diserahkan ke antrean native sebelum gilirannya (supaya terus jalan walau app digeser). */
+const NATIVE_LOOKAHEAD = 2
+/** Lagu yang sedang ditunggu hasilnya dari native -> penyelesai. null = dicabut sebelum mulai. */
+const waiters = new Map<string, (result: NativeQueueResult | null) => void>()
+/** Lagu yang sudah dicatat selesai (dari event / sinkronisasi), supaya lirik dan hitungan tidak ganda. */
+const adopted = new Set<string>()
+let prefetching = false
 
 /** Berkas lagu wajar: antara ~88 kbps dan ~336 kbps. Di luar itu hampir pasti bukan lagu yang dimaksud (potongan / berkas lain). */
 const MIN_BYTES_PER_SEC_STRICT = 11_000
@@ -252,6 +283,11 @@ function installProgressListener(): void {
     }).catch(() => {
       // Plugin lama tanpa event ini: progres native tidak tampil, unduhan tetap berjalan.
     })
+    MusicVerseNative.addListener('queueResult', (event) => {
+      void handleNativeResult(event)
+    }).catch(() => {
+      // Plugin lama tanpa antrean native: jalur JS dipakai.
+    })
   }
 }
 
@@ -410,6 +446,211 @@ function isTransientApiError(error: unknown): boolean {
   return error.code !== 'no_audio' && error.code !== 'clip_only' && error.code !== 'aborted'
 }
 
+/* ---------------- antrean native (tahap 1) ----------------
+ * JS tetap me-resolve link (kode plugin ada di JS) lalu menyerahkan lagu yang URL-nya siap ke antrean native
+ * (DownloadQueue.java). Native mengerjakan unduh + verifikasi + tag + simpan sendiri, jadi lagu yang sedang berjalan dan
+ * beberapa lagu di depannya (NATIVE_LOOKAHEAD) tetap selesai walau aplikasi digeser dari recent apps. Hasilnya dicatat di
+ * native (jurnal + metadata) dan dibaca JS lewat event `queueResult` atau `queueSync` saat aplikasi dibuka lagi. */
+
+function buildQueueJob(job: Job, info: PlaybackInfo, sourceUrl: string, expected: number | null): NativeQueueJob {
+  const { track, key } = job
+  const coverUrl = track.cover || info.cover
+  const entry = { key, title: track.title, artists: track.artists, album: track.album, duration: track.duration, url: track.url, cover: track.cover }
+  return {
+    key,
+    url: sourceUrl,
+    userAgent: info.directUserAgent,
+    partPath: `${DOWNLOAD_DIR}/${key}.part.mp3`,
+    finalBase: `${DOWNLOAD_DIR}/${key}`,
+    coverUrl: isSafeHttpUrl(coverUrl) ? coverUrl : undefined,
+    coverPath: `${COVER_DIR}/${key}.jpg`,
+    metaPath: `${META_DIR}/${key}.json`,
+    entryJson: JSON.stringify(entry),
+    title: track.title,
+    artist: track.artists,
+    album: track.album,
+    exportToMusic: getOfflineState().exportMusic,
+    exportName: exportDisplayName(track, 'tmp').slice(0, -'.tmp'.length),
+    expectedSec: expected ?? -1,
+    remoteSec: info.probedDuration ?? -1,
+    forced: job.forced === true,
+    resolvedAt: Date.now(),
+  }
+}
+
+/** Menyerahkan satu lagu ke native. `result` selesai saat native melapor (null = dicabut sebelum mulai). Menolak bila APK lama. */
+async function submitToNative(
+  job: Job,
+  info: PlaybackInfo,
+  sourceUrl: string,
+  expected: number | null,
+): Promise<{ result: Promise<NativeQueueResult | null> }> {
+  installProgressListener()
+  await ensureDir(DOWNLOAD_DIR)
+  await ensureDir(COVER_DIR)
+  const result = new Promise<NativeQueueResult | null>((resolve) => {
+    waiters.set(job.key, resolve)
+  })
+  try {
+    await MusicVerseNative.queueAdd({ job: buildQueueJob(job, info, sourceUrl, expected) })
+  } catch (error) {
+    waiters.delete(job.key)
+    throw error
+  }
+  return { result }
+}
+
+/** Me-resolve dan menyerahkan satu lagu di depan antrean sementara lagu sebelumnya masih berjalan. Gagal = diproses biasa nanti. */
+function startHandoff(job: Job): Handoff {
+  let markReady: (ok: boolean) => void = () => undefined
+  const ready = new Promise<boolean>((resolve) => {
+    markReady = resolve
+  })
+  const pending = (async (): Promise<HandoffOutcome | null> => {
+    try {
+      const info = await fetchPlaybackInfo(job.track, { strict: true, avoid: [...(job.avoid ?? [])], quality: getOfflineState().downloadQuality })
+      const sourceUrl = info.directUrl ?? info.audioUrl
+      if (!isSafeHttpUrl(sourceUrl)) throw new Error('Sumber audio tidak valid.')
+      const handed = await submitToNative(job, info, sourceUrl, parseDuration(job.track.duration))
+      markReady(true)
+      const result = await handed.result
+      return result ? { result, info } : null
+    } catch (error) {
+      if (isNativeUnimplemented(error)) nativeQueueMissing = true
+      markReady(false)
+      return null
+    }
+  })()
+  return { pending, ready }
+}
+
+/** Menjaga NATIVE_LOOKAHEAD lagu di depan sudah diserahkan ke native (hanya saat tidak dijeda dan syarat terpenuhi). */
+async function prefetchAhead(): Promise<void> {
+  if (prefetching || nativeQueueMissing || !isNativeApp()) return
+  prefetching = true
+  try {
+    for (;;) {
+      if (getOfflineState().paused || isHeldByConditions() || nativeQueueMissing) return
+      if (queue.filter((j) => j.handoff).length >= NATIVE_LOOKAHEAD) return
+      const next = queue.find((j) => !j.held && !j.handoff && !j.forced)
+      if (!next) return
+      const handoff = startHandoff(next)
+      next.handoff = handoff
+      if (!(await handoff.ready)) return
+    }
+  } finally {
+    prefetching = false
+  }
+}
+
+/** Mencabut semua lagu yang belum mulai di native (jeda): lagunya kembali ke antrean JS. Yang sudah berjalan diselesaikan. */
+async function releasePrefetched(): Promise<void> {
+  if (nativeQueueMissing || !isNativeApp()) return
+  try {
+    const { released } = await MusicVerseNative.queueRelease()
+    for (const key of released) {
+      const waiter = waiters.get(key)
+      waiters.delete(key)
+      waiter?.(null)
+      const job = queue.find((j) => j.key === key)
+      if (job) job.handoff = undefined
+    }
+  } catch (error) {
+    if (isNativeUnimplemented(error)) nativeQueueMissing = true
+  }
+}
+
+/** Mencabut SATU lagu yang belum mulai di native. False bila sudah berjalan (tidak bisa dihentikan di tengah). */
+async function cancelHandoff(key: string): Promise<boolean> {
+  if (nativeQueueMissing || !isNativeApp()) return false
+  try {
+    const { removed } = await MusicVerseNative.queueCancel({ key })
+    if (removed) {
+      const waiter = waiters.get(key)
+      waiters.delete(key)
+      waiter?.(null)
+    }
+    return removed
+  } catch {
+    return false
+  }
+}
+
+/** Mencatat lagu yang selesai di native: masuk daftar unduhan, keluar dari antrean JS. Aman dipanggil berulang. */
+function adoptNativeDone(result: NativeQueueResult): void {
+  let entry: DownloadedTrack
+  try {
+    entry = JSON.parse(result.entry ?? '') as DownloadedTrack
+  } catch {
+    return
+  }
+  if (typeof entry?.key !== 'string' || typeof entry.fileName !== 'string') return
+  const key = entry.key
+  setItems([entry, ...getOfflineState().items.filter((item) => item.key !== key)])
+  const index = queue.findIndex((j) => j.key === key)
+  if (index !== -1) queue.splice(index, 1)
+  failedJobs.delete(key)
+  setTransfer(key, null)
+  persistQueue()
+  if (!adopted.has(key)) {
+    adopted.add(key)
+    // Lirik usaha terbaik di latar belakang, seperti jalur JS.
+    void fetchAndSaveLyrics(toPlaylistTrack(entry), key)
+  }
+  if (getOfflineState().exportMusic && result.exported === false) {
+    console.warn(`[MusicVerse] Salinan ke folder Musik gagal: ${result.exportError ?? 'tak diketahui'}`)
+  }
+}
+
+/** Hasil yang datang tanpa ada `downloadOne` yang menunggu (app baru dibuka lagi setelah digeser). */
+function takeOrphan(result: NativeQueueResult): void {
+  const job = queue.find((j) => j.key === result.key)
+  if (!job) return
+  if (result.status === 'failed') {
+    const index = queue.indexOf(job)
+    queue.splice(index, 1)
+    failedJobs.set(job.key, { job: { track: job.track, key: job.key }, epoch: sessionEpoch })
+    setTransfer(job.key, { key: job.key, title: job.track.title, status: 'error', percent: null, message: result.message || 'Unduhan gagal.' })
+    persistQueue()
+    return
+  }
+  // handback / verify: tetap di antrean, di-resolve ulang pada gilirannya (sisa .part disambung bila sumbernya sama).
+  if (result.reason === 'rejected') forgetResolved(job.track)
+  job.handoff = undefined
+  setTransfer(job.key, { key: job.key, title: job.track.title, status: 'queued', percent: null, held: job.held })
+}
+
+async function handleNativeResult(result: NativeQueueResult): Promise<void> {
+  if (result.status === 'done') adoptNativeDone(result)
+  const waiter = waiters.get(result.key)
+  waiters.delete(result.key)
+  if (waiter) waiter(result)
+  else if (result.status !== 'done') takeOrphan(result)
+  // Sudah dipegang JS: native boleh menghapusnya dari jurnal.
+  MusicVerseNative.queueAck({ keys: [result.key] }).catch(() => undefined)
+}
+
+/** Dipanggil saat app dibuka: hasil yang terjadi selagi JS mati (lagu selesai, dikembalikan, gagal). */
+async function syncNative(): Promise<void> {
+  if (!isNativeApp() || nativeQueueMissing) return
+  installProgressListener()
+  try {
+    const { results } = await MusicVerseNative.queueSync()
+    for (const result of results) await handleNativeResult(result)
+  } catch (error) {
+    if (isNativeUnimplemented(error)) nativeQueueMissing = true
+  }
+}
+
+/** Syarat Wi-Fi / cas juga dipegang native, supaya tetap dihormati saat JS mati. */
+function pushConditions(): void {
+  if (!isNativeApp() || nativeQueueMissing) return
+  const s = getOfflineState()
+  MusicVerseNative.queueConfigure({ wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly }).catch((error) => {
+    if (isNativeUnimplemented(error)) nativeQueueMissing = true
+  })
+}
+
 async function downloadOne(job: Job): Promise<void> {
   const { track, key, forced } = job
   const title = track.title
@@ -421,110 +662,200 @@ async function downloadOne(job: Job): Promise<void> {
   // Berakhiran .mp3 supaya durasinya bisa dibaca sebelum berkas dianggap sah.
   const partPath = `${DOWNLOAD_DIR}/${key}.part.mp3`
   const expected = parseDuration(track.duration)
-  const avoid: ApiSourceName[] = []
+  const avoid: ApiSourceName[] = [...(job.avoid ?? [])]
   let netFailures = 0
-  /** Sumber menolak URL (HTTP 4xx) berturut-turut; dua kali = plugin dilewati, API lama yang dipakai. */
+  /** Sumber menolak URL (HTTP 4xx) berturut-turut; dua kali = plugin itu dilewati, plugin berikutnya yang dipakai. */
   let httpRejects = 0
   let mismatchRounds = 0
+  /** Penyerahan lebih awal ke antrean native (lihat `prefetchAhead`); dipakai sekali, putaran berikutnya me-resolve sendiri. */
+  let handoff = job.handoff
+  job.handoff = undefined
+  const active = { key, title, total: 0 }
+
+  /**
+   * Menerjemahkan hasil antrean native menjadi langkah berikut: 'done' (berkas sudah jadi, dicatat oleh `adoptNativeDone`),
+   * 'verify' (berkas utuh, durasinya diperiksa JS), atau 'retry' (resolve ulang; hitungan gagal sudah diperbarui).
+   */
+  const applyOutcome = async (outcome: HandoffOutcome): Promise<'done' | 'verify' | 'retry'> => {
+    const out = outcome.result
+    if (out.status === 'done') return 'done'
+    if (out.status === 'verify') return 'verify'
+    if (out.status === 'failed') throw new Error(out.message || 'Unduhan gagal.')
+    console.warn(`[MusicVerse] Antrean native mengembalikan "${title}" (${out.reason ?? 'tanpa alasan'}): ${out.message ?? ''}`)
+    const api = avoidKeyOf(outcome.info)
+    if (out.reason === 'notaudio' || out.reason === 'mismatch') {
+      // Isi tidak cocok: singkirkan sumber itu, atau ulangi semua sumber dari awal bila sudah habis.
+      if (api && !avoid.includes(api)) {
+        avoid.push(api)
+      } else {
+        mismatchRounds += 1
+        if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(out.message || 'Isi unduhan tidak cocok.')
+        avoid.length = 0
+        await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
+      }
+      return 'retry'
+    }
+    // rejected | network | truncated: gangguan sesaat, dicoba lagi (URL ditolak = resolve ulang).
+    netFailures += 1
+    if (out.reason === 'rejected') {
+      forgetResolved(track)
+      httpRejects += 1
+      // Dua kali ditolak berturut-turut: lewati plugin itu dan coba plugin berikutnya (mis. ytmusic -> ytvideo).
+      const rejectedKey = avoidKeyOf(outcome.info)
+      if (httpRejects >= 2 && rejectedKey && !avoid.includes(rejectedKey)) avoid.push(rejectedKey)
+    }
+    if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
+    await waitBeforeRetry(netFailures, job)
+    return 'retry'
+  }
 
   // Unduhan HARUS cocok dengan data lagu di playlist: judul + artis (dicek saat memilih sumber) dan durasi
   // (dicek dari berkas yang benar-benar terunduh). Berkas yang tidak cocok dibuang dan sumber lain dicoba.
-  let info: PlaybackInfo
+  let info!: PlaybackInfo
   let size = 0
   /** Jenis wadah menurut ISI berkas (null = tidak diperiksa: APK lama / pengunduh lama). */
   let container: { ext: string; mime: string } | null = null
   for (;;) {
     throwIfPaused(job)
-    // .part TIDAK dihapus di sini: sisa unduhan yang terputus disambung oleh pengunduh native (lihat NativeDownloader).
-    setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
-    try {
-      info = await fetchPlaybackInfo(track, { strict: true, avoid, quality: getOfflineState().downloadQuality })
-    } catch (error) {
-      // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
-      if (error instanceof SpotifyApiError && error.code === 'clip_only') {
-        mismatchRounds += 1
-        console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
-        if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
-        avoid.length = 0
-        await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
-        continue
-      }
-      if (!isTransientApiError(error)) throw error
-      netFailures += 1
-      console.warn(`[MusicVerse] Gagal mengambil sumber unduhan (percobaan ${netFailures}/${NET_RETRY_MAX}):`, error)
-      if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
-      await waitBeforeRetry(netFailures, job)
-      continue
-    }
-    // Plugin: unduh langsung dari URL asli sumber dengan User-Agent-nya (bukan lewat proxy pemutaran).
-    const sourceUrl = info.directUrl ?? info.audioUrl
-    if (!isSafeHttpUrl(sourceUrl)) throw new Error('Sumber audio tidak valid.')
-    // Titik aman terakhir sebelum unduhan berkas (yang tidak bisa dihentikan di tengah): bila dijeda, berhenti di sini.
-    throwIfPaused(job)
-
-    setTransfer(key, { key, title, status: 'downloading', percent: null, forced })
-    const active = { key, title, total: 0 }
-    let downloadError: unknown = null
-    let triedNative = false
-    if (isNativeApp() && !nativeDownloaderMissing) {
-      triedNative = true
+    let outcome: HandoffOutcome | null = null
+    let sourceUrl = ''
+    if (handoff) {
+      // Lagu ini sudah diserahkan ke native saat lagu sebelumnya masih berjalan; tinggal menunggu hasilnya.
+      setTransfer(key, { key, title, status: 'downloading', percent: null, forced })
       activeById.set(key, active)
       try {
-        const result: NativeDownloadResult = await MusicVerseNative.downloadFile({
-          id: key,
-          url: sourceUrl,
-          userAgent: info.directUserAgent,
-          path: partPath,
-        })
-        if (result.total > 0) active.total = result.total
-        if (result.resumed) console.info(`[MusicVerse] Unduhan "${title}" disambung dari sisa sebelumnya.`)
-      } catch (error) {
-        if (isNativeUnimplemented(error)) {
-          nativeDownloaderMissing = true
-          triedNative = false
-          console.warn('[MusicVerse] APK ini belum punya pengunduh native; memakai pengunduh lama (tanpa resume).')
-        } else {
-          downloadError = error ?? new Error('Unduhan terputus.')
-        }
+        outcome = await handoff.pending
       } finally {
         activeById.delete(key)
       }
-    }
-    if (!triedNative && !downloadError) {
-      // Pengunduh lama (web view): selalu mulai dari awal.
-      await safeDeletePart(partPath)
-      activeUrls.set(info.audioUrl, active)
+      handoff = undefined
+      if (outcome === null) continue
+    } else {
+      // .part TIDAK dihapus di sini: sisa unduhan yang terputus disambung oleh pengunduh native (lihat NativeDownloader).
+      setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
       try {
-        await Filesystem.downloadFile({
-          url: info.audioUrl,
-          path: partPath,
-          directory: Directory.External,
-          recursive: true,
-          progress: true,
-        })
+        info = await fetchPlaybackInfo(track, { strict: true, avoid, quality: getOfflineState().downloadQuality })
       } catch (error) {
-        downloadError = error ?? new Error('Unduhan terputus.')
-      } finally {
-        activeUrls.delete(info.audioUrl)
+        // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
+        if (error instanceof SpotifyApiError && error.code === 'clip_only') {
+          mismatchRounds += 1
+          console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
+          if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
+          avoid.length = 0
+          await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
+          continue
+        }
+        if (!isTransientApiError(error)) throw error
+        netFailures += 1
+        console.warn(`[MusicVerse] Gagal mengambil sumber unduhan (percobaan ${netFailures}/${NET_RETRY_MAX}):`, error)
+        if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
+        await waitBeforeRetry(netFailures, job)
+        continue
+      }
+      // Plugin: unduh langsung dari URL asli sumber dengan User-Agent-nya (bukan lewat proxy pemutaran).
+      sourceUrl = info.directUrl ?? info.audioUrl
+      if (!isSafeHttpUrl(sourceUrl)) throw new Error('Sumber audio tidak valid.')
+      // Titik aman terakhir sebelum unduhan berkas (yang tidak bisa dihentikan di tengah): bila dijeda, berhenti di sini.
+      throwIfPaused(job)
+
+      setTransfer(key, { key, title, status: 'downloading', percent: null, forced })
+      if (isNativeApp() && !nativeQueueMissing) {
+        // Antrean native: unduh + cek isi + verifikasi + tag + simpan dikerjakan thread native, tanpa WebView.
+        activeById.set(key, active)
+        try {
+          const handed = await submitToNative(job, info, sourceUrl, expected)
+          void prefetchAhead()
+          const result = await handed.result
+          if (result) outcome = { result, info }
+          else continue // dicabut sebelum mulai (dijeda): putaran berikut memutuskan
+        } catch (error) {
+          if (isNativeUnimplemented(error)) {
+            nativeQueueMissing = true
+            console.warn('[MusicVerse] APK ini belum punya antrean native; unduhan dikerjakan JS (jalur lama).')
+          } else {
+            throw error
+          }
+        } finally {
+          activeById.delete(key)
+        }
       }
     }
-    if (downloadError) {
-      netFailures += 1
-      const code = typeof (downloadError as { code?: unknown }).code === 'string' ? String((downloadError as { code: string }).code) : ''
-      console.warn(`[MusicVerse] Unduhan terputus (percobaan ${netFailures}/${NET_RETRY_MAX}, ${code || 'tanpa kode'}):`, downloadError)
-      const rejected = /^HTTP_(401|403|404|410)$/.test(code)
-      if (rejected) {
-        // URL kedaluwarsa / ditolak: resolve ulang (cache dibuang). Dua kali berturut-turut = lewati plugin, pakai API lama.
-        forgetResolved(track)
-        httpRejects += 1
-        if (httpRejects >= 2 && !avoid.includes('plugin')) avoid.push('plugin')
+
+    let viaNative = false
+    if (outcome) {
+      const action = await applyOutcome(outcome)
+      if (action === 'done') return
+      if (action === 'retry') continue
+      // 'verify': berkas sudah utuh di .part; periksa durasinya di bawah (pembaca WebView) lalu selesaikan seperti biasa.
+      info = outcome.info
+      active.total = outcome.result.total ?? 0
+      viaNative = true
+    }
+
+    let downloadError: unknown = null
+    let triedNative = viaNative
+    if (!viaNative) {
+      if (isNativeApp() && !nativeDownloaderMissing) {
+        triedNative = true
+        activeById.set(key, active)
+        try {
+          const result: NativeDownloadResult = await MusicVerseNative.downloadFile({
+            id: key,
+            url: sourceUrl,
+            userAgent: info.directUserAgent,
+            path: partPath,
+          })
+          if (result.total > 0) active.total = result.total
+          if (result.resumed) console.info(`[MusicVerse] Unduhan "${title}" disambung dari sisa sebelumnya.`)
+        } catch (error) {
+          if (isNativeUnimplemented(error)) {
+            nativeDownloaderMissing = true
+            triedNative = false
+            console.warn('[MusicVerse] APK ini belum punya pengunduh native; memakai pengunduh lama (tanpa resume).')
+          } else {
+            downloadError = error ?? new Error('Unduhan terputus.')
+          }
+        } finally {
+          activeById.delete(key)
+        }
       }
-      // Pengunduh native menyimpan .part untuk disambung; hapus hanya bila memang tidak bisa disambung / pengunduh lama.
-      const resumable = triedNative && (code === 'NETWORK' || rejected)
-      if (!resumable) await safeDeletePart(partPath)
-      if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
-      await waitBeforeRetry(netFailures, job)
-      continue
+      if (!triedNative && !downloadError) {
+        // Pengunduh lama (web view): selalu mulai dari awal.
+        await safeDeletePart(partPath)
+        activeUrls.set(info.audioUrl, active)
+        try {
+          await Filesystem.downloadFile({
+            url: info.audioUrl,
+            path: partPath,
+            directory: Directory.External,
+            recursive: true,
+            progress: true,
+          })
+        } catch (error) {
+          downloadError = error ?? new Error('Unduhan terputus.')
+        } finally {
+          activeUrls.delete(info.audioUrl)
+        }
+      }
+      if (downloadError) {
+        netFailures += 1
+        const code = typeof (downloadError as { code?: unknown }).code === 'string' ? String((downloadError as { code: string }).code) : ''
+        console.warn(`[MusicVerse] Unduhan terputus (percobaan ${netFailures}/${NET_RETRY_MAX}, ${code || 'tanpa kode'}):`, downloadError)
+        const rejected = /^HTTP_(401|403|404|410)$/.test(code)
+        if (rejected) {
+          // URL kedaluwarsa / ditolak: resolve ulang (cache dibuang). Dua kali berturut-turut = lewati plugin itu, coba berikutnya.
+          forgetResolved(track)
+          httpRejects += 1
+          const rejectedKey = avoidKeyOf(info)
+          if (httpRejects >= 2 && rejectedKey && !avoid.includes(rejectedKey)) avoid.push(rejectedKey)
+        }
+        // Pengunduh native menyimpan .part untuk disambung; hapus hanya bila memang tidak bisa disambung / pengunduh lama.
+        const resumable = triedNative && (code === 'NETWORK' || rejected)
+        if (!resumable) await safeDeletePart(partPath)
+        if (netFailures > NET_RETRY_MAX) throw new Error(BAD_SIGNAL_TEXT)
+        await waitBeforeRetry(netFailures, job)
+        continue
+      }
     }
 
     // Isi berkas harus audio sungguhan (bukan halaman error yang tersimpan sebagai lagu), dan jenis wadahnya menentukan
@@ -538,7 +869,7 @@ async function downloadOne(job: Job): Promise<void> {
           nativeFinalizerMissing = true
         } else if ((error as { code?: unknown } | null)?.code === 'NOT_AUDIO') {
           await safeDeletePart(partPath)
-          const api = info.apiSource
+          const api = avoidKeyOf(info)
           console.warn(`[MusicVerse] Isi unduhan dari ${api ?? 'sumber tak dikenal'} bukan audio; sumber dilewati.`)
           if (api && !avoid.includes(api)) {
             avoid.push(api)
@@ -561,7 +892,7 @@ async function downloadOne(job: Job): Promise<void> {
       break
     }
     await safeDeletePart(partPath)
-    const api = info.apiSource
+    const api = avoidKeyOf(info)
     console.warn(`[MusicVerse] Unduhan dari ${api ?? 'sumber tak dikenal'} ditolak: ${problem.reason}`)
     // Unduhan terpotong karena jaringan: ulangi sumber yang sama beberapa kali sebelum menyerah (sinyal jelek).
     if (problem.retrySame) {
@@ -713,6 +1044,8 @@ async function pump(): Promise<void> {
     running = false
     current = null
     const s = getOfflineState()
+    // Berhenti karena dijeda / menunggu syarat: lagu yang sudah diserahkan ke native tetapi belum mulai dikembalikan.
+    if (queue.length > 0 && (s.paused || isHeldByConditions())) void releasePrefetched()
     if (queue.length > 0 && s.paused) {
       notify('Unduhan dijeda', `${queue.length} lagu menunggu. Buka Unduhan untuk melanjutkan.`, null, true, true, false, 'resume')
     } else if (queue.length > 0 && isHeldByConditions()) {
@@ -735,6 +1068,7 @@ function enqueue(track: PlaylistTrack): EnqueueResult {
   if (state.items.some((item) => item.key === key)) return 'already'
   const current = state.transfers.get(key)
   if (current && current.status !== 'error') return 'busy'
+  adopted.delete(key)
   queue.push({ track, key })
   sessionTotal += 1
   setTransfer(key, { key, title: track.title, status: 'queued', percent: null })
@@ -814,6 +1148,8 @@ export function bulkDownloadText(result: BulkEnqueueResult): string {
 export function cancelQueued(key: string): void {
   const index = queue.findIndex((job) => job.key === key)
   if (index !== -1) {
+    // Sudah diserahkan ke native tetapi belum mulai: cabut juga di sana (yang sudah berjalan tidak bisa dibatalkan).
+    if (queue[index].handoff) void cancelHandoff(key)
     queue.splice(index, 1)
     sessionTotal = Math.max(0, sessionTotal - 1)
   }
@@ -863,6 +1199,8 @@ export function retryAllFailed(): number {
 export function pauseDownloads(): void {
   if (queue.length === 0) return
   setPaused(true)
+  // Lagu yang sudah diserahkan ke native tetapi belum mulai dikembalikan; yang sedang berjalan diselesaikan.
+  void releasePrefetched()
 }
 
 /** Melanjutkan antrean yang dijeda. */
@@ -883,6 +1221,12 @@ export function holdDownload(key: string): boolean {
   const transfer = getOfflineState().transfers.get(key)
   if (transfer?.status === 'downloading') return false
   target.held = true
+  if (target.handoff) {
+    const handoff = target.handoff
+    void cancelHandoff(key).then((removed) => {
+      if (removed && target.handoff === handoff) target.handoff = undefined
+    })
+  }
   if (transfer) setTransfer(key, { ...transfer, held: true })
   return true
 }
@@ -1051,6 +1395,7 @@ async function runUpgrade(): Promise<UpgradeSummary> {
 function saveSettings(): void {
   const s = getOfflineState()
   writeJson(SETTINGS_KEY, { wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly, exportMusic: s.exportMusic, downloadQuality: s.downloadQuality })
+  pushConditions()
 }
 
 /**
@@ -1060,6 +1405,11 @@ function saveSettings(): void {
  */
 export function initDownloads(): void {
   if (!isNativeApp()) return
+  // Hasil antrean native yang terjadi selagi aplikasi mati. Ditunda satu putaran supaya antrean JS sudah dipulihkan di bawah.
+  window.setTimeout(() => {
+    pushConditions()
+    void syncNative()
+  }, 0)
   // Unduhan lama dirapikan pelan-pelan di latar belakang setelah aplikasi tenang (tanpa internet, satu lagu sekali jalan).
   window.setTimeout(() => void upgradeOldDownloads(), 20_000)
   // Tombol Jeda / Lanjutkan di notifikasi unduhan.

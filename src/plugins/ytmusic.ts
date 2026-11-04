@@ -5,7 +5,7 @@ import type { PluginTrackHit, ResolverPlugin, StreamSource } from './types'
  * Plugin YouTube Music (port ringkas dari plugin `ytmusic` Bloomee):
  *  - search : API WEB_REMIX filter "Songs".
  *  - streams: klien ANDROID dulu, lalu IOS; keduanya mengembalikan URL langsung tanpa cipher.
- *    (Cadangan TVHTML5 + dekode cipher belum dibawa; jika keduanya gagal, aplikasi memakai API lama.)
+ *    (Cadangan TVHTML5 + dekode cipher belum dibawa; jika keduanya gagal, aplikasi mencoba plugin `ytvideo`.)
  */
 
 const SEARCH_URL = 'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30&prettyPrint=false'
@@ -200,5 +200,8 @@ async function getStreams(id: string, signal?: AbortSignal): Promise<StreamSourc
   }
   throw lastError
 }
+
+/** Pengambil stream YouTube (klien ANDROID lalu IOS), dipakai bersama oleh plugin `ytvideo`. */
+export { getStreams as getYoutubeStreams }
 
 export const ytMusicPlugin: ResolverPlugin = { id: 'ytmusic', name: 'YouTube Music', search, getStreams }

@@ -93,6 +93,57 @@ export interface NativeDownloadResult {
   resumed: boolean
 }
 
+/** Satu lagu yang URL-nya sudah di-resolve JS, diserahkan ke antrean native (DownloadQueue.java). Semua path relatif terhadap Directory.External. */
+export interface NativeQueueJob {
+  key: string
+  url: string
+  userAgent?: string
+  partPath: string
+  /** Path akhir TANPA ekstensi; native menambahkan ekstensi sesuai isi berkas. */
+  finalBase: string
+  coverUrl?: string
+  coverPath: string
+  metaPath: string
+  /** DownloadedTrack tanpa fileName/bytes/savedAt/tagged/coverFileName: native melengkapi lalu menulisnya sebagai metadata. */
+  entryJson: string
+  title: string
+  artist: string
+  album: string
+  exportToMusic: boolean
+  /** Nama salinan publik TANPA ekstensi. */
+  exportName: string
+  /** Durasi lagu di playlist (detik); -1 = tidak diketahui. */
+  expectedSec: number
+  /** Durasi sumber yang dibaca sebelum diunduh (detik); -1 = tidak diketahui. */
+  remoteSec: number
+  /** Dipilih manual: abaikan syarat Wi-Fi/cas. */
+  forced?: boolean
+  /** Waktu (ms) URL di-resolve; dipakai native untuk menolak URL yang sudah kedaluwarsa. */
+  resolvedAt: number
+}
+
+/**
+ * Hasil satu lagu dari antrean native.
+ *  - done: berkas jadi + metadata tertulis (`entry` = DownloadedTrack JSON).
+ *  - handback: JS harus me-resolve ulang. reason: rejected | network | notaudio | truncated | mismatch.
+ *  - verify: berkas utuh (.part dipertahankan) tetapi durasinya perlu diperiksa pembaca durasi WebView.
+ *  - failed: gagal permanen.
+ */
+export interface NativeQueueResult {
+  key: string
+  status: 'done' | 'handback' | 'verify' | 'failed'
+  reason?: 'rejected' | 'network' | 'notaudio' | 'truncated' | 'mismatch'
+  message?: string
+  entry?: string
+  ext?: string
+  mime?: string
+  bytes?: number
+  total?: number
+  tagged?: boolean
+  exported?: boolean
+  exportError?: string
+}
+
 export interface NativeInspectResult {
   /** Ekstensi sesuai ISI berkas: m4a | mp3 | aac | ogg | flac | webm | wav. */
   ext: string
@@ -170,6 +221,22 @@ export interface MusicVerseNativePlugin {
    */
   downloadFile(options: NativeDownloadOptions): Promise<NativeDownloadResult>
   cancelDownload(options: { id: string }): Promise<void>
+  /**
+   * Antrean unduhan NATIVE (APK v0.4.4+; APK lama melempar UNIMPLEMENTED: pemanggil memakai jalur lama).
+   * `queueAdd` menyerahkan lagu yang URL-nya sudah di-resolve; hasilnya datang lewat event `queueResult`.
+   */
+  queueAdd(options: { job: NativeQueueJob }): Promise<void>
+  /** Mencabut satu lagu yang belum mulai. `removed` false = sudah berjalan. */
+  queueCancel(options: { key: string }): Promise<{ removed: boolean }>
+  /** Mencabut semua lagu yang belum mulai; lagu yang sudah berjalan diselesaikan. */
+  queueRelease(): Promise<{ released: string[] }>
+  /** Keadaan saat app dibuka: lagu yang masih di native + hasil yang terjadi selagi JS mati. */
+  queueSync(): Promise<{ active: string[]; results: NativeQueueResult[] }>
+  /** Mengakui hasil yang sudah ditangani JS supaya dihapus dari jurnal native. */
+  queueAck(options: { keys: string[] }): Promise<void>
+  /** Syarat unduhan yang juga dihormati native saat JS mati. */
+  queueConfigure(options: { wifiOnly: boolean; chargingOnly: boolean }): Promise<void>
+  addListener(eventName: 'queueResult', listener: (event: NativeQueueResult) => void): Promise<PluginListenerHandle>
   addListener(
     eventName: 'downloadProgress',
     listener: (event: NativeDownloadProgressEvent) => void,

@@ -66,6 +66,27 @@ public class MusicVerseNativePlugin extends Plugin {
   public void load() {
     // Dipakai StreamProxy & NativeDownloader untuk menunggu jaringan kembali saat sinyal putus.
     NetWatch.attach(getContext());
+    DownloadQueue.init(getContext());
+    DownloadQueue.setListener(
+        new DownloadQueue.Listener() {
+          @Override
+          public void onProgress(String id, long bytes, long total) {
+            JSObject event = new JSObject();
+            event.put("id", id);
+            event.put("bytes", bytes);
+            event.put("total", total);
+            notifyListeners("downloadProgress", event);
+          }
+
+          @Override
+          public void onResult(org.json.JSONObject result) {
+            try {
+              notifyListeners("queueResult", new JSObject(result.toString()));
+            } catch (org.json.JSONException e) {
+              android.util.Log.w("MusicVerse", "Hasil antrean tidak terkirim: " + e);
+            }
+          }
+        });
     DownloadService.setListener((action) -> {
       JSObject event = new JSObject();
       event.put("action", action);
@@ -96,6 +117,8 @@ public class MusicVerseNativePlugin extends Plugin {
     PlaybackService.setListener(null);
     PlaybackService.setEngineListener(null);
     DownloadService.setListener(null);
+    // WebView mati: antrean native jalan terus dan memegang notifikasinya sendiri.
+    DownloadQueue.setListener(null);
     uiHandler.removeCallbacksAndMessages(null);
     if (downloadReceiver != null) {
       try {
@@ -585,6 +608,70 @@ public class MusicVerseNativePlugin extends Plugin {
   public void cancelDownload(PluginCall call) {
     String id = call.getString("id");
     if (id != null) NativeDownloader.cancel(id);
+    call.resolve();
+  }
+
+  /**
+   * Menyerahkan satu lagu yang URL-nya SUDAH di-resolve ke antrean native (lihat DownloadQueue). Antrean mengerjakan sisanya
+   * tanpa WebView, jadi tetap selesai walau app digeser dari recent apps. Hasil datang lewat event `queueResult`.
+   */
+  @PluginMethod
+  public void queueAdd(PluginCall call) {
+    JSObject job = call.getObject("job");
+    if (job == null || !DownloadQueue.add(job)) {
+      call.reject("Data unduhan tidak lengkap", "INVALID");
+      return;
+    }
+    call.resolve();
+  }
+
+  /** Mencabut satu lagu yang belum mulai. `removed` false = sudah berjalan (tidak bisa dihentikan di tengah). */
+  @PluginMethod
+  public void queueCancel(PluginCall call) {
+    String key = call.getString("key");
+    JSObject out = new JSObject();
+    out.put("removed", key != null && DownloadQueue.cancel(key));
+    call.resolve(out);
+  }
+
+  /** Mencabut semua lagu yang belum mulai (jeda / syarat Wi-Fi-cas); lagu yang sudah berjalan diselesaikan. */
+  @PluginMethod
+  public void queueRelease(PluginCall call) {
+    JSArray keys = new JSArray();
+    for (String key : DownloadQueue.release()) keys.put(key);
+    JSObject out = new JSObject();
+    out.put("released", keys);
+    call.resolve(out);
+  }
+
+  /** Dipanggil saat app dibuka: lagu yang masih di native + hasil yang terjadi selagi JS mati. */
+  @PluginMethod
+  public void queueSync(PluginCall call) {
+    try {
+      call.resolve(new JSObject(DownloadQueue.sync().toString()));
+    } catch (org.json.JSONException e) {
+      call.reject("Antrean native tidak terbaca", "IO");
+    }
+  }
+
+  @PluginMethod
+  public void queueAck(PluginCall call) {
+    java.util.List<String> keys = new java.util.ArrayList<>();
+    JSArray array = call.getArray("keys");
+    if (array != null) {
+      for (int i = 0; i < array.length(); i++) {
+        String key = array.optString(i, "");
+        if (!key.isEmpty()) keys.add(key);
+      }
+    }
+    DownloadQueue.ack(keys);
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void queueConfigure(PluginCall call) {
+    DownloadQueue.configure(
+        Boolean.TRUE.equals(call.getBoolean("wifiOnly", false)), Boolean.TRUE.equals(call.getBoolean("chargingOnly", false)));
     call.resolve();
   }
 

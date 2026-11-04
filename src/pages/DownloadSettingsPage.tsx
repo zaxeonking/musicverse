@@ -104,7 +104,7 @@ export default function DownloadSettingsPage() {
       </div>
       <p className="mt-4 text-xs text-ink-muted">
         Lagu yang kamu pilih dengan tombol putar di antrean tetap diunduh sekarang walau syarat di atas belum terpenuhi. Unduhan baru
-        disimpan dengan ekstensi sesuai isinya dan membawa judul, artis, album, serta sampul di dalam berkasnya. Bila sumber plugin gagal dan aplikasi memakai API cadangan, kualitasnya mengikuti API itu (tanpa pilihan bitrate).
+        disimpan dengan ekstensi sesuai isinya dan membawa judul, artis, album, serta sampul di dalam berkasnya. Sumber audio hanya YouTube Music lalu YouTube (seperti StreamBeats), tanpa API pihak ketiga.
       </p>
     </section>
   )

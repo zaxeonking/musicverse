@@ -10,12 +10,20 @@ import { stripArtistPrefix } from '../utils/trackTitle'
 import { DEFAULT_DOWNLOAD_QUALITY, orderStreamsForQuality, type DownloadQuality } from './quality'
 import type { ResolverPlugin, StreamSource } from './types'
 import { ytMusicPlugin } from './ytmusic'
+import { ytVideoPlugin } from './ytvideo'
 
 /**
- * Daftar plugin pemutaran, dicoba berurutan. Menambah sumber baru = buat `ResolverPlugin`
- * (lihat ytmusic.ts) lalu daftarkan di sini atau lewat `registerPlugin`.
+ * Daftar plugin pemutaran, dicoba berurutan (sama seperti StreamBeats: YouTube Music, lalu YouTube). Audio HANYA berasal
+ * dari plugin; tidak ada API pihak ketiga. Menambah sumber baru = buat `ResolverPlugin` (lihat ytmusic.ts) lalu
+ * daftarkan di sini atau lewat `registerPlugin`.
  */
-const plugins: ResolverPlugin[] = [ytMusicPlugin]
+let pluginList: ResolverPlugin[] | null = null
+
+/** Dibangun saat pertama dipakai (bukan saat modul dimuat): modul plugin dan registry saling mengimpor lewat jaringan/API. */
+function plugins(): ResolverPlugin[] {
+  if (!pluginList) pluginList = [ytMusicPlugin, ytVideoPlugin]
+  return pluginList
+}
 
 const DISABLED_KEY = 'mv:plugins:disabled'
 
@@ -29,12 +37,13 @@ function readDisabled(): string[] {
 }
 
 export function registerPlugin(plugin: ResolverPlugin): void {
-  if (!plugins.some((p) => p.id === plugin.id)) plugins.push(plugin)
+  const list = plugins()
+  if (!list.some((p) => p.id === plugin.id)) list.push(plugin)
 }
 
 export function listPlugins(): Array<{ id: string; name: string; enabled: boolean }> {
   const disabled = readDisabled()
-  return plugins.map((p) => ({ id: p.id, name: p.name, enabled: !disabled.includes(p.id) }))
+  return plugins().map((p) => ({ id: p.id, name: p.name, enabled: !disabled.includes(p.id) }))
 }
 
 export function setPluginEnabled(id: string, enabled: boolean): void {
@@ -89,10 +98,10 @@ const ACCEPT_SCORE = 0.7
 const MAX_CANDIDATES = 2
 const MAX_STREAMS_PER_CANDIDATE = 2
 /**
- * Batas total waktu plugin; lewat ini aplikasi pindah ke API lama. Dulu tetap 9 dtk: di sinyal lemah rangkaian
- * (visitorData + cari + ambil stream + baca metadata lewat proxy) hampir selalu melewati batas itu, sehingga plugin
- * "selalu gagal" dan aplikasi balik ke pihak ketiga. Sekarang batasnya mengikuti kualitas jaringan; unduhan (tidak
- * ada pendengar yang menunggu) diberi waktu paling longgar.
+ * Batas total waktu satu kali resolve plugin. Di sinyal lemah rangkaian (visitorData + cari + ambil stream + baca
+ * metadata lewat proxy) butuh waktu lebih lama, jadi batasnya mengikuti kualitas jaringan; unduhan (tidak ada
+ * pendengar yang menunggu) diberi waktu paling longgar. Lewat batas = gagal sementara (diulang pemanggil), bukan
+ * pindah ke sumber lain.
  */
 const PLUGIN_BUDGET_BY_TIER = { good: 9_000, medium: 16_000, poor: 28_000 } as const
 const PLUGIN_BUDGET_STRICT_MS = 35_000
@@ -104,12 +113,6 @@ function pluginBudgetMs(strict: boolean): number {
 function probeTimeoutMs(strict: boolean): number {
   return strict || getNetworkTier() !== 'good' ? 12_000 : 7_000
 }
-/** Plugin yang gagal berturut-turut dilewati sementara, supaya tidak menambah jeda sebelum API lama. */
-const BREAKER_AFTER = 3
-const BREAKER_PAUSE_MS = 5 * 60_000
-let failStreak = 0
-let pausedUntil = 0
-
 function formatClock(totalSec: number | null): string {
   if (totalSec === null) return ''
   const s = Math.round(totalSec)
@@ -157,15 +160,31 @@ function strictProblem(wanted: WantedTrack, info: PlaybackInfo, actual: number |
   return strictDurationProblem(actual, expected)
 }
 
-/**
- * Mencari lagu lewat plugin dan mengembalikan info playback, atau null bila semua plugin gagal / tidak
- * ada hasil yang cocok. Tidak pernah melempar error: pemanggil lanjut ke API lama.
- * Setiap stream diperiksa dulu (metadata audio terbaca di WebView, bukan klip) sebelum dipakai.
- */
+/** Hasil resolve plugin: `ok`, atau alasan gagal supaya pemanggil tahu perlu mengulang atau menyerah. */
+export type PluginOutcome = 'ok' | 'timeout' | 'failed' | 'rejected' | 'nomatch' | 'aborted'
+
+export interface PluginResolveResult {
+  info: PlaybackInfo | null
+  outcome: PluginOutcome
+}
+
+/** Sama seperti `resolveViaPluginsDetailed`, tetapi hanya mengembalikan infonya (null bila gagal). */
 export async function resolveViaPlugins(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string> },
 ): Promise<PlaybackInfo | null> {
+  return (await resolveViaPluginsDetailed(wanted, options)).info
+}
+
+/**
+ * Mencari lagu lewat plugin (berurutan) dan mengembalikan info playback beserta alasannya bila tidak ada.
+ * `avoid` berisi kunci `plugin:<id>` yang dilewati (mis. yang baru memberi berkas salah). Tidak pernah melempar error.
+ * Setiap stream diperiksa dulu (metadata audio terbaca di WebView, bukan klip) sebelum dipakai.
+ */
+export async function resolveViaPluginsDetailed(
+  wanted: WantedTrack,
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string> },
+): Promise<PluginResolveResult> {
   const { expected, strict = false } = options
   // Kualitas hanya berlaku untuk unduhan (strict). Selain "tinggi" hasilnya disimpan di kunci sendiri supaya tidak
   // menimpa stream yang dipakai pemutaran (yang selalu memakai kualitas terbaik).
@@ -173,12 +192,18 @@ export async function resolveViaPlugins(
   const key = quality === DEFAULT_DOWNLOAD_QUALITY ? cacheKey(wanted) : `${cacheKey(wanted)}|q:${quality}`
   const cached = cacheGet(key)
   // Mode unduhan menambah pemeriksaan ketat (artis, versi, durasi); hasil cache yang tidak lolos dibuang.
-  if (cached && (!strict || strictProblem(wanted, cached, cached.probedDuration ?? null, expected) === null)) return cached
-  if (Date.now() < pausedUntil) return null
+  const cachedSource = cached?.source ? `plugin:${cached.source.replace(/^plugin:/, '')}` : ''
+  if (
+    cached &&
+    !options.avoid?.includes(cachedSource) &&
+    (!strict || strictProblem(wanted, cached, cached.probedDuration ?? null, expected) === null)
+  ) {
+    return { info: cached, outcome: 'ok' }
+  }
 
   const inner = new AbortController()
   const forward = () => inner.abort()
-  if (options.signal?.aborted) return null
+  if (options.signal?.aborted) return { info: null, outcome: 'aborted' }
   options.signal?.addEventListener('abort', forward, { once: true })
   const budget = setTimeout(() => inner.abort(), pluginBudgetMs(strict))
   const signal = inner.signal
@@ -189,11 +214,13 @@ export async function resolveViaPlugins(
     .join(' ')
   const spotifyUrl = extractSpotifyTrackLink(wanted.url ?? '') ?? ''
   let hadFailure = false
+  let sawCandidate = false
+  const stopped = (): PluginResolveResult => ({ info: null, outcome: options.signal?.aborted ? 'aborted' : 'timeout' })
 
   try {
-    for (const plugin of plugins) {
-      if (disabled.includes(plugin.id)) continue
-      if (signal.aborted) return null
+    for (const plugin of plugins()) {
+      if (disabled.includes(plugin.id) || options.avoid?.includes(`plugin:${plugin.id}`)) continue
+      if (signal.aborted) return stopped()
       try {
         const hits = await plugin.search(query, signal)
         const scored = hits
@@ -215,6 +242,7 @@ export async function resolveViaPlugins(
           .slice(0, MAX_CANDIDATES)
 
         for (const { hit, score } of scored) {
+          sawCandidate = true
           const streams = orderStreamsForQuality(await plugin.getStreams(hit.id, signal), quality).slice(0, MAX_STREAMS_PER_CANDIDATE)
           for (const stream of streams) {
             const playable = await toPlayableUrl(stream)
@@ -250,29 +278,20 @@ export async function resolveViaPlugins(
             }
             console.info(`[MusicVerse] Plugin ${plugin.id}: "${hit.title}" skor ${score.toFixed(2)}, ${actual.toFixed(1)} dtk`)
             cachePut(key, info, stream)
-            failStreak = 0
-            return info
+            return { info, outcome: 'ok' }
           }
         }
       } catch (error) {
-        if (signal.aborted) return null
+        if (signal.aborted) return stopped()
         hadFailure = true
         console.warn(`[MusicVerse] Plugin ${plugin.id} gagal:`, error)
       }
     }
-    return null
+    // Gagal nyata (jaringan / stream tak terbaca) dibedakan dari "ada kandidat tetapi semuanya ditolak" dan "tidak ada".
+    return { info: null, outcome: hadFailure ? 'failed' : sawCandidate ? 'rejected' : 'nomatch' }
   } finally {
     clearTimeout(budget)
     options.signal?.removeEventListener('abort', forward)
-    // Hanya kegagalan nyata (jaringan / stream tak terbaca) yang dihitung; "tidak ada yang cocok" bukan gagal.
-    if (hadFailure && !options.signal?.aborted) {
-      failStreak += 1
-      if (failStreak >= BREAKER_AFTER) {
-        pausedUntil = Date.now() + BREAKER_PAUSE_MS
-        failStreak = 0
-        console.warn('[MusicVerse] Plugin dijeda 5 menit karena gagal berturut-turut; memakai API lama.')
-      }
-    }
   }
 }
 
@@ -281,7 +300,7 @@ export async function resolveViaPlugins(
  * berganti tidak ada lagi jeda mencari/mengambil link. Aman dipanggil berkali-kali.
  */
 export function warmResolve(wanted: WantedTrack, expected: number | null): void {
-  if (cacheGet(cacheKey(wanted)) || Date.now() < pausedUntil) return
+  if (cacheGet(cacheKey(wanted))) return
   // Beri waktu lagu yang sedang dimuat menyelesaikan permintaannya lebih dulu.
   setTimeout(() => {
     void resolveViaPlugins(wanted, { expected })

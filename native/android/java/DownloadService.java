@@ -197,8 +197,13 @@ public class DownloadService extends Service {
 
   @Override
   public void onTaskRemoved(Intent rootIntent) {
-    // Aplikasi digeser dari recent apps: WebView (tempat antrean unduhan berjalan) ikut mati, jadi jangan tinggalkan notifikasi yatim.
-    shutdown();
+    // Aplikasi digeser dari recent apps: WebView ikut mati. Bila antrean NATIVE masih bekerja, service (dan notifikasinya)
+    // tetap hidup sampai antrean selesai; kalau tidak, jangan tinggalkan notifikasi yatim.
+    if (DownloadQueue.isBusy()) {
+      lastJsUpdateAt = SystemClock.elapsedRealtime();
+    } else {
+      shutdown();
+    }
     super.onTaskRemoved(rootIntent);
   }
 

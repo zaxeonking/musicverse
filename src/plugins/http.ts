@@ -3,7 +3,7 @@ import { getNetworkTier } from '../utils/networkQuality'
 /**
  * HTTP untuk plugin. Di APK, CapacitorHttp (aktif di capacitor.config.ts) meneruskan fetch() lewat
  * HTTP native: bebas CORS dan boleh mengirim header seperti User-Agent. Di browser biasa (dev web)
- * sumber seperti YouTube akan ditolak CORS, dan itu normal: pemutaran jatuh ke API lama.
+ * sumber seperti YouTube akan ditolak CORS, dan itu normal: audio hanya bisa diputar/diunduh di APK.
  */
 export interface PluginFetchInit {
   method?: 'GET' | 'POST'

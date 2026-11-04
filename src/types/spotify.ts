@@ -81,8 +81,11 @@ export interface PlaybackResponse {
   data: SpotifyApiPlaybackData
 }
 
-/** Nama sumber audio: plugin (YouTube Music dst.) atau API pihak ketiga lama. */
-export type ApiSourceName = 'plugin' | 'kyzz' | 'cadangan'
+/**
+ * Kunci sumber audio yang boleh dihindari saat mencoba ulang: `plugin:<id>` (mis. `plugin:ytmusic`). Audio hanya berasal
+ * dari plugin yang langsung ke sumbernya (YouTube), tanpa API pihak ketiga.
+ */
+export type ApiSourceName = 'plugin' | `plugin:${string}`
 
 /** Model yang dipakai aplikasi untuk satu permintaan play. */
 export interface PlaybackInfo {
@@ -95,7 +98,7 @@ export interface PlaybackInfo {
   spotifyUrl: string
   /** URL audio yang diputar. Selalu diambil ulang untuk setiap permintaan play. */
   audioUrl: string
-  /** Sumber yang dipilih (kyzz, cadangan-tautan, judul->tautan), untuk diagnosis. */
+  /** Sumber yang dipilih (mis. `plugin:ytmusic`), untuk diagnosis. */
   source?: string
   /** Sumber yang menghasilkan audioUrl. Dipakai untuk menghindari sumber yang memberi klip 30 detik / berkas yang salah. */
   apiSource?: ApiSourceName

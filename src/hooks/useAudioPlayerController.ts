@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { audioEngine, AudioEngineError, mediaErrorToCode, type AudioEngineEvent } from '../services/audioEngine'
-import { fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
+import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import type {
   AudioPlayerActions,
   AudioPlayerState,
@@ -734,15 +734,16 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
             return
           }
           console.warn(
-            `[MusicVerse] Audio dari ${info.apiSource ?? 'sumber tak dikenal'} hanya ${duration.toFixed(1)} dtk ` +
+            `[MusicVerse] Audio dari ${avoidKeyOf(info) ?? 'sumber tak dikenal'} hanya ${duration.toFixed(1)} dtk ` +
               `(seharusnya ~${expectedDuration} dtk): dianggap cuplikan, mencoba sumber lain.`,
           )
           clearStartTimer()
-          if (!info.apiSource || avoid.includes(info.apiSource)) {
+          const clipKey = avoidKeyOf(info)
+          if (!clipKey || avoid.includes(clipKey)) {
             fail('clip_only')
             return
           }
-          avoid.push(info.apiSource)
+          avoid.push(clipKey)
           commit({ status: 'resolving', playbackInfo: null, error: null })
           audioEngine.stop()
           void attempt()

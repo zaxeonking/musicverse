@@ -8,10 +8,6 @@
       "destination": "/api/proxy?upstream=nexa&path=:path*"
     },
     {
-      "source": "/kyzz/:path*",
-      "destination": "/api/proxy?upstream=kyzz&path=:path*"
-    },
-    {
       "source": "/netease/:path*",
       "destination": "/api/proxy?upstream=netease&path=:path*"
     },
