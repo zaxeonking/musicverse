@@ -1,4 +1,4 @@
-import { ArrowLeft, Battery, BatteryCharging, Gauge, Music, Sparkles, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, Battery, BatteryCharging, Gauge, Music, ShieldAlert, Sparkles, Wifi, WifiOff } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { DOWNLOAD_QUALITIES } from '../plugins/quality'
 import SettingSwitch from '../components/ui/SettingSwitch'
@@ -6,6 +6,7 @@ import {
   setChargingOnlyEnabled,
   setDownloadQualityPreference,
   setExportMusicEnabled,
+  setThirdPartyFallbackEnabled,
   setWifiOnlyEnabled,
   upgradeOldDownloads,
 } from '../native/downloads'
@@ -14,7 +15,7 @@ import { isNativeApp } from '../native/platform'
 
 /** Pengaturan unduhan (APK): syarat kapan antrean boleh berjalan. */
 export default function DownloadSettingsPage() {
-  const { wifiOnly, chargingOnly, exportMusic, downloadQuality, items, upgrade } = useOffline()
+  const { wifiOnly, chargingOnly, exportMusic, downloadQuality, thirdPartyFallback, items, upgrade } = useOffline()
   const pending = items.filter((item) => item.tagged !== true).length
   const running = upgrade?.running === true
   if (!isNativeApp()) return <Navigate to="/" replace />
@@ -101,10 +102,17 @@ export default function DownloadSettingsPage() {
           label="Salin ke folder Musik"
           hint="Lagu juga disalin ke Musik/MusicVerse agar muncul di pemutar musik dan pengelola berkas lain (Android 10+). Memakai ruang dua kali."
         />
+        <SettingSwitch
+          checked={thirdPartyFallback}
+          onChange={() => setThirdPartyFallbackEnabled(!thirdPartyFallback)}
+          icon={ShieldAlert}
+          label="Cadangan pihak ketiga"
+          hint="Cadangan TERAKHIR bila YouTube Music dan YouTube tidak menemukan yang cocok. Hanya untuk lagu bertautan Spotify, tetap diperiksa judul, artis, durasi, dan isinya. Lagu yang tidak ada di YouTube belum tentu ada di sini. Mati secara bawaan."
+        />
       </div>
       <p className="mt-4 text-xs text-ink-muted">
         Lagu yang kamu pilih dengan tombol putar di antrean tetap diunduh sekarang walau syarat di atas belum terpenuhi. Unduhan baru
-        disimpan dengan ekstensi sesuai isinya dan membawa judul, artis, album, serta sampul di dalam berkasnya. Sumber audio hanya YouTube Music lalu YouTube (seperti StreamBeats), tanpa API pihak ketiga.
+        disimpan dengan ekstensi sesuai isinya dan membawa judul, artis, album, serta sampul di dalam berkasnya. Sumber audio YouTube Music lalu YouTube (seperti StreamBeats); pihak ketiga hanya dipakai bila “Cadangan pihak ketiga” dinyalakan. Unduhan yang gagal punya tombol “Cari manual” untuk memilih sendiri hasilnya.
       </p>
     </section>
   )

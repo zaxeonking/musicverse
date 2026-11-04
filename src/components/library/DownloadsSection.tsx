@@ -1,4 +1,4 @@
-import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Play, RotateCw, Settings, Trash2, WifiOff, X } from 'lucide-react'
+import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Play, RotateCw, Search, Settings, Trash2, WifiOff, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PauseLines from '../ui/PauseLines'
@@ -25,6 +25,7 @@ import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
+import ManualSearchSheet from './ManualSearchSheet'
 import MoveDownloadSheet from './MoveDownloadSheet'
 
 function formatBytes(bytes: number): string {
@@ -184,6 +185,8 @@ export default function DownloadsSection() {
   const currentActivity = getRowActivity(player.status)
   const { playlists } = useMyPlaylists()
   const { showToast } = useTrackMenu()
+  /** Unduhan gagal yang sedang dicarikan sumbernya secara manual. */
+  const [manualFor, setManualFor] = useState<{ key: string; title: string } | null>(null)
   const [moving, setMoving] = useState<{ track: PlaylistTrack; fromPlaylistId?: string } | null>(null)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
   const toggleGroup = (id: string) =>
@@ -388,6 +391,16 @@ export default function DownloadsSection() {
                       />
                     </span>
                   )}
+                  {transfer.status === 'error' && (
+                    <button
+                      type="button"
+                      onClick={() => setManualFor({ key: transfer.key, title: name ?? 'Lagu' })}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-raised px-3 py-1.5 text-xs font-medium text-ink focus-ring"
+                    >
+                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                      Cari manual
+                    </button>
+                  )}
                 </span>
                 {transfer.status === 'error' && (
                   <button
@@ -492,6 +505,10 @@ export default function DownloadsSection() {
             </section>
           )}
         </div>
+      )}
+
+      {manualFor && (
+        <ManualSearchSheet transferKey={manualFor.key} title={manualFor.title} onClose={() => setManualFor(null)} onToast={showToast} />
       )}
 
       {moving && (

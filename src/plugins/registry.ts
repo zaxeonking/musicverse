@@ -8,7 +8,8 @@ import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
 import { stripArtistPrefix } from '../utils/trackTitle'
 import { DEFAULT_DOWNLOAD_QUALITY, orderStreamsForQuality, type DownloadQuality } from './quality'
-import type { ResolverPlugin, StreamSource } from './types'
+import type { ManualCandidate, ManualPick, ResolverPlugin, StreamSource } from './types'
+import { THIRD_PARTY_SOURCES } from './thirdParty'
 import { ytMusicPlugin } from './ytmusic'
 import { ytVideoPlugin } from './ytvideo'
 
@@ -171,7 +172,7 @@ export interface PluginResolveResult {
 /** Sama seperti `resolveViaPluginsDetailed`, tetapi hanya mengembalikan infonya (null bila gagal). */
 export async function resolveViaPlugins(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string> },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean },
 ): Promise<PlaybackInfo | null> {
   return (await resolveViaPluginsDetailed(wanted, options)).info
 }
@@ -183,7 +184,7 @@ export async function resolveViaPlugins(
  */
 export async function resolveViaPluginsDetailed(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string> },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean },
 ): Promise<PluginResolveResult> {
   const { expected, strict = false } = options
   // Kualitas hanya berlaku untuk unduhan (strict). Selain "tinggi" hasilnya disimpan di kunci sendiri supaya tidak
@@ -287,8 +288,163 @@ export async function resolveViaPluginsDetailed(
         console.warn(`[MusicVerse] Plugin ${plugin.id} gagal:`, error)
       }
     }
+    // Cadangan TERAKHIR (opsional, default mati, hanya unduhan): sumber pihak ketiga, dengan verifikasi yang sama ketatnya.
+    // Hanya bila plugin sungguh tidak menemukan yang cocok; gangguan jaringan / timeout diulang pemanggil, bukan dialihkan.
+    if (options.thirdParty && strict && spotifyUrl && !hadFailure && !options.signal?.aborted) {
+      const fallback = await resolveViaThirdParty(wanted, spotifyUrl, { signal: options.signal, expected, avoid: options.avoid })
+      if (fallback.info) return { info: fallback.info, outcome: 'ok' }
+      if (fallback.sawCandidate) sawCandidate = true
+    }
     // Gagal nyata (jaringan / stream tak terbaca) dibedakan dari "ada kandidat tetapi semuanya ditolak" dan "tidak ada".
     return { info: null, outcome: hadFailure ? 'failed' : sawCandidate ? 'rejected' : 'nomatch' }
+  } finally {
+    clearTimeout(budget)
+    options.signal?.removeEventListener('abort', forward)
+  }
+}
+
+/**
+ * Sumber pihak ketiga (lihat thirdParty.ts). Hasilnya DIVERIFIKASI seperti plugin: audio terbaca di WebView, bukan klip,
+ * judul + artis cocok dengan lagu di playlist, dan durasi file sangat dekat dengan durasi playlist. Tidak di-cache
+ * (URL bertoken).
+ */
+async function resolveViaThirdParty(
+  wanted: WantedTrack,
+  spotifyUrl: string,
+  options: { signal?: AbortSignal; expected: number | null; avoid?: ReadonlyArray<string> },
+): Promise<{ info: PlaybackInfo | null; sawCandidate: boolean }> {
+  let sawCandidate = false
+  for (const source of THIRD_PARTY_SOURCES) {
+    if (options.signal?.aborted) break
+    if (options.avoid?.includes(`plugin:${source.id}`)) continue
+    try {
+      const found = await source.fetch(spotifyUrl, options.signal)
+      sawCandidate = true
+      const actual = await probeAudioDuration(found.audioUrl, probeTimeoutMs(true), options.signal)
+      if (actual === null || isLikelyClip(actual, options.expected)) continue
+      const info: PlaybackInfo = {
+        title: found.title,
+        artist: found.artist,
+        album: found.album,
+        duration: formatClock(actual),
+        cover: found.cover,
+        spotifyUrl,
+        audioUrl: found.audioUrl,
+        source: `plugin:${source.id}`,
+        apiSource: 'plugin',
+        probedDuration: actual,
+        directUrl: found.audioUrl,
+      }
+      const problem = strictProblem(wanted, info, actual, options.expected)
+      if (problem) {
+        console.warn(`[MusicVerse] ${source.name} ditolak untuk unduhan: ${problem}`)
+        continue
+      }
+      console.info(`[MusicVerse] ${source.name}: "${found.title}", ${actual.toFixed(1)} dtk`)
+      return { info, sawCandidate }
+    } catch (error) {
+      if (options.signal?.aborted) break
+      console.warn(`[MusicVerse] ${source.name} gagal:`, error)
+    }
+  }
+  return { info: null, sawCandidate }
+}
+
+/* ---------------- pilih manual ---------------- */
+
+const MANUAL_RESULTS = 5
+
+/**
+ * Sampai 5 hasil pencarian (YouTube Music dan YouTube bergantian, tanpa duplikat) untuk dipilih pengguna bila pencarian
+ * otomatis gagal. Melempar bila SEMUA sumber tidak bisa dihubungi; sebagian gagal tidak apa-apa.
+ */
+export async function searchManualCandidates(track: { title: string; artists?: string }, signal?: AbortSignal): Promise<ManualCandidate[]> {
+  const artists = track.artists ?? ''
+  const query = [stripArtistPrefix(track.title, artists), artists.split(/\s*[,&;]\s*/)[0]].filter(Boolean).join(' ')
+  const disabled = readDisabled()
+  const active = plugins().filter((plugin) => !disabled.includes(plugin.id))
+  const settled = await Promise.allSettled(active.map(async (plugin) => ({ plugin, hits: await plugin.search(query, signal) })))
+  const lists: ManualCandidate[][] = []
+  for (const result of settled) {
+    if (result.status !== 'fulfilled') continue
+    const { plugin, hits } = result.value
+    lists.push(hits.map((hit) => ({ ...hit, pluginId: plugin.id, pluginName: plugin.name })))
+  }
+  if (lists.length === 0) throw new Error('Pencarian tidak bisa dihubungi. Periksa koneksi lalu coba lagi.')
+  const out: ManualCandidate[] = []
+  const seen = new Set<string>()
+  for (let round = 0; out.length < MANUAL_RESULTS; round += 1) {
+    let any = false
+    for (const list of lists) {
+      const hit = list[round]
+      if (!hit) continue
+      any = true
+      const id = `${hit.pluginId}:${hit.id}`
+      if (seen.has(id) || out.length >= MANUAL_RESULTS) continue
+      seen.add(id)
+      out.push(hit)
+    }
+    if (!any) break
+  }
+  return out
+}
+
+/**
+ * Mengambil stream untuk hasil yang DIPILIH pengguna. Judul/artis tidak dicocokkan dengan playlist (pengguna yang
+ * menentukan), tetapi audionya tetap diperiksa: terbaca, bukan klip, dan durasinya sesuai dengan hasil yang dipilih.
+ */
+export async function resolveManualPick(
+  pick: ManualPick,
+  options: { signal?: AbortSignal; quality?: DownloadQuality },
+): Promise<PluginResolveResult> {
+  const plugin = plugins().find((p) => p.id === pick.pluginId)
+  if (!plugin) return { info: null, outcome: 'nomatch' }
+  if (options.signal?.aborted) return { info: null, outcome: 'aborted' }
+  const inner = new AbortController()
+  const forward = () => inner.abort()
+  options.signal?.addEventListener('abort', forward, { once: true })
+  const budget = setTimeout(() => inner.abort(), PLUGIN_BUDGET_STRICT_MS)
+  const signal = inner.signal
+  const expected = pick.durationSec
+  try {
+    const streams = orderStreamsForQuality(await plugin.getStreams(pick.id, signal), options.quality ?? DEFAULT_DOWNLOAD_QUALITY).slice(
+      0,
+      MAX_STREAMS_PER_CANDIDATE,
+    )
+    let hadFailure = false
+    let rejected = false
+    for (const stream of streams) {
+      const playable = await toPlayableUrl(stream)
+      const actual = await probeAudioDuration(playable, probeTimeoutMs(true), signal)
+      if (actual === null) {
+        hadFailure = true
+        continue
+      }
+      if (isLikelyClip(actual, expected) || strictDurationProblem(actual, expected) !== null) {
+        rejected = true
+        continue
+      }
+      const info: PlaybackInfo = {
+        title: pick.title,
+        artist: pick.artist,
+        album: pick.album,
+        duration: formatClock(actual),
+        cover: pick.cover,
+        spotifyUrl: '',
+        audioUrl: playable,
+        source: `plugin:${plugin.id}`,
+        apiSource: 'plugin',
+        probedDuration: actual,
+        directUrl: stream.url,
+        directUserAgent: stream.headers?.['User-Agent'],
+      }
+      return { info, outcome: 'ok' }
+    }
+    return { info: null, outcome: hadFailure ? 'failed' : rejected ? 'rejected' : 'nomatch' }
+  } catch (error) {
+    if (signal.aborted) return { info: null, outcome: options.signal?.aborted ? 'aborted' : 'timeout' }
+    console.warn(`[MusicVerse] Pilihan manual gagal (${plugin.id}):`, error)
+    return { info: null, outcome: 'failed' }
   } finally {
     clearTimeout(budget)
     options.signal?.removeEventListener('abort', forward)

@@ -1,6 +1,7 @@
 import { resolveOfflinePlayback } from '../native/offline'
 import type { DownloadQuality } from '../plugins/quality'
-import { resolveViaPluginsDetailed } from '../plugins/registry'
+import { resolveManualPick, resolveViaPluginsDetailed, type PluginOutcome } from '../plugins/registry'
+import type { ManualPick } from '../plugins/types'
 import {
   ImporterError,
   importSpotifyPlaylist,
@@ -185,6 +186,10 @@ export interface FetchPlaylistOptions {
   strict?: boolean
   /** Kualitas unduhan (hanya dipakai bersama `strict`, hanya untuk sumber plugin). Default: tinggi. */
   quality?: DownloadQuality
+  /** Unduhan saja: izinkan sumber pihak ketiga sebagai cadangan TERAKHIR (opsional di Pengaturan, default mati). */
+  thirdParty?: boolean
+  /** Unduhan saja: hasil yang dipilih pengguna secara manual; pencarian otomatis dilewati. */
+  manual?: ManualPick
 }
 
 export function buildPlaylistEndpoint(normalizedPlaylistUrl: string): string {
@@ -686,6 +691,13 @@ async function resolvePlaybackInfo(
   const aborted = () => new SpotifyApiError('aborted', 'Permintaan dibatalkan.')
   if (external?.aborted) throw aborted()
 
+  if (options.manual) {
+    const manual = await resolveManualPick(options.manual, { signal: external, quality: options.quality })
+    if (external?.aborted || manual.outcome === 'aborted') throw aborted()
+    if (manual.info) return manual.info
+    throw playbackError(manual.outcome)
+  }
+
   const wanted = { title: track.title, artists: track.artists ?? '', duration: track.duration ?? '', url: track.url }
   const expected = parseDuration(wanted.duration)
 
@@ -695,18 +707,22 @@ async function resolvePlaybackInfo(
     strict: options.strict,
     quality: options.quality,
     avoid: options.avoid,
+    thirdParty: options.thirdParty,
   })
   if (external?.aborted || outcome === 'aborted') throw aborted()
   if (info) return info
+  throw playbackError(outcome)
+}
 
+function playbackError(outcome: PluginOutcome): SpotifyApiError {
   switch (outcome) {
     case 'timeout':
-      throw new SpotifyApiError('timeout', 'Sinyal lambat: sumber audio (YouTube) belum menjawab. Coba lagi.')
+      return new SpotifyApiError('timeout', 'Sinyal lambat: sumber audio (YouTube) belum menjawab. Coba lagi.')
     case 'failed':
-      throw new SpotifyApiError('network', 'Sumber audio (YouTube) tidak bisa dihubungi. Periksa koneksi lalu coba lagi.')
+      return new SpotifyApiError('network', 'Sumber audio (YouTube) tidak bisa dihubungi. Periksa koneksi lalu coba lagi.')
     case 'rejected':
-      throw new SpotifyApiError('clip_only', 'Audio yang ditemukan di YouTube tidak sesuai dengan lagunya (durasi/judul).')
+      return new SpotifyApiError('clip_only', 'Audio yang ditemukan di YouTube tidak sesuai dengan lagunya (durasi/judul).')
     default:
-      throw new SpotifyApiError('no_audio', 'Lagu ini tidak ditemukan di YouTube Music maupun YouTube.')
+      return new SpotifyApiError('no_audio', 'Lagu ini tidak ditemukan di YouTube Music maupun YouTube.')
   }
 }
