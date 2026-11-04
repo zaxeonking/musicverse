@@ -7,6 +7,7 @@ import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
 import { stripArtistPrefix } from '../utils/trackTitle'
+import { DEFAULT_DOWNLOAD_QUALITY, orderStreamsForQuality, type DownloadQuality } from './quality'
 import type { ResolverPlugin, StreamSource } from './types'
 import { ytMusicPlugin } from './ytmusic'
 
@@ -58,7 +59,10 @@ function cacheKey(wanted: WantedTrack): string {
 
 /** Membuang hasil resolve yang tersimpan untuk lagu ini (mis. URL-nya ditolak sumber walau belum kedaluwarsa). */
 export function forgetResolved(track: { title: string; artists?: string }): void {
-  cache.delete(cacheKey({ title: track.title, artists: track.artists ?? '', duration: '' }))
+  const key = cacheKey({ title: track.title, artists: track.artists ?? '', duration: '' })
+  cache.delete(key)
+  // Hasil unduhan berkualitas non-default disimpan di kunci sendiri (lihat resolveViaPlugins); ikut dibuang.
+  for (const k of [...cache.keys()]) if (k.startsWith(`${key}|q:`)) cache.delete(k)
 }
 
 function cacheGet(key: string): PlaybackInfo | null {
@@ -160,10 +164,13 @@ function strictProblem(wanted: WantedTrack, info: PlaybackInfo, actual: number |
  */
 export async function resolveViaPlugins(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality },
 ): Promise<PlaybackInfo | null> {
   const { expected, strict = false } = options
-  const key = cacheKey(wanted)
+  // Kualitas hanya berlaku untuk unduhan (strict). Selain "tinggi" hasilnya disimpan di kunci sendiri supaya tidak
+  // menimpa stream yang dipakai pemutaran (yang selalu memakai kualitas terbaik).
+  const quality: DownloadQuality = strict ? (options.quality ?? DEFAULT_DOWNLOAD_QUALITY) : DEFAULT_DOWNLOAD_QUALITY
+  const key = quality === DEFAULT_DOWNLOAD_QUALITY ? cacheKey(wanted) : `${cacheKey(wanted)}|q:${quality}`
   const cached = cacheGet(key)
   // Mode unduhan menambah pemeriksaan ketat (artis, versi, durasi); hasil cache yang tidak lolos dibuang.
   if (cached && (!strict || strictProblem(wanted, cached, cached.probedDuration ?? null, expected) === null)) return cached
@@ -208,7 +215,7 @@ export async function resolveViaPlugins(
           .slice(0, MAX_CANDIDATES)
 
         for (const { hit, score } of scored) {
-          const streams = (await plugin.getStreams(hit.id, signal)).slice(0, MAX_STREAMS_PER_CANDIDATE)
+          const streams = orderStreamsForQuality(await plugin.getStreams(hit.id, signal), quality).slice(0, MAX_STREAMS_PER_CANDIDATE)
           for (const stream of streams) {
             const playable = await toPlayableUrl(stream)
             const actual = await probeAudioDuration(playable, probeTimeoutMs(strict), signal)

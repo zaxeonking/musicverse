@@ -1,4 +1,5 @@
 import { resolveOfflinePlayback } from '../native/offline'
+import type { DownloadQuality } from '../plugins/quality'
 import { proxyRemoteUrl, resolveViaPlugins } from '../plugins/registry'
 import type {
   ApiSourceName,
@@ -192,6 +193,8 @@ export interface FetchPlaylistOptions {
    * tidak cocok dengan lagu di playlist (durasi file diperiksa setelah diunduh).
    */
   strict?: boolean
+  /** Kualitas unduhan (hanya dipakai bersama `strict`, hanya untuk sumber plugin). Default: tinggi. */
+  quality?: DownloadQuality
 }
 
 export function buildPlaylistEndpoint(normalizedPlaylistUrl: string): string {
@@ -736,7 +739,7 @@ async function resolvePlaybackInfo(
   // dipakai di unduhan (dengan pemeriksaan ketat), dan baru dilewati bila plugin sendiri yang terbukti memberi hasil salah
   // (`avoid` memuat 'plugin'). Jika plugin gagal atau tidak cocok, lanjut ke alur API lama di bawah.
   if (!options.avoid?.includes('plugin')) {
-    const viaPlugin = await resolveViaPlugins(wanted, { signal: external, expected, strict: options.strict })
+    const viaPlugin = await resolveViaPlugins(wanted, { signal: external, expected, strict: options.strict, quality: options.quality })
     if (external?.aborted) throw aborted()
     if (viaPlugin) return viaPlugin
   }

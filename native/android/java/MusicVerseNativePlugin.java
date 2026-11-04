@@ -397,6 +397,190 @@ public class MusicVerseNativePlugin extends Plugin {
     });
   }
 
+  /** Path relatif terhadap Directory.External -> File; null bila tidak aman. */
+  private File externalFile(String path) {
+    if (path == null || path.isEmpty() || path.contains("..") || path.startsWith("/")) return null;
+    File base = getContext().getExternalFilesDir(null);
+    return base == null ? null : new File(base, path);
+  }
+
+  /**
+   * Mengenali jenis audio dari ISI berkas (bukan dari nama/URL), seperti pemeriksaan wadah di StreamBeats.
+   * Menolak dengan code NOT_AUDIO bila isinya bukan audio (mis. halaman error HTML yang tersimpan sebagai lagu).
+   */
+  @PluginMethod
+  public void inspectDownload(PluginCall call) {
+    final File file = externalFile(call.getString("path"));
+    if (file == null || !file.isFile()) {
+      call.reject("Berkas tidak ditemukan", "IO");
+      return;
+    }
+    downloadPool.execute(
+        () -> {
+          try {
+            AudioFinalizer.Container container = AudioFinalizer.sniff(file);
+            if (container == null) {
+              call.reject("Isi berkas bukan audio yang dikenal", "NOT_AUDIO");
+              return;
+            }
+            JSObject out = new JSObject();
+            out.put("ext", container.ext);
+            out.put("mime", container.mime);
+            call.resolve(out);
+          } catch (Exception e) {
+            call.reject("Gagal memeriksa berkas: " + e.getMessage(), "IO");
+          }
+        });
+  }
+
+  /**
+   * Menyelesaikan unduhan di sisi native: sematkan tag + sampul ke dalam berkas (usaha terbaik; wadah yang tidak
+   * didukung dibiarkan), ganti nama atomik dari .part ke nama akhir, tulis salinan metadata (jurnal) lalu, bila
+   * diminta, salin ke Music/MusicVerse. Setelah berkas jadi, metadata ikut tertulis di native, jadi aplikasi
+   * yang mati di tengah jalan tidak meninggalkan lagu tanpa catatan.
+   */
+  @PluginMethod
+  public void finalizeDownload(PluginCall call) {
+    final File part = externalFile(call.getString("partPath"));
+    final File dest = externalFile(call.getString("finalPath"));
+    final File cover = externalFile(call.getString("coverPath"));
+    final File metaFile = externalFile(call.getString("metaPath"));
+    final String metaJson = call.getString("metaJson");
+    final String exportName = call.getString("exportName");
+    final boolean export = Boolean.TRUE.equals(call.getBoolean("exportToMusic", false));
+    final AudioFinalizer.Tags tags = new AudioFinalizer.Tags();
+    String title = call.getString("title");
+    String artist = call.getString("artist");
+    String album = call.getString("album");
+    tags.title = title == null ? "" : title;
+    tags.artist = artist == null ? "" : artist;
+    tags.album = album == null ? "" : album;
+    if (part == null || dest == null || !part.isFile()) {
+      call.reject("Parameter / berkas unduhan tidak valid", "INVALID");
+      return;
+    }
+    downloadPool.execute(
+        () -> {
+          try {
+            AudioFinalizer.Container container = AudioFinalizer.sniff(part);
+            if (container == null) {
+              call.reject("Isi berkas bukan audio yang dikenal", "NOT_AUDIO");
+              return;
+            }
+            boolean tagged = false;
+            try {
+              if (cover != null && cover.isFile() && cover.length() < 8L * 1024 * 1024) {
+                tags.cover = AudioFinalizer.readAll(cover);
+              }
+              tagged = AudioFinalizer.tag(part, container, tags);
+            } catch (Exception e) {
+              // Tag hanya pemanis: berkas tetap sah tanpa tag.
+              android.util.Log.w("MusicVerse", "Tag gagal disematkan: " + e);
+            }
+            File parent = dest.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+              call.reject("Folder tujuan tidak bisa dibuat", "IO");
+              return;
+            }
+            AudioFinalizer.moveReplace(part, dest);
+            if (metaFile != null && metaJson != null) {
+              try {
+                File parentMeta = metaFile.getParentFile();
+                if (parentMeta != null) parentMeta.mkdirs();
+                File tmp = new File(metaFile.getPath() + ".tmp");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tmp)) {
+                  fos.write(metaJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+                AudioFinalizer.moveReplace(tmp, metaFile);
+              } catch (Exception e) {
+                android.util.Log.w("MusicVerse", "Metadata tidak tertulis: " + e);
+              }
+            }
+            String exportError = null;
+            boolean exported = false;
+            if (export && exportName != null && !exportName.isEmpty()) {
+              exportError = MediaExporter.export(getContext(), dest, exportName, container.mime);
+              exported = exportError == null;
+            }
+            JSObject out = new JSObject();
+            out.put("ext", container.ext);
+            out.put("mime", container.mime);
+            out.put("bytes", dest.length());
+            out.put("tagged", tagged);
+            out.put("exported", exported);
+            if (exportError != null) out.put("exportError", exportError);
+            call.resolve(out);
+          } catch (Exception e) {
+            call.reject("Gagal menyelesaikan unduhan: " + e.getMessage(), "IO");
+          }
+        });
+  }
+
+  /**
+   * Merapikan SATU unduhan lama: tag + sampul disematkan dan berkas diberi ekstensi sesuai isinya (lihat
+   * AudioFinalizer.upgradeInPlace). `finalPath` harus di folder yang sama dengan `path`. Menolak dengan code NOT_AUDIO
+   * (isi bukan audio), NO_SPACE (ruang kurang), atau IO.
+   */
+  @PluginMethod
+  public void upgradeDownload(PluginCall call) {
+    final File src = externalFile(call.getString("path"));
+    final File dest = externalFile(call.getString("finalPath"));
+    final File cover = externalFile(call.getString("coverPath"));
+    final File metaFile = externalFile(call.getString("metaPath"));
+    final String metaJson = call.getString("metaJson");
+    final AudioFinalizer.Tags tags = new AudioFinalizer.Tags();
+    String title = call.getString("title");
+    String artist = call.getString("artist");
+    String album = call.getString("album");
+    tags.title = title == null ? "" : title;
+    tags.artist = artist == null ? "" : artist;
+    tags.album = album == null ? "" : album;
+    if (src == null || dest == null || !src.isFile() || !java.util.Objects.equals(src.getParentFile(), dest.getParentFile())) {
+      call.reject("Parameter / berkas tidak valid", "INVALID");
+      return;
+    }
+    downloadPool.execute(
+        () -> {
+          try {
+            if (cover != null && cover.isFile() && cover.length() < 8L * 1024 * 1024) tags.cover = AudioFinalizer.readAll(cover);
+            AudioFinalizer.Upgrade result = AudioFinalizer.upgradeInPlace(src, dest, tags, metaFile, metaJson);
+            JSObject out = new JSObject();
+            out.put("ext", result.container.ext);
+            out.put("mime", result.container.mime);
+            out.put("bytes", result.bytes);
+            out.put("tagged", result.tagged);
+            out.put("renamed", result.renamed);
+            call.resolve(out);
+          } catch (AudioFinalizer.NotAudioException e) {
+            call.reject("Isi berkas bukan audio yang dikenal", "NOT_AUDIO");
+          } catch (AudioFinalizer.NoSpaceException e) {
+            call.reject("Ruang penyimpanan tidak cukup", "NO_SPACE");
+          } catch (Exception e) {
+            call.reject("Gagal merapikan unduhan: " + e.getMessage(), "IO");
+          }
+        });
+  }
+
+  /** Menyalin lagu yang SUDAH diunduh ke Music/MusicVerse (untuk unduhan lama saat opsi folder Musik dinyalakan). */
+  @PluginMethod
+  public void exportDownload(PluginCall call) {
+    final File file = externalFile(call.getString("path"));
+    final String name = call.getString("exportName");
+    final String mime = call.getString("mime");
+    if (file == null || !file.isFile() || name == null || name.isEmpty()) {
+      call.reject("Berkas / nama tidak valid", "INVALID");
+      return;
+    }
+    downloadPool.execute(
+        () -> {
+          String error = MediaExporter.export(getContext(), file, name, mime == null ? "audio/mpeg" : mime);
+          JSObject out = new JSObject();
+          out.put("exported", error == null);
+          if (error != null) out.put("exportError", error);
+          call.resolve(out);
+        });
+  }
+
   @PluginMethod
   public void cancelDownload(PluginCall call) {
     String id = call.getString("id");

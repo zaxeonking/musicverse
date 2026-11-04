@@ -1,5 +1,6 @@
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
+import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
 import { forgetResolved, isNativeUnimplemented } from '../plugins/registry'
 import type { ApiSourceName, PlaybackInfo, PlaylistTrack } from '../types/spotify'
 import { isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
@@ -11,12 +12,17 @@ import { fetchAndSaveLyrics } from './offlineLyrics'
 import {
   COVER_DIR,
   DOWNLOAD_DIR,
+  META_DIR,
   MIN_VALID_BYTES,
   getOfflineState,
   writeMeta,
   isTooSmallForDuration,
   srcFor,
   setCellular,
+  replaceItem,
+  setDownloadQuality,
+  setExportMusic,
+  setUpgrade,
   setChargingOnly,
   setItems,
   setPaused,
@@ -24,6 +30,7 @@ import {
   setTransfer,
   setUnplugged,
   setWifiOnly,
+  toPlaylistTrack,
   trackKey,
   type DownloadedTrack,
 } from './offline'
@@ -42,6 +49,11 @@ import { readJson, removeKey, writeJson } from '../utils/safeStorage'
  * `Filesystem.downloadFile` di WebView. Sama seperti sistem unduhan StreamBeats: berkas `.part` hanya bertambah,
  * putus sinyal ditunggu lalu disambung lewat Range (tidak mulai dari nol), dan URL sumber yang kedaluwarsa cukup
  * di-resolve ulang karena sisa `.part` tetap dipakai selama ukuran total sumbernya sama.
+ *
+ * PENYELESAIAN NATIVE (v0.4.1, padanan Rust + lofty di StreamBeats): setelah byte lengkap, native memeriksa ISI berkas
+ * (`inspectDownload`: halaman error ditolak, jenis wadah menentukan ekstensi), lalu `finalizeDownload` menyematkan judul,
+ * artis, album, dan sampul ke dalam berkas (M4A/MP3), mengganti nama .part secara atomik, menulis metadata (jurnal
+ * pemulihan) dan, bila dipilih, menyalin ke Music/MusicVerse. APK lama tanpa fungsi ini memakai jalur lama (.mp3, tanpa tag).
  *
  * BATAS: antrean (urutan lagu, verifikasi, penyimpanan metadata) masih di JS dalam proses aplikasi. Bila aplikasi digeser
  * dari recent apps atau dimatikan sistem, lagu yang sedang berjalan berhenti, tetapi `.part` + catatan ukurannya TETAP ada
@@ -78,6 +90,8 @@ const activeUrls = new Map<string, { key: string; title: string; total: number }
 const activeById = new Map<string, { key: string; title: string; total: number }>()
 /** True bila APK belum punya pengunduh native (UNIMPLEMENTED): pakai Filesystem.downloadFile seperti sebelumnya. */
 let nativeDownloaderMissing = false
+/** True bila APK belum punya pemeriksa/penyelesai unduhan native (v0.4.1+): jalur lama (.mp3, tanpa tag). */
+let nativeFinalizerMissing = false
 
 /** Berkas lagu wajar: antara ~88 kbps dan ~336 kbps. Di luar itu hampir pasti bukan lagu yang dimaksud (potongan / berkas lain). */
 const MIN_BYTES_PER_SEC_STRICT = 11_000
@@ -344,6 +358,23 @@ async function checkDownloaded(
   return null
 }
 
+/** Nama berkas untuk salinan publik (Music/MusicVerse): "Artis - Judul.ext", tanpa karakter terlarang. */
+function exportDisplayName(track: PlaylistTrack, ext: string): string {
+  const clean = (text: string) => text.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim()
+  const base = clean([track.artists, track.title].filter(Boolean).join(' - ')).slice(0, 120).trim()
+  return `${base || 'MusicVerse'}.${ext}`
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  m4a: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  webm: 'audio/webm',
+  wav: 'audio/wav',
+}
+
 /** Gangguan jaringan saat unduh: dicoba lagi sampai sekian kali (jeda naik bertahap), lalu menyerah dengan pesan sinyal jelek. */
 const NET_RETRY_MAX = 12
 const NET_RETRY_DELAY_MS = 2_000
@@ -387,8 +418,6 @@ async function downloadOne(job: Job): Promise<void> {
   await ensureDir(DOWNLOAD_DIR)
   await ensureDir(COVER_DIR)
 
-  const fileName = `${key}.mp3`
-  const finalPath = `${DOWNLOAD_DIR}/${fileName}`
   // Berakhiran .mp3 supaya durasinya bisa dibaca sebelum berkas dianggap sah.
   const partPath = `${DOWNLOAD_DIR}/${key}.part.mp3`
   const expected = parseDuration(track.duration)
@@ -402,12 +431,14 @@ async function downloadOne(job: Job): Promise<void> {
   // (dicek dari berkas yang benar-benar terunduh). Berkas yang tidak cocok dibuang dan sumber lain dicoba.
   let info: PlaybackInfo
   let size = 0
+  /** Jenis wadah menurut ISI berkas (null = tidak diperiksa: APK lama / pengunduh lama). */
+  let container: { ext: string; mime: string } | null = null
   for (;;) {
     throwIfPaused(job)
     // .part TIDAK dihapus di sini: sisa unduhan yang terputus disambung oleh pengunduh native (lihat NativeDownloader).
     setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
     try {
-      info = await fetchPlaybackInfo(track, { strict: true, avoid })
+      info = await fetchPlaybackInfo(track, { strict: true, avoid, quality: getOfflineState().downloadQuality })
     } catch (error) {
       // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
       if (error instanceof SpotifyApiError && error.code === 'clip_only') {
@@ -496,6 +527,33 @@ async function downloadOne(job: Job): Promise<void> {
       continue
     }
 
+    // Isi berkas harus audio sungguhan (bukan halaman error yang tersimpan sebagai lagu), dan jenis wadahnya menentukan
+    // ekstensi, seperti pemeriksaan wadah di StreamBeats.
+    container = null
+    if (triedNative && !nativeFinalizerMissing) {
+      try {
+        container = await MusicVerseNative.inspectDownload({ path: partPath })
+      } catch (error) {
+        if (isNativeUnimplemented(error)) {
+          nativeFinalizerMissing = true
+        } else if ((error as { code?: unknown } | null)?.code === 'NOT_AUDIO') {
+          await safeDeletePart(partPath)
+          const api = info.apiSource
+          console.warn(`[MusicVerse] Isi unduhan dari ${api ?? 'sumber tak dikenal'} bukan audio; sumber dilewati.`)
+          if (api && !avoid.includes(api)) {
+            avoid.push(api)
+          } else {
+            mismatchRounds += 1
+            if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error('Isi unduhan bukan audio.')
+            avoid.length = 0
+            await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
+          }
+          continue
+        }
+        // Kegagalan lain pada pemeriksaan ini tidak menghentikan unduhan: verifikasi durasi di bawah tetap berjalan.
+      }
+    }
+
     const stat = await Filesystem.stat({ path: partPath, directory: Directory.External })
     const problem = await checkDownloaded(partPath, stat.size, expected, info.probedDuration, active.total)
     if (!problem) {
@@ -524,10 +582,11 @@ async function downloadOne(job: Job): Promise<void> {
     }
   }
 
-  await safeDelete(finalPath)
-  await Filesystem.rename({ from: partPath, to: finalPath, directory: Directory.External, toDirectory: Directory.External })
+  const ext = container?.ext ?? 'mp3'
+  const fileName = `${key}.${ext}`
+  const finalPath = `${DOWNLOAD_DIR}/${fileName}`
 
-  // Sampul: usaha terbaik; gagal = pakai sampul bawaan.
+  // Sampul lebih dulu: ikut disematkan ke dalam berkas. Usaha terbaik; gagal = pakai sampul bawaan.
   let coverFileName: string | undefined
   const coverUrl = track.cover || info.cover
   if (isSafeHttpUrl(coverUrl)) {
@@ -552,7 +611,42 @@ async function downloadOne(job: Job): Promise<void> {
     coverFileName,
     bytes: size,
     savedAt: Date.now(),
+    // Tag sudah dicoba di native (wadah tak didukung dibiarkan, itu bukan kegagalan): tidak perlu dirapikan lagi.
+    ...(container && !nativeFinalizerMissing && isNativeApp() ? { tagged: true } : {}),
   }
+
+  // Penyelesaian di native: tag + sampul disematkan, .part diganti nama atomik, metadata (jurnal) ditulis, dan bila
+  // diminta disalin ke Music/MusicVerse. Berkas yang sudah jadi tidak bergantung lagi pada WebView yang mungkin dibekukan.
+  let finalized = false
+  if (container && !nativeFinalizerMissing && isNativeApp()) {
+    try {
+      const done = await MusicVerseNative.finalizeDownload({
+        partPath,
+        finalPath,
+        title: track.title,
+        artist: track.artists,
+        album: track.album,
+        coverPath: coverFileName ? `${COVER_DIR}/${coverFileName}` : undefined,
+        metaPath: `${META_DIR}/${key}.json`,
+        metaJson: JSON.stringify(entry),
+        exportToMusic: getOfflineState().exportMusic,
+        exportName: exportDisplayName(track, ext),
+      })
+      entry.bytes = done.bytes > 0 ? done.bytes : size
+      finalized = true
+      if (!done.tagged) console.info(`[MusicVerse] "${title}": tag tidak disematkan (wadah ${ext} belum didukung / tidak aman).`)
+      if (getOfflineState().exportMusic && !done.exported) console.warn(`[MusicVerse] Salinan ke folder Musik gagal: ${done.exportError ?? 'tak diketahui'}`)
+    } catch (error) {
+      if (isNativeUnimplemented(error)) nativeFinalizerMissing = true
+      else console.warn('[MusicVerse] Penyelesaian native gagal; memakai ganti nama biasa:', error)
+    }
+  }
+  if (!finalized) {
+    delete entry.tagged
+    await safeDelete(finalPath)
+    await Filesystem.rename({ from: partPath, to: finalPath, directory: Directory.External, toDirectory: Directory.External })
+  }
+
   setItems([entry, ...getOfflineState().items.filter((item) => item.key !== key)])
   void writeMeta(entry)
   setTransfer(key, null)
@@ -824,6 +918,43 @@ export function setWifiOnlyEnabled(on: boolean): void {
   void refreshConditions().then(maybeAutoStart)
 }
 
+/**
+ * Menyalakan/mematikan "Salin ke folder Musik" (disimpan di perangkat). Saat dinyalakan, lagu yang SUDAH diunduh ikut
+ * disalin di latar belakang satu per satu; yang sudah pernah disalin dilewati native (tidak jadi dobel).
+ */
+export function setExportMusicEnabled(on: boolean): void {
+  setExportMusic(on)
+  saveSettings()
+  if (!on || !isNativeApp() || nativeFinalizerMissing) return
+  void (async () => {
+    for (const item of getOfflineState().items) {
+      if (!getOfflineState().exportMusic) return
+      const ext = /\.([a-z0-9]+)$/.exec(item.fileName)?.[1] ?? 'mp3'
+      try {
+        await MusicVerseNative.exportDownload({
+          path: `${DOWNLOAD_DIR}/${item.fileName}`,
+          exportName: exportDisplayName(toPlaylistTrack(item), ext),
+          mime: MIME_BY_EXT[ext] ?? 'audio/mpeg',
+        })
+      } catch (error) {
+        if (isNativeUnimplemented(error)) {
+          nativeFinalizerMissing = true
+          return
+        }
+      }
+    }
+  })()
+}
+
+/**
+ * Kualitas unduhan BARU (disimpan di perangkat). Lagu yang sudah diunduh tidak berubah. Hanya berlaku untuk sumber
+ * plugin: API pihak ketiga tidak menyediakan pilihan bitrate.
+ */
+export function setDownloadQualityPreference(quality: DownloadQuality): void {
+  setDownloadQuality(quality)
+  saveSettings()
+}
+
 /** Menyalakan/mematikan "Unduh hanya saat dicas" (disimpan di perangkat). */
 export function setChargingOnlyEnabled(on: boolean): void {
   setChargingOnly(on)
@@ -833,9 +964,93 @@ export function setChargingOnlyEnabled(on: boolean): void {
   void refreshConditions().then(maybeAutoStart)
 }
 
+/* ---------------- merapikan unduhan lama ---------------- */
+
+export interface UpgradeSummary {
+  upgraded: number
+  skipped: number
+  failed: number
+}
+
+/** APK sudah 0.4.1 (punya inspectDownload) tetapi belum 0.4.2 (belum punya upgradeDownload). */
+let nativeUpgradeMissing = false
+/** Lagu yang gagal / bukan audio di sesi ini: tidak diulang tiap saat (dicoba lagi di sesi berikutnya). */
+const upgradeSkipped = new Set<string>()
+let upgrading: Promise<UpgradeSummary> | null = null
+
+/** Jumlah unduhan yang belum dirapikan (belum bertag / ekstensi belum sesuai isi). */
+export function countUpgradable(): number {
+  return getOfflineState().items.filter((item) => item.tagged !== true).length
+}
+
+/**
+ * Menulis ulang unduhan LAMA (dulu semuanya `.mp3` walau isinya M4A, tanpa tag): sematkan judul/artis/album + sampul dan
+ * beri ekstensi sesuai isi. Satu lagu sekali jalan, semuanya di native dan atomik (lihat AudioFinalizer.upgradeInPlace),
+ * jadi dihentikan di titik mana pun tidak merusak lagu. Tanpa internet. Aman dipanggil berulang: yang sedang berjalan
+ * dipakai bersama, yang sudah rapi dilewati.
+ */
+export function upgradeOldDownloads(): Promise<UpgradeSummary> {
+  if (!upgrading) upgrading = runUpgrade().finally(() => (upgrading = null))
+  return upgrading
+}
+
+async function runUpgrade(): Promise<UpgradeSummary> {
+  const summary: UpgradeSummary = { upgraded: 0, skipped: 0, failed: 0 }
+  if (!isNativeApp() || nativeFinalizerMissing || nativeUpgradeMissing) return summary
+  const todo = getOfflineState().items.filter((item) => item.tagged !== true && !upgradeSkipped.has(item.key))
+  if (todo.length === 0) return summary
+  let done = 0
+  const report = (running: boolean) => setUpgrade({ running, total: todo.length, done, failed: summary.failed + summary.skipped })
+  report(true)
+  for (const snapshot of todo) {
+    // Daftar bisa berubah selagi menyapu (lagu dihapus / sudah dirapikan): selalu baca entri terbaru.
+    const item = getOfflineState().items.find((entry) => entry.key === snapshot.key)
+    if (item && item.tagged !== true) {
+      const path = `${DOWNLOAD_DIR}/${item.fileName}`
+      try {
+        const info = await MusicVerseNative.inspectDownload({ path })
+        const fileName = `${item.key}.${info.ext}`
+        const next: DownloadedTrack = { ...item, fileName, tagged: true }
+        const result = await MusicVerseNative.upgradeDownload({
+          path,
+          finalPath: `${DOWNLOAD_DIR}/${fileName}`,
+          title: item.title,
+          artist: item.artists,
+          album: item.album,
+          coverPath: item.coverFileName ? `${COVER_DIR}/${item.coverFileName}` : undefined,
+          metaPath: `${META_DIR}/${item.key}.json`,
+          metaJson: JSON.stringify(next),
+        })
+        if (result.bytes > 0) next.bytes = result.bytes
+        if (replaceItem(next)) {
+          summary.upgraded += 1
+        } else {
+          // Dihapus pengguna selagi dirapikan: berkas dengan nama baru jangan jadi yatim.
+          for (const orphan of [`${DOWNLOAD_DIR}/${fileName}`, `${META_DIR}/${item.key}.json`]) await safeDelete(orphan)
+        }
+      } catch (error) {
+        if (isNativeUnimplemented(error)) {
+          nativeUpgradeMissing = true
+          break
+        }
+        upgradeSkipped.add(item.key)
+        const code = (error as { code?: unknown } | null)?.code
+        if (code === 'NOT_AUDIO' || code === 'NO_SPACE') summary.skipped += 1
+        else summary.failed += 1
+        console.warn(`[MusicVerse] Unduhan lama "${item.title}" tidak dirapikan:`, error)
+      }
+    }
+    done += 1
+    report(true)
+    await sleep(150) // beri napas supaya tidak berebut disk dengan pemutaran
+  }
+  report(false)
+  return summary
+}
+
 function saveSettings(): void {
   const s = getOfflineState()
-  writeJson(SETTINGS_KEY, { wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly })
+  writeJson(SETTINGS_KEY, { wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly, exportMusic: s.exportMusic, downloadQuality: s.downloadQuality })
 }
 
 /**
@@ -845,6 +1060,8 @@ function saveSettings(): void {
  */
 export function initDownloads(): void {
   if (!isNativeApp()) return
+  // Unduhan lama dirapikan pelan-pelan di latar belakang setelah aplikasi tenang (tanpa internet, satu lagu sekali jalan).
+  window.setTimeout(() => void upgradeOldDownloads(), 20_000)
   // Tombol Jeda / Lanjutkan di notifikasi unduhan.
   void MusicVerseNative.addListener('downloadAction', (event) => {
     if (event.action === 'pause') pauseDownloads()
@@ -854,7 +1071,9 @@ export function initDownloads(): void {
   })
   const settings = readJson(SETTINGS_KEY)
   if (settings.status === 'ok' && typeof settings.value === 'object' && settings.value !== null) {
-    const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown }
+    const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown; exportMusic?: unknown; downloadQuality?: unknown }
+    if (isDownloadQuality(saved.downloadQuality)) setDownloadQuality(saved.downloadQuality)
+    if (saved.exportMusic === true) setExportMusic(true)
     if (saved.wifiOnly === true) setWifiOnly(true)
     if (saved.chargingOnly === true) setChargingOnly(true)
     updateWatch()

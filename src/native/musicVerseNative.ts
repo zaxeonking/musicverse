@@ -93,7 +93,76 @@ export interface NativeDownloadResult {
   resumed: boolean
 }
 
+export interface NativeInspectResult {
+  /** Ekstensi sesuai ISI berkas: m4a | mp3 | aac | ogg | flac | webm | wav. */
+  ext: string
+  mime: string
+}
+
+export interface NativeFinalizeOptions {
+  /** Semua path relatif terhadap Directory.External. */
+  partPath: string
+  finalPath: string
+  title?: string
+  artist?: string
+  album?: string
+  /** Sampul (JPEG/PNG) yang disematkan ke berkas bila wadahnya didukung (M4A, MP3). */
+  coverPath?: string
+  /** Salinan metadata yang ditulis native tepat setelah berkas jadi (jurnal pemulihan). */
+  metaPath?: string
+  metaJson?: string
+  /** Salin juga ke Music/MusicVerse (Android 10+). */
+  exportToMusic?: boolean
+  exportName?: string
+}
+
+export interface NativeUpgradeOptions {
+  /** Berkas sekarang (mis. `download/<kunci>.mp3`). */
+  path: string
+  /** Nama akhir di folder yang sama, berekstensi sesuai isi. Boleh sama dengan `path`. */
+  finalPath: string
+  title: string
+  artist: string
+  album: string
+  coverPath?: string
+  metaPath?: string
+  /** Metadata dengan nama berkas BARU; ditulis sebelum ganti nama supaya pemulihan indeks bisa membacanya. */
+  metaJson?: string
+}
+
+export interface NativeUpgradeResult {
+  ext: string
+  mime: string
+  bytes: number
+  tagged: boolean
+  renamed: boolean
+}
+
+export interface NativeFinalizeResult {
+  ext: string
+  mime: string
+  bytes: number
+  /** True bila judul/artis/album/sampul berhasil disematkan ke dalam berkas. */
+  tagged: boolean
+  exported: boolean
+  exportError?: string
+}
+
 export interface MusicVerseNativePlugin {
+  /**
+   * Mengenali jenis audio dari ISI berkas. Gagal dengan code NOT_AUDIO bila bukan audio (mis. halaman error).
+   * Butuh APK v0.4.1+ (APK lama melempar UNIMPLEMENTED: pemanggil melewati pemeriksaan ini).
+   */
+  inspectDownload(options: { path: string }): Promise<NativeInspectResult>
+  /** Menyematkan tag + sampul, mengganti nama .part -> nama akhir, menulis jurnal metadata, dan (opsional) mengekspor. */
+  finalizeDownload(options: NativeFinalizeOptions): Promise<NativeFinalizeResult>
+  /**
+   * Merapikan SATU unduhan lama: sematkan tag + sampul dan beri ekstensi sesuai isi (atomik, aman bila terhenti).
+   * Gagal dengan code NOT_AUDIO | NO_SPACE | INVALID | IO. Butuh APK v0.4.2+ (APK lama melempar UNIMPLEMENTED).
+   */
+  upgradeDownload(options: NativeUpgradeOptions): Promise<NativeUpgradeResult>
+  /** Menyalin berkas yang sudah ada ke Music/MusicVerse. */
+  exportDownload(options: { path: string; exportName: string; mime: string }): Promise<{ exported: boolean; exportError?: string }>
   /**
    * Pengunduh native yang BISA MELANJUTKAN: putus sinyal tidak membuang byte yang sudah masuk, jaringan ditunggu lalu
    * disambung lewat Range. Gagal dengan code CANCELLED | HTTP_<kode> | NETWORK | SOURCE_CHANGED | IO | INVALID.

@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { useSyncExternalStore } from 'react'
+import { DEFAULT_DOWNLOAD_QUALITY, type DownloadQuality } from '../plugins/quality'
 import type { PlaybackInfo, PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
 import { readJson, writeJson } from '../utils/safeStorage'
@@ -24,6 +25,9 @@ export const META_DIR = `${DOWNLOAD_DIR}/meta`
 const INDEX_KEY = 'musicverse:downloads:v1'
 /** Berkas lebih kecil dari ini dianggap rusak (mis. halaman error HTML yang tersimpan sebagai audio). */
 export const MIN_VALID_BYTES = 100 * 1024
+/** Ekstensi audio yang dikenali (sesuai ISI berkas saat diunduh). Unduhan lama selalu .mp3. */
+export const AUDIO_EXT_PATTERN = 'mp3|m4a|aac|ogg|flac|webm|wav'
+const AUDIO_FILE_RE = new RegExp(`^([A-Za-z0-9_-]+)\\.(?:${AUDIO_EXT_PATTERN})$`)
 /** Lagu penuh jarang di bawah ~40 kbps; berkas yang lebih kecil dari ini untuk durasinya hampir pasti cuplikan. */
 export const MIN_BYTES_PER_SEC = 5000
 
@@ -45,6 +49,19 @@ export interface DownloadedTrack {
   coverFileName?: string
   bytes: number
   savedAt: number
+  /**
+   * True bila berkas sudah melewati penyelesaian native (tag + sampul disematkan, ekstensi sesuai isi). Unduhan sebelum
+   * 0.4.2 tidak punya penanda ini dan dirapikan sekali oleh `upgradeOldDownloads`.
+   */
+  tagged?: boolean
+}
+
+/** Kemajuan perapian unduhan lama (null = belum pernah dijalankan di sesi ini). */
+export interface UpgradeProgress {
+  running: boolean
+  total: number
+  done: number
+  failed: number
 }
 
 export type TransferStatus = 'queued' | 'resolving' | 'downloading' | 'error'
@@ -81,9 +98,14 @@ interface OfflineState {
   unplugged: boolean
   /** Jumlah lagu antrean yang dipulihkan dari sesi sebelumnya dan masih menunggu "Lanjutkan". */
   restored: number
+  /** Pilihan "Salin ke folder Musik": unduhan baru juga disalin ke Music/MusicVerse (terlihat di aplikasi lain). */
+  exportMusic: boolean
+  /** Kualitas unduhan baru (hanya sumber plugin). */
+  downloadQuality: DownloadQuality
+  upgrade: UpgradeProgress | null
 }
 
-let state: OfflineState = { items: [], transfers: new Map(), ready: false, paused: false, wifiOnly: false, cellular: false, chargingOnly: false, unplugged: false, restored: 0 }
+let state: OfflineState = { items: [], transfers: new Map(), ready: false, paused: false, wifiOnly: false, cellular: false, chargingOnly: false, unplugged: false, restored: 0, exportMusic: false, downloadQuality: DEFAULT_DOWNLOAD_QUALITY, upgrade: null }
 const listeners = new Set<() => void>()
 
 function setState(next: Partial<OfflineState>): void {
@@ -124,7 +146,7 @@ function parseItem(value: unknown): DownloadedTrack | null {
   const key = str(v.key)
   const fileName = str(v.fileName)
   // Nama berkas hanya boleh polos: cegah path traversal dari data yang rusak.
-  if (!/^[A-Za-z0-9_-]+\.mp3$/.test(fileName) || !/^[A-Za-z0-9_-]+$/.test(key)) return null
+  if (!AUDIO_FILE_RE.test(fileName) || !/^[A-Za-z0-9_-]+$/.test(key)) return null
   const coverFileName = str(v.coverFileName)
   return {
     key,
@@ -138,6 +160,7 @@ function parseItem(value: unknown): DownloadedTrack | null {
     coverFileName: /^[A-Za-z0-9_-]+\.jpg$/.test(coverFileName) ? coverFileName : undefined,
     bytes: typeof v.bytes === 'number' && Number.isFinite(v.bytes) ? v.bytes : 0,
     savedAt: typeof v.savedAt === 'number' && Number.isFinite(v.savedAt) ? v.savedAt : 0,
+    ...(v.tagged === true ? { tagged: true } : {}),
   }
 }
 
@@ -176,6 +199,25 @@ export function setChargingOnly(chargingOnly: boolean): void {
 
 export function setUnplugged(unplugged: boolean): void {
   if (state.unplugged !== unplugged) setState({ unplugged })
+}
+
+export function setExportMusic(exportMusic: boolean): void {
+  if (state.exportMusic !== exportMusic) setState({ exportMusic })
+}
+
+export function setUpgrade(upgrade: UpgradeProgress | null): void {
+  setState({ upgrade })
+}
+
+/** Mengganti satu entri (mis. setelah dirapikan). Diabaikan bila entri sudah dihapus. */
+export function replaceItem(item: DownloadedTrack): boolean {
+  if (!state.items.some((entry) => entry.key === item.key)) return false
+  setItems(state.items.map((entry) => (entry.key === item.key ? item : entry)))
+  return true
+}
+
+export function setDownloadQuality(downloadQuality: DownloadQuality): void {
+  if (state.downloadQuality !== downloadQuality) setState({ downloadQuality })
 }
 
 export function setRestored(restored: number): void {
@@ -252,15 +294,22 @@ export async function initOffline(): Promise<void> {
   const alive: DownloadedTrack[] = []
   for (const item of loaded) {
     known.add(item.key)
-    if (!files.has(item.fileName)) continue
-    const size = files.get(item.fileName)
+    let fileName = item.fileName
+    if (!files.has(fileName)) {
+      // Perapian unduhan lama terhenti setelah ganti nama tetapi sebelum indeks tersimpan: berkasnya ada dengan
+      // ekstensi lain. Pakai itu, jangan membuang entrinya.
+      const other = AUDIO_EXT_PATTERN.split('|').map((ext) => `${item.key}.${ext}`).find((name) => files.has(name))
+      if (!other) continue
+      fileName = other
+    }
+    const size = files.get(fileName)
     if (size !== undefined && size < MIN_VALID_BYTES) continue
-    alive.push(size !== undefined ? { ...item, bytes: size } : item)
+    alive.push(size !== undefined || fileName !== item.fileName ? { ...item, fileName, ...(size !== undefined ? { bytes: size } : {}) } : item)
   }
 
   let recovered = 0
   for (const [name, size] of files) {
-    const match = /^([A-Za-z0-9_-]+)\.mp3$/.exec(name)
+    const match = AUDIO_FILE_RE.exec(name)
     if (!match || known.has(match[1])) continue
     if (size !== undefined && size < MIN_VALID_BYTES) continue
     const key = match[1]
