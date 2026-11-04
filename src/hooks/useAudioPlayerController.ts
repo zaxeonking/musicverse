@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { audioEngine, AudioEngineError, mediaErrorToCode, type AudioEngineEvent } from '../services/audioEngine'
 import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
+import { forgetResolved } from '../plugins/registry'
+import { markClientRejected } from '../plugins/ytmusic'
 import type {
   AudioPlayerActions,
   AudioPlayerState,
@@ -301,6 +303,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const crossfadeRetryAtRef = useRef(0)
   /** Berapa kali lagu aktif dimuat ulang otomatis karena jaringan putus/lambat; direset saat pemutaran jalan atau lagu baru dipilih. */
   const streamRetryRef = useRef(0)
+  /** User-Agent klien YouTube yang menghasilkan stream lagu aktif; dipakai untuk berganti klien bila stream terus putus. */
+  const activeUaRef = useRef<string | undefined>(undefined)
   /** True selama lagu menunggu internet kembali (jaringan putus di tengah lagu); mencegah penantian ganda. */
   const offlineWaitRef = useRef(false)
   const startPlaybackRef = useRef<(queue: readonly PlaylistTrack[], index: number, options?: StartOptions) => void>(() => {})
@@ -384,6 +388,13 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         streamRetryRef.current += 1
         console.warn(`[MusicVerse] Audio putus (${code}), memuat ulang (${streamRetryRef.current}/${STREAM_RETRY_MAX}).`)
         const retryIndex = current.currentIndex
+        // Muat ulang HARUS mengambil link baru: hasil resolve disimpan di cache sampai ±30 menit, jadi tanpa ini percobaan
+        // ulang memakai URL yang sama persis dan ikut ditolak (spinner "memuat" tidak pernah selesai).
+        const failedTrack = current.queue[retryIndex]
+        if (failedTrack) forgetResolved(failedTrack)
+        // Putus lagi walau link sudah baru dan internet ada: kemungkinan server video menolak stream klien ini
+        // (mis. butuh PO token). Klien itu dilewati supaya link berikutnya dibuat dari klien lain.
+        if (streamRetryRef.current >= 2 && !isDeviceOffline()) markClientRejected(activeUaRef.current)
         const retryRequestId = requestIdRef.current
         const resumeAt = timeRef.current.currentTime
         setStatus('buffering')
@@ -482,6 +493,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           }
           if (event.type === 'timeupdate') {
             clearBufferingTimer()
+            // Pemulihan: event `playing` hilang/terlambat padahal ExoPlayer sudah berbunyi -> jangan terjebak "Buffering…".
+            if (status === 'buffering' && audioEngine.isNativePlaying()) commit({ status: 'playing', error: null })
             crossfadeStepRef.current(event)
             persistPositionRef.current(false, event.currentTime)
           }
@@ -667,6 +680,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         let info: PlaybackInfo
         try {
           info = await fetchPlaybackInfo(track, { signal: controller.signal, avoid })
+          activeUaRef.current = info.directUserAgent
         } catch (error) {
           if (isStale()) return
           if (error instanceof SpotifyApiError) {

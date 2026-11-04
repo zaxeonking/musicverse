@@ -2,6 +2,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem'
 import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
 import { forgetResolved, isNativeUnimplemented } from '../plugins/registry'
+import { markClientRejected } from '../plugins/ytmusic'
 import type { ApiSourceName, PlaybackInfo, PlaylistTrack } from '../types/spotify'
 import { isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { parseDuration } from '../utils/formatTime'
@@ -699,6 +700,7 @@ async function downloadOne(job: Job): Promise<void> {
     netFailures += 1
     if (out.reason === 'rejected') {
       forgetResolved(track)
+      markClientRejected(outcome.info.directUserAgent)
       httpRejects += 1
       // Dua kali ditolak berturut-turut: lewati plugin itu dan coba plugin berikutnya (mis. ytmusic -> ytvideo).
       const rejectedKey = avoidKeyOf(outcome.info)
@@ -732,7 +734,15 @@ async function downloadOne(job: Job): Promise<void> {
       if (outcome === null) continue
     } else {
       // .part TIDAK dihapus di sini: sisa unduhan yang terputus disambung oleh pengunduh native (lihat NativeDownloader).
-      setTransfer(key, { key, title, status: 'resolving', percent: null, forced })
+      // Percobaan ke-2 dan seterusnya diberi keterangan supaya tidak tampak macet di "Menyiapkan…".
+      setTransfer(key, {
+        key,
+        title,
+        status: 'resolving',
+        percent: null,
+        forced,
+        message: netFailures > 0 ? `Mencoba lagi (${netFailures}/${NET_RETRY_MAX})` : undefined,
+      })
       try {
         info = await fetchPlaybackInfo(track, { strict: true, avoid, quality: getOfflineState().downloadQuality })
       } catch (error) {
@@ -845,6 +855,7 @@ async function downloadOne(job: Job): Promise<void> {
         if (rejected) {
           // URL kedaluwarsa / ditolak: resolve ulang (cache dibuang). Dua kali berturut-turut = lewati plugin itu, coba berikutnya.
           forgetResolved(track)
+          markClientRejected(info.directUserAgent)
           httpRejects += 1
           const rejectedKey = avoidKeyOf(info)
           if (httpRejects >= 2 && rejectedKey && !avoid.includes(rejectedKey)) avoid.push(rejectedKey)

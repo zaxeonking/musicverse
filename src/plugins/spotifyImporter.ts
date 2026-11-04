@@ -221,26 +221,53 @@ async function tokenFromAnonymousEndpoint(signal?: AbortSignal): Promise<AccessT
   return null
 }
 
+/** Token anonim web player berlaku ~1 jam: dipakai ulang oleh semua pemanggil (pencarian, info lagu, impor). */
+let cachedToken: AccessToken | null = null
+const TOKEN_ASSUMED_LIFETIME_S = 600
+
+/** Buang token tersimpan (mis. setelah Spotify menolaknya dengan 401/403). */
+export function invalidateAccessToken(): void {
+  cachedToken = null
+}
+
 export async function getAccessToken(
   target: string | { kind: string; id: string } | null,
   signal?: AbortSignal,
   nowS = Date.now() / 1000,
 ): Promise<string> {
+  if (tokenUsable(cachedToken, nowS)) return cachedToken.token
   const embed = typeof target === 'string' ? { kind: 'playlist', id: target } : target
   const sources: Array<() => Promise<AccessToken | null>> = [
     ...(embed ? [async () => tokenFromEmbedHtml(await fetchEmbedHtml(embed.kind, embed.id, signal))] : []),
     ...SEED_PLAYLISTS.map((seed) => async () => tokenFromEmbedHtml(await fetchEmbedHtml('playlist', seed, signal))),
     () => tokenFromAnonymousEndpoint(signal),
   ]
-  for (const source of sources) {
-    try {
-      const token = await source()
-      if (tokenUsable(token, nowS)) return token.token
-    } catch (error) {
-      if (signal?.aborted) throw error
+  // Semua sumber token dijalankan BERSAMAAN; yang pertama memberi token valid dipakai (dulu berurutan: tiap halaman
+  // embed besar harus selesai/gagal dulu sebelum sumber berikutnya dicoba).
+  const token = await new Promise<AccessToken | null>((resolve) => {
+    let pending = sources.length
+    let done = false
+    const settle = (value: AccessToken | null): void => {
+      if (done) return
+      if (value !== null) {
+        done = true
+        resolve(value)
+      } else if (--pending === 0) {
+        done = true
+        resolve(null)
+      }
     }
-  }
-  throw new ImporterError('Tidak bisa mendapatkan token Spotify.')
+    for (const source of sources) {
+      source().then(
+        (value) => settle(tokenUsable(value, nowS) ? value : null),
+        () => settle(null),
+      )
+    }
+  })
+  throwIfAborted(signal)
+  if (token === null) throw new ImporterError('Tidak bisa mendapatkan token Spotify.')
+  cachedToken = { token: token.token, expiresAt: token.expiresAt ?? Math.floor(nowS) + TOKEN_ASSUMED_LIFETIME_S }
+  return token.token
 }
 
 /* ------------------------------------------------------------------ */
@@ -309,7 +336,13 @@ export function parseEmbedTrack(item: unknown, defaultCover?: string): SpotifyAp
 /* ------------------------------------------------------------------ */
 
 async function apiGet(url: string, token: string, signal?: AbortSignal): Promise<unknown> {
-  return getJson(url, { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal)
+  try {
+    return await getJson(url, { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal)
+  } catch (error) {
+    // Token ditolak: jangan dipakai lagi pada percobaan berikutnya.
+    if (error instanceof Error && /HTTP (401|403)\b/.test(error.message)) invalidateAccessToken()
+    throw error
+  }
 }
 
 async function tracksViaApi(id: string, token: string, signal?: AbortSignal): Promise<SpotifyApiTrack[]> {

@@ -277,6 +277,13 @@ export interface MusicVerseNativePlugin {
   engineSetVolume(options: { volume: number }): Promise<void>
   /** Memuat lagu berikutnya di pemutar cadangan (senyap). Dibalas event `standby_ready` / `standby_error`. */
   engineStandbyLoad(options: { url: string; cacheKey?: string }): Promise<void>
+  /** Mode langsung (tanpa StreamProxy) untuk lagu berikutnya yang dimuat. Default mati. */
+  engineSetDirect(options: { enabled: boolean }): Promise<void>
+  /**
+   * Putar-ulang otomatis di native setelah gangguan fokus audio (panggilan / app lain), tanpa batas waktu pendek.
+   * Butuh APK v0.4.11+ (APK lama melempar UNIMPLEMENTED; pemanggil mengabaikannya).
+   */
+  engineSetAutoResume(options: { enabled: boolean }): Promise<void>
   /** true = native pindah sendiri ke lagu cadangan saat lagu aktif selesai (event `advanced`), tanpa menunggu JS. */
   engineSetAutoAdvance(options: { on: boolean }): Promise<void>
   engineClearStandby(): Promise<void>

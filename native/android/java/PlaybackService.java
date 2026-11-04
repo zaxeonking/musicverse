@@ -50,6 +50,7 @@ import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.ResolvingDataSource;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.extractor.DefaultExtractorsFactory;
 
@@ -154,6 +155,8 @@ public class PlaybackService extends Service {
   private static LoadRequest pendingLoad;
   private static volatile float engineVolume = 1f;
   private static volatile boolean autoAdvance = false;
+  /** Mode langsung (ExoPlayer ambil dari sumber tanpa proxy). Dari pengaturan; mati = selalu lewat StreamProxy. */
+  private static volatile boolean directEnabled = false;
   private static volatile boolean eqEnabled = false;
   private static volatile double[] eqGains = new double[EQ_FREQS.length];
 
@@ -192,7 +195,12 @@ public class PlaybackService extends Service {
   public static void engineSeek(long positionMs) {
     PlaybackService running = instance;
     if (running != null) running.handler.post(() -> {
-      if (running.player != null && running.hasMedia) running.player.seekTo(Math.max(0, positionMs));
+      ExoPlayer p = running.player;
+      if (p == null || !running.hasMedia) return;
+      running.bufferingSince = 0; // seek memulai hitungan macet dari awal
+      running.stallStage = 0;
+      if (p.getPlaybackState() == Player.STATE_IDLE) p.prepare(); // pemutar berhenti karena galat: bangunkan lagi
+      p.seekTo(Math.max(0, positionMs));
     });
   }
 
@@ -218,8 +226,26 @@ public class PlaybackService extends Service {
    * true = bila lagu aktif selesai dan lagu cadangan sudah dimuat, native langsung pindah sendiri (tanpa menunggu JS /
    * WebView yang mungkin ditahan di latar belakang) lalu mengirim event `advanced`. JS yang menjamin lagu cadangan itu valid.
    */
+  public static void engineSetDirect(boolean on) {
+    directEnabled = on;
+  }
+
   public static void engineSetAutoAdvance(boolean on) {
     autoAdvance = on;
+  }
+
+  /** Pengaturan "Putar otomatis setelah gangguan" (default menyala). Berlaku juga untuk penantian yang sedang berjalan. */
+  private static volatile boolean autoResumeEnabled = true;
+
+  public static void engineSetAutoResume(boolean on) {
+    autoResumeEnabled = on;
+    final PlaybackService running = instance;
+    if (running != null) {
+      running.handler.post(
+          () -> {
+            if (running.resumer != null) running.resumer.setEnabled(on);
+          });
+    }
   }
 
   public static void engineClearStandby() {
@@ -307,10 +333,18 @@ public class PlaybackService extends Service {
 
     @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
       if (playWhenReady) {
+        if (resumer != null) resumer.end(); // sudah berbunyi lagi (oleh ExoPlayer, kami, atau pengguna)
         emitEngine("play", 0, null);
       } else {
-        String why = reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS ? "focus"
+        boolean focusLoss = reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS;
+        String why = focusLoss ? "focus"
             : reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY ? "noisy" : "user";
+        // Hanya kehilangan fokus audio yang ditunggu lalu dilanjutkan. Jeda pengguna / notifikasi / headset dicabut /
+        // lagu habis membatalkan penantian (tidak pernah diputar ulang sendiri), seperti StreamBeats.
+        if (resumer != null) {
+          if (focusLoss) resumer.begin();
+          else resumer.end();
+        }
         emitEngine("pause", 0, why);
       }
     }
@@ -345,10 +379,16 @@ public class PlaybackService extends Service {
       int st = player.getPlaybackState();
       if (st == Player.STATE_BUFFERING && player.getPlayWhenReady()) {
         long now = SystemClock.elapsedRealtime();
-        if (bufferingSince == 0) bufferingSince = now;
-        else if (now - bufferingSince > DIRECT_STALL_MS && fallbackActive()) bufferingSince = 0;
+        if (bufferingSince == 0) {
+          bufferingSince = now;
+          stallStage = 0;
+        } else if (now - bufferingSince > STALL_STEP_MS) {
+          bufferingSince = now;
+          handleStall(++stallStage);
+        }
       } else {
         bufferingSince = 0;
+        stallStage = 0;
       }
       if (st == Player.STATE_READY || st == Player.STATE_BUFFERING) {
         if (player.isPlaying()) emitEngine("timeupdate", 0, null);
@@ -376,7 +416,8 @@ public class PlaybackService extends Service {
   private static final Map<String, String> DIRECT_UA = new ConcurrentHashMap<>();
   /** Domain yang sudah gagal/macet saat langsung: sisa sesi lewat proxy (mis. sumber yang membatasi Range tak terbatas). */
   private static final Set<String> DIRECT_BLOCKED = ConcurrentHashMap.newKeySet();
-  private static final long DIRECT_STALL_MS = 15_000L;
+  /** Tangga pemulihan macet: tiap STALL_STEP_MS buffering terus-menerus naik satu anak tangga. */
+  private static final long STALL_STEP_MS = 10_000L;
 
   private static final class Src {
     final String proxyUrl;
@@ -403,6 +444,32 @@ public class PlaybackService extends Service {
   private Src activeSrc;
   private Src standbySrc;
   private long bufferingSince = 0;
+  private int stallStage = 0;
+
+  /**
+   * Buffering macet tanpa galat (koneksi menggantung): 1) buka ulang sumber yang sama di posisi sekarang (koneksi baru),
+   * 2) pindah ke proxy bila masih langsung (atau buka ulang lagi), 3) laporkan galat jaringan ke JS supaya link
+   * diambil ulang dan lagu dimuat ulang dari posisi terakhir. Sebelumnya macet seperti ini bisa berputar selamanya.
+   */
+  private void handleStall(int stage) {
+    if (stage == 1) {
+      reopenActive();
+    } else if (stage == 2) {
+      if (!fallbackActive()) reopenActive();
+    } else {
+      stallStage = 0;
+      emitEngine("error", 2, null);
+    }
+  }
+
+  private void reopenActive() {
+    Src src = activeSrc;
+    ExoPlayer p = player;
+    if (src == null || p == null || !hasMedia) return;
+    long pos = Math.max(0, p.getCurrentPosition());
+    p.setMediaSource(mediaSourceFor(src), pos);
+    p.prepare();
+  }
 
   private static String domainKey(String url) {
     try {
@@ -418,7 +485,7 @@ public class PlaybackService extends Service {
   private Src makeSrc(String url, String cacheKey) {
     try {
       String[] peeked = StreamProxy.get().peek(url);
-      if (peeked != null && !DIRECT_BLOCKED.contains(domainKey(peeked[0]))) {
+      if (directEnabled && peeked != null && !DIRECT_BLOCKED.contains(domainKey(peeked[0]))) {
         if (DIRECT_UA.size() > 400) DIRECT_UA.clear();
         DIRECT_UA.put(peeked[0], peeked[1] == null ? "" : peeked[1]);
         return new Src(url, peeked[0], cacheKey);
@@ -675,6 +742,7 @@ public class PlaybackService extends Service {
         .setHandleAudioBecomingNoisy(handleFocus)
         .setWakeMode(C.WAKE_MODE_NETWORK)
         .build();
+    p.setSeekParameters(SeekParameters.CLOSEST_SYNC); // loncat ke titik sinkron terdekat: lebih cepat tanpa membaca mundur
     p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon()
         .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build());
     return p;
@@ -708,6 +776,7 @@ public class PlaybackService extends Service {
   }
 
   void doStopEngine() {
+    if (resumer != null) resumer.end();
     autoAdvance = false;
     hasMedia = false;
     handler.removeCallbacks(engineTicker);
@@ -822,6 +891,8 @@ public class PlaybackService extends Service {
   /** Waktu (elapsedRealtime) saat positionMs terakhir dilaporkan JS; dasar penghitungan posisi berjalan. */
   private long positionAt = 0;
   private final Handler handler = new Handler(Looper.getMainLooper());
+  /** Putar-ulang otomatis setelah gangguan fokus audio (panggilan / app lain), seluruhnya di native dan tanpa batas waktu pendek. */
+  private InterruptionResumer resumer;
   /** Lama notifikasi pemutar bertahan saat dijeda / tidak dipakai sebelum service berhenti (1 jam). */
   private static final long IDLE_LIMIT_MS = 60L * 60L * 1000L;
   private boolean idleScheduled = false;
@@ -851,6 +922,31 @@ public class PlaybackService extends Service {
     super.onCreate();
     instance = this;
     createChannel();
+    resumer =
+        new InterruptionResumer(
+            this,
+            handler,
+            new InterruptionResumer.Host() {
+              @Override public boolean isPlayWanted() {
+                return player != null && player.getPlayWhenReady();
+              }
+
+              @Override public void resumePlayback() {
+                if (!stopped && hasMedia) doResume();
+              }
+
+              @Override public void holdWake(long ms) {
+                // Kunci berbatas waktu; apply() menggantinya dengan kunci biasa begitu benar-benar memutar.
+                if (wakeLock == null || (wakeLock.isHeld() && !timedLock)) return;
+                wakeLock.acquire(ms);
+                timedLock = true;
+              }
+
+              @Override public void gaveUp() {
+                shutdown();
+              }
+            });
+    resumer.setEnabled(autoResumeEnabled);
     session = new MediaSession(this, "MusicVerse");
     session.setCallback(new MediaSession.Callback() {
       @Override public void onPlay() { emit("play", -1); }
@@ -904,6 +1000,7 @@ public class PlaybackService extends Service {
   @Override
   public void onDestroy() {
     stopped = true;
+    if (resumer != null) resumer.end();
     handler.removeCallbacksAndMessages(null);
     if (instance == this) instance = null;
     // Jaring pengaman: pastikan notifikasi benar-benar hilang.
@@ -977,7 +1074,12 @@ public class PlaybackService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
       }
       startInForeground(notification);
-      if (!idleScheduled) {
+      if (resumer != null && resumer.isWaiting()) {
+        // Menunggu gangguan selesai: service tetap hidup (tanpa batas 60 menit) agar bisa lanjut sendiri walau lama.
+        // Batas pengamannya ada di InterruptionResumer (24 jam).
+        handler.removeCallbacks(idleStop);
+        idleScheduled = false;
+      } else if (!idleScheduled) {
         handler.postDelayed(idleStop, IDLE_LIMIT_MS);
         idleScheduled = true;
       }
@@ -1001,6 +1103,7 @@ public class PlaybackService extends Service {
     if (instance == this) instance = null;
     pending = null;
     pendingLoad = null;
+    if (resumer != null) resumer.end(); // lepas callback audio sebelum antrean handler dikosongkan
     handler.removeCallbacksAndMessages(null);
     idleScheduled = false;
     releasePlayer();

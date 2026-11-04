@@ -864,6 +864,18 @@ public class MusicVerseNativePlugin extends Plugin {
   }
 
   @PluginMethod
+  public void engineSetDirect(PluginCall call) {
+    PlaybackService.engineSetDirect(Boolean.TRUE.equals(call.getBoolean("enabled", false)));
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void engineSetAutoResume(PluginCall call) {
+    PlaybackService.engineSetAutoResume(!Boolean.FALSE.equals(call.getBoolean("enabled", true)));
+    call.resolve();
+  }
+
+  @PluginMethod
   public void engineSetAutoAdvance(PluginCall call) {
     PlaybackService.engineSetAutoAdvance(Boolean.TRUE.equals(call.getBoolean("on", false)));
     call.resolve();

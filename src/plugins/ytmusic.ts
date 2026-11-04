@@ -4,8 +4,8 @@ import type { PluginTrackHit, ResolverPlugin, StreamSource } from './types'
 /**
  * Plugin YouTube Music (port ringkas dari plugin `ytmusic` Bloomee):
  *  - search : API WEB_REMIX filter "Songs".
- *  - streams: klien ANDROID dulu, lalu IOS; keduanya mengembalikan URL langsung tanpa cipher.
- *    (Cadangan TVHTML5 + dekode cipher belum dibawa; jika keduanya gagal, aplikasi mencoba plugin `ytvideo`.)
+ *  - streams: klien VISIONOS (tanpa PO token), lalu ANDROID tanpa androidSdkVersion, lalu IOS; semuanya mengembalikan URL
+ *    langsung tanpa cipher. (TVHTML5 + dekode cipher belum dibawa; jika semuanya gagal, aplikasi mencoba plugin `ytvideo`.)
  */
 
 const SEARCH_URL = 'https://music.youtube.com/youtubei/v1/search?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30&prettyPrint=false'
@@ -15,21 +15,64 @@ const WEB_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
 const SONGS_PARAMS = 'EgWKAQIIAWoMEA4QChADEAQQCRAF'
 
-const ANDROID = {
+/**
+ * Klien pengambil stream. URUTAN PENTING: klien yang dipakai harus yang URL-nya tidak butuh PO token.
+ *
+ * Klien `ANDROID` yang membawa `androidSdkVersion` (dipakai sampai v0.4.11) memicu syarat PO token di server video
+ * YouTube: playerResponse-nya OK dan beberapa detik/MB pertama terbaca (lolos pemeriksaan durasi), tetapi permintaan
+ * Range berikutnya ditolak 403. Gejalanya: lagu berhenti di tengah buffering, geser maju/mundur macet, dan unduhan
+ * berputar di "Menyiapkan…" karena URL ditolak lalu di-resolve ulang dari klien yang sama.
+ *
+ *  - VISIONOS     : klien utama (default yt-dlp sejak 2026.08.19; tanpa JS runtime dan tanpa PO token). Konteks sama
+ *                   dengan yt-dlp (`visionos`), X-YouTube-Client-Name 101.
+ *  - ANDROID sdkless: ANDROID tanpa `androidSdkVersion` (cadangan; sebelumnya dipakai yt-dlp).
+ *  - IOS          : cadangan terakhir.
+ * Klien berikutnya hanya dipakai bila yang sebelumnya gagal / tanpa stream, atau bila stream klien itu baru saja
+ * ditolak server video (lihat `markClientRejected`).
+ */
+const VISIONOS = {
+  name: 'VISIONOS',
+  id: '101',
+  version: '1.02',
+  ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
+  context: { deviceMake: 'Apple', deviceModel: 'RealityDevice17,1', osName: 'visionOS', osVersion: '26.5.23O471' },
+}
+const ANDROID_SDKLESS = {
   name: 'ANDROID',
   id: '3',
-  version: '21.26.364',
-  ua: 'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
-  context: { androidSdkVersion: 30, platform: 'MOBILE', osName: 'Android', osVersion: '11' },
+  version: '20.10.38',
+  ua: 'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
+  context: { osName: 'Android', osVersion: '11' },
 }
 const IOS = {
   name: 'IOS',
   id: '5',
   version: '20.10.4',
-  ua: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3 like Mac OS X)',
-  context: { deviceModel: 'iPhone16,2' },
+  ua: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+  context: { deviceMake: 'Apple', deviceModel: 'iPhone16,2', osName: 'iOS', osVersion: '18.3.2.22D82' },
 }
-type PlayerClient = typeof ANDROID | typeof IOS
+type PlayerClient = typeof VISIONOS | typeof ANDROID_SDKLESS | typeof IOS
+const CLIENTS: readonly PlayerClient[] = [VISIONOS, ANDROID_SDKLESS, IOS]
+
+/** User-Agent klien -> sampai kapan klien itu dilewati (stream-nya baru ditolak server video). */
+const rejectedUntil = new Map<string, number>()
+const REJECT_PAUSE_MS = 10 * 60_000
+
+/**
+ * Dipanggil saat URL stream dari klien ini ditolak server video (HTTP 401/403/410) setelah berhasil di-resolve.
+ * Klien itu dilewati 10 menit supaya resolve berikutnya memakai klien lain, bukan mengulang URL yang sama-sama ditolak.
+ */
+export function markClientRejected(userAgent: string | undefined): void {
+  if (!userAgent) return
+  if (CLIENTS.some((c) => c.ua === userAgent)) rejectedUntil.set(userAgent, Date.now() + REJECT_PAUSE_MS)
+}
+
+function orderedClients(): PlayerClient[] {
+  const now = Date.now()
+  const usable = CLIENTS.filter((c) => (rejectedUntil.get(c.ua) ?? 0) <= now)
+  const paused = CLIENTS.filter((c) => (rejectedUntil.get(c.ua) ?? 0) > now)
+  return [...usable, ...paused]
+}
 
 /* ---------------- visitorData (di-cache agar request berikutnya cepat) ---------------- */
 
@@ -187,7 +230,8 @@ async function playerStreams(client: PlayerClient, id: string, visitor: string |
 async function getStreams(id: string, signal?: AbortSignal): Promise<StreamSource[]> {
   let visitor = loadVisitor() ?? (await fetchVisitor(signal))
   let lastError: unknown = new Error('Tidak ada stream audio.')
-  for (const client of [ANDROID, IOS]) {
+  let first = true
+  for (const client of orderedClients()) {
     try {
       const streams = await playerStreams(client, id, visitor, signal)
       if (streams.length > 0) return streams
@@ -195,13 +239,14 @@ async function getStreams(id: string, signal?: AbortSignal): Promise<StreamSourc
       if (signal?.aborted) throw error
       lastError = error
       // Gagal pada klien pertama biasanya karena visitorData basi: ambil ulang sekali.
-      if (client === ANDROID) visitor = (await fetchVisitor(signal)) ?? visitor
+      if (first) visitor = (await fetchVisitor(signal)) ?? visitor
     }
+    first = false
   }
   throw lastError
 }
 
-/** Pengambil stream YouTube (klien ANDROID lalu IOS), dipakai bersama oleh plugin `ytvideo`. */
+/** Pengambil stream YouTube (VISIONOS, lalu ANDROID sdkless, lalu IOS), dipakai bersama oleh plugin `ytvideo`. */
 export { getStreams as getYoutubeStreams }
 
 export const ytMusicPlugin: ResolverPlugin = { id: 'ytmusic', name: 'YouTube Music', search, getStreams }

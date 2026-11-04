@@ -39,7 +39,8 @@ function transferLabel(transfer: Transfer, paused: boolean, heldText: string | n
     case 'queued':
       return paused ? 'Dijeda' : heldText ? `Menunggu ${heldText}` : 'Menunggu antrean'
     case 'resolving':
-      return paused && !transfer.forced ? 'Menyiapkan… lalu dijeda' : 'Menyiapkan…'
+      if (paused && !transfer.forced) return 'Menyiapkan… lalu dijeda'
+      return transfer.message ? `Menyiapkan… ${transfer.message}` : 'Menyiapkan…'
     case 'downloading': {
       const note = paused && !transfer.forced ? ' · dijeda setelah lagu ini' : ''
       if (transfer.percent !== null) return `Mengunduh ${transfer.percent}%${note}`

@@ -1,6 +1,7 @@
 import { isNativeApp } from '../native/platform'
 import { bindEqElement, getEqState, isCorsSafe, isEqBound, subscribeEq } from './equalizer'
 import { MusicVerseNative, type NativeEngineEvent } from '../native/musicVerseNative'
+import { getAutoResume, getDirectMode } from '../native/engineSettings'
 import type { PlayerErrorCode } from '../types/player'
 
 /**
@@ -329,7 +330,8 @@ class AudioEngine {
     m.duration = typeof event.duration === 'number' && event.duration > 0 ? event.duration : null
     m.seekable = event.seekable
     m.ahead = event.ahead
-    if (event.type === 'playing') m.playing = true
+    // `timeupdate` dari native hanya dikirim saat ExoPlayer benar-benar berbunyi.
+    if (event.type === 'playing' || event.type === 'timeupdate') m.playing = true
     else if (event.type === 'waiting' || event.type === 'pause' || event.type === 'ended' || event.type === 'error') m.playing = false
 
     if (event.type === 'play' || event.type === 'playing') {
@@ -369,6 +371,8 @@ class AudioEngine {
     this.mirror.url = nativeUrl
     this.mirror.cacheKey = cacheKey
     this.nativeAutoAdvance = false
+    await MusicVerseNative.engineSetDirect({ enabled: getDirectMode() }).catch(() => {})
+    await MusicVerseNative.engineSetAutoResume({ enabled: getAutoResume() }).catch(() => {})
     await MusicVerseNative.engineLoad({ url: nativeUrl, startMs, cacheKey: cacheKey ?? undefined })
     this.pushNativeEq()
     this.applyNativeVolume(true)
@@ -762,6 +766,11 @@ class AudioEngine {
   /** Detik lagu berikutnya mulai dimuat lebih awal di mesin native (cadangan bisa langsung dipakai walau JS tertahan). */
   preloadLeadSeconds(): number {
     return this.isNative() ? 45 : 0
+  }
+
+  /** Mesin native sedang berjalan dan melaporkan suara keluar (bukan buffering). Dipakai controller untuk memulihkan status. */
+  isNativePlaying(): boolean {
+    return this.isNative() && this.activeSource !== null && this.mirror.playing
   }
 
   /** Mesin native: izinkan/larang native pindah sendiri ke lagu cadangan saat lagu aktif selesai. */

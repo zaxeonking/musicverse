@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { getAutoResume } from '../../native/engineSettings'
 import { MusicVerseNative } from '../../native/musicVerseNative'
 import { isNativeApp } from '../../native/platform'
 import { audioEngine } from '../../services/audioEngine'
@@ -11,7 +12,10 @@ const RETRY_GAP_MS = 3_000
 const GRACE_MS = 3_000
 /** Bila app lain tidak pernah terdeteksi memutar audio, putar lagi setelah ini (gangguan singkat, mis. suara navigasi). */
 const NO_SIGNAL_RESUME_MS = 8_000
-/** Berhenti menunggu setelah ini (sama dengan batas notifikasi pemutar saat dijeda). */
+/**
+ * Berhenti menunggu setelah ini. Ini hanya jalur cadangan di JavaScript: penantian panjang (sampai 24 jam) ditangani
+ * native (InterruptionResumer) yang tidak bergantung pada WebView.
+ */
 const GIVE_UP_MS = 60 * 60 * 1000
 
 async function otherAudioBusy(): Promise<boolean> {
@@ -25,7 +29,8 @@ async function otherAudioBusy(): Promise<boolean> {
 /**
  * Putar lagi otomatis saat musik terhenti karena app lain (mis. TikTok, panggilan) dan gangguannya sudah selesai.
  * Jeda yang dilakukan pengguna (tombol, notifikasi, headset) TIDAK diputar ulang.
- * Hanya APK: butuh deteksi audio app lain dari native.
+ * Hanya APK: butuh deteksi audio app lain dari native. Jalur utama sekarang di native (InterruptionResumer, APK v0.4.11+);
+ * komponen ini jaga-jaga untuk APK lama dan mengikuti pengaturan "Putar otomatis setelah gangguan".
  */
 export default function AutoResumeSync() {
   useEffect(() => {
@@ -74,6 +79,7 @@ export default function AutoResumeSync() {
     }
 
     const begin = () => {
+      if (!getAutoResume()) return
       since = Date.now()
       lastTry = 0
       sawBusy = false

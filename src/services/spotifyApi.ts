@@ -573,6 +573,21 @@ async function requestTrack(trackUrl: string, options: FetchPlaylistOptions = {}
 /* Pencarian lagu (HANYA info lagu; audio selalu dari plugin)           */
 /* ------------------------------------------------------------------ */
 
+/** Hasil pertama yang BERHASIL; menolak (dengan daftar galat per janji) hanya bila semuanya gagal. (Promise.any butuh ES2021.) */
+function firstSuccess<T>(promises: Array<Promise<T>>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const errors: unknown[] = []
+    let failed = 0
+    promises.forEach((promise, index) => {
+      promise.then(resolve, (error: unknown) => {
+        errors[index] = error
+        failed += 1
+        if (failed === promises.length) reject(errors)
+      })
+    })
+  })
+}
+
 /** Mencari lagu lewat judul (endpoint play lama; server memilih lagu terdekat). Hanya info lagunya yang dipakai. */
 export async function searchTrackByTitle(
   query: string,
@@ -580,11 +595,48 @@ export async function searchTrackByTitle(
 ): Promise<PlaybackInfo> {
   const text = query.trim()
   if (!text) throw new SpotifyApiError('invalid_query', 'Judul lagu kosong, audio tidak bisa dicari.')
-  // 1) Pencarian langsung di Spotify. 2) Hanya jika gagal (setelah retry): endpoint play nexadev sebagai cadangan.
-  const meta = await withImporterRetry('Pencarian judul', () => searchSpotifyTrack(text, { signal: options.signal }), options.signal)
-  if (meta) return toPlaybackInfo(meta)
-  console.warn('[MusicVerse] Pencarian Spotify langsung gagal; memakai API pihak ketiga sebagai cadangan.')
-  return requestPlayback(query, options)
+  // HYBRID: Spotify langsung dan API pihak ketiga (nexadev) dijalankan BERSAMAAN; yang pertama berhasil dipakai dan
+  // yang lain dibatalkan. Bila salah satu gagal, yang lain tetap ditunggu; error hanya dilempar jika keduanya gagal.
+  const outer = options.signal
+  if (outer?.aborted) throw new SpotifyApiError('aborted', 'Permintaan dibatalkan.')
+  const directCtl = new AbortController()
+  const thirdCtl = new AbortController()
+  const onOuterAbort = (): void => {
+    directCtl.abort()
+    thirdCtl.abort()
+  }
+  outer?.addEventListener('abort', onOuterAbort, { once: true })
+
+  const direct = withImporterRetry('Pencarian judul', () => searchSpotifyTrack(text, { signal: directCtl.signal }), directCtl.signal).then(
+    (meta) => {
+      if (!meta) throw new SpotifyApiError('no_audio', 'Pencarian Spotify langsung gagal.')
+      return toPlaybackInfo(meta)
+    },
+  )
+  const third = requestPlayback(query, { ...options, signal: thirdCtl.signal })
+  // Kegagalan salah satu jangan jadi "unhandled rejection" saat yang lain sudah menang.
+  direct.catch(() => {})
+  third.catch(() => {})
+
+  try {
+    const winner = await firstSuccess<{ info: PlaybackInfo; from: string }>([
+      direct.then((info) => ({ info, from: 'spotify' as const })),
+      third.then((info) => ({ info, from: 'pihak ketiga' as const })),
+    ])
+    console.info(`[MusicVerse] Pencarian judul dimenangkan: ${winner.from}.`)
+    return winner.info
+  } catch (error) {
+    if (outer?.aborted) throw new SpotifyApiError('aborted', 'Permintaan dibatalkan.')
+    // Keduanya gagal: tampilkan galat pihak ketiga (pesan paling informatif untuk pengguna).
+    const errors = Array.isArray(error) ? (error as unknown[]) : []
+    const thirdError = errors[1] ?? errors[0]
+    throw thirdError instanceof Error ? thirdError : new SpotifyApiError('network', 'Pencarian lagu gagal.')
+  } finally {
+    // Pemenang sudah ada (atau semua gagal): hentikan yang masih berjalan.
+    directCtl.abort()
+    thirdCtl.abort()
+    outer?.removeEventListener('abort', onOuterAbort)
+  }
 }
 
 /** Memuat info satu lagu lewat tautan Spotify-nya. Audionya diambil terpisah oleh plugin saat diputar/diunduh. */
