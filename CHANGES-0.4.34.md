@@ -9,7 +9,7 @@ Cukup push source ke GitHub. Perubahan tampilan sampai ke HP sendiri.
 ## Pengaman
 - Tidak pernah mundur: bandingkan `builtAt` paket dengan `__BUILD_TIME__` JS yang sedang berjalan.
 - Hanya bila sidik jari native sama (`scripts/native-hash.mjs`, ditanam APK lewat `res/values/mv_native.xml`, dibaca plugin `nativeHash`).
-  Ada perubahan native = lewati OTA; APK baru tetap lewat tag `v*`.
+  Ada perubahan native = lewati OTA; APK baru tetap lewat kenaikan `version` di package.json.
 - `notifyAppReady` dipanggil 2,5 dtk setelah UI tampil; bila paket baru macet sebelum itu, plugin mundur sendiri (batas 15 dtk).
 - Release `ota` pre-release dan `--latest=false`, jadi cek "rilis terbaru" APK tidak terganggu. `statsUrl` dikosongkan: tidak ada laporan ke cloud Capgo.
 

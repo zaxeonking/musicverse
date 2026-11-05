@@ -438,7 +438,7 @@ Release `ota` (pre-release bergulir) di repo rilis (`RELEASE_REPO`, sama dengan 
 **saat aplikasi dibuka ulang** (tutup dari recent apps lalu buka). Tidak memuat ulang di tengah lagu.
 
 - Hanya untuk perubahan **web** (tampilan, logika JS). Perubahan di Java, izin, plugin, dependensi, atau `capacitor.config.ts`
-  mengubah "sidik jari native" (`scripts/native-hash.mjs`); aplikasi lalu melewati paket OTA itu dan APK baru (tag `v*`) tetap diperlukan.
+  mengubah "sidik jari native" (`scripts/native-hash.mjs`); aplikasi lalu melewati paket OTA itu dan APK baru (naikkan `version` di package.json) tetap diperlukan.
 - Aman: paket yang lebih lama tidak pernah dipasang (`__BUILD_TIME__`), data (library, unduhan) tetap karena origin WebView sama, dan
   bila paket baru macet sebelum UI tampil plugin otomatis mundur ke paket sebelumnya (`notifyAppReady`, batas 15 dtk).
 - Syarat: repo rilis harus **public** (sama dengan cek pembaruan APK). Untuk repo rilis lain, pakai secret `RELEASES_TOKEN` seperti `apk.yml`.
