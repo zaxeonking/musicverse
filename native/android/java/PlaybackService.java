@@ -370,7 +370,9 @@ public class PlaybackService extends Service {
         }
       } else if (state == Player.STATE_ENDED) {
         // Lagu cadangan sudah siap dan JS mengizinkan: pindah sendiri tanpa menunggu WebView (bisa ditahan di latar belakang).
-        if (autoAdvance && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
+        // Hanya saat JS beku (!jsAlive): bila JS hidup, JS yang memproses `ended` dan memindah lagu sendiri. Dua pengendali
+        // sekaligus membuat lagu berikutnya diputar dua kali (native pindah ke cadangan, lalu JS memuatnya lagi).
+        if (autoAdvance && !jsAlive() && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
           autoAdvance = false;
           // Daftar rantai dibuat untuk lagu yang BARU SAJA selesai: isinya (lagu cadangan ini) sudah diputar. Tanpa dibuang,
           // saat lagu cadangan selesai rantai memutarnya LAGI (lagu berulang walau mode ulang mati).
