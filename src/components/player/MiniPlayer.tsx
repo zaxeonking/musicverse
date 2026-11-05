@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useLongPress } from '../../hooks/useLongPress'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
@@ -29,6 +30,15 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const { openTrackMenu } = useTrackMenu()
   const now = useNowPlaying()
   const { collapsed, side, setCollapsed, setSide } = useMiniPlayerMode()
+  const keyboardOpen = useKeyboardOpen()
+  // Gelembung SEMENTARA karena keyboard terbuka. Tidak disimpan: pilihan pengguna (collapsed) tetap seperti semula,
+  // jadi saat keyboard hilang kartu kembali kalau memang itu pilihannya.
+  const [kbBubble, setKbBubble] = useState(false)
+  const kbTimer = useRef(0)
+  const prevKeyboard = useRef(false)
+  // Pengguna mengetuk gelembung saat keyboard terbuka: keyboard ditutup dulu, kartu membesar sesudahnya.
+  const pendingExpand = useRef(false)
+  const showBubble = collapsed || kbBubble
   const dockRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [dockWidth, setDockWidth] = useState(0)
@@ -58,6 +68,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     () => () => {
       window.clearTimeout(collapseTimer.current)
       window.clearTimeout(resetTimer.current)
+      window.clearTimeout(kbTimer.current)
     },
     [],
   )
@@ -90,28 +101,76 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }, 340)
   }
 
-  /** Kartu "terbang" mengecil ke pojok tempat gelembung, lalu diganti gelembung. */
-  const shrink = () => {
+  /**
+   * Kartu "terbang" mengecil ke pojok tempat gelembung, lalu diganti gelembung. `persist` = pilihan pengguna (disimpan);
+   * false = sementara karena keyboard (tidak disimpan).
+   */
+  const flyToBubble = (persist: boolean) => {
     const el = cardRef.current
     if (!el) {
-      setCollapsed(true)
+      if (persist) setCollapsed(true)
+      else setKbBubble(true)
       return
     }
     const travel = Math.max(0, el.clientWidth / 2 - 28) * (side === 'right' ? 1 : -1)
     el.style.transition = 'transform 220ms cubic-bezier(0.5,0,0.75,0), opacity 200ms ease-in'
     el.style.transform = `translate3d(${travel}px, 0, 0) scale(0.16)`
     el.style.opacity = '0'
-    window.clearTimeout(collapseTimer.current)
-    collapseTimer.current = window.setTimeout(() => {
+    const timer = persist ? collapseTimer : kbTimer
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
       setGrowFrom(null)
-      setCollapsed(true)
+      if (persist) setCollapsed(true)
+      else setKbBubble(true)
     }, 200)
   }
 
+  const shrink = () => flyToBubble(true)
+
   const expand = () => {
+    if (keyboardOpen) {
+      pendingExpand.current = true
+      const active = document.activeElement
+      if (active instanceof HTMLElement) active.blur()
+      return
+    }
     setGrowFrom(side)
     setCollapsed(false)
   }
+
+  // Keyboard muncul -> kartu mengecil jadi piringan; keyboard hilang -> piringan membesar jadi kartu lagi.
+  // Tanpa daftar dependensi: badan efek hanya bekerja saat keyboardOpen BERUBAH (dijaga prevKeyboard), jadi aman dan selalu
+  // memakai nilai terbaru (collapsed, side, kbBubble).
+  useEffect(() => {
+    const was = prevKeyboard.current
+    prevKeyboard.current = keyboardOpen
+    if (keyboardOpen === was) return
+    if (keyboardOpen) {
+      if (!collapsed && !kbBubble) flyToBubble(false)
+      return
+    }
+    window.clearTimeout(kbTimer.current)
+    if (!kbBubble) {
+      // Sempat mulai mengecil tetapi keyboard keburu menutup: kartu kembali ke tempatnya dengan animasi.
+      const el = cardRef.current
+      if (el) {
+        el.style.transition = 'transform 260ms cubic-bezier(0.22,1,0.36,1), opacity 200ms'
+        el.style.transform = ''
+        el.style.opacity = ''
+      }
+    }
+    if (pendingExpand.current) {
+      pendingExpand.current = false
+      if (collapsed) {
+        setGrowFrom(side)
+        setCollapsed(false)
+      }
+    }
+    if (kbBubble) {
+      setGrowFrom(side)
+      setKbBubble(false)
+    }
+  })
 
   /** Kartu meluncur ke atas sambil memudar, bersamaan dengan pemutar penuh yang naik menutupinya. */
   const openFull = () => {
@@ -208,8 +267,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
 
   return (
     <div className="pointer-events-none relative z-40 h-0 shrink-0">
-    <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-4 ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
-    {collapsed ? (
+    <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
+    {showBubble ? (
       <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} />
     ) : (
     <div className={`flex origin-bottom flex-col ${cardAnimation}`}>
@@ -233,7 +292,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
       <button
         type="button"
-        onClick={shrink}
+        onClick={() => shrink()}
         aria-label="Perkecil pemutar jadi gelembung"
         title="Seret ke bawah untuk memperkecil"
         className="absolute left-1/2 top-0 z-10 flex h-4 w-20 -translate-x-1/2 items-start justify-center pt-1 focus-ring"

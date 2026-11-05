@@ -62,7 +62,7 @@ Berisi komponen yang mengatur tata letak dan navigasi aplikasi.
 File| Fungsi
 AppShell.tsx| Kerangka utama aplikasi dan pengatur layout.
 Sidebar.tsx| Navigasi samping untuk tampilan desktop.
-BottomNav.tsx| Navigasi bawah untuk tampilan mobile.
+BottomNav.tsx| Navigasi bawah mobile bergaya kaca cair: pil melayang, lensa aktif meluncur, turun saat keyboard terbuka (utils/navActive.ts menentukan tab aktif).
 MobileHeader.tsx| Header khusus tampilan mobile.
 UpdateBanner.tsx| Menampilkan pemberitahuan pembaruan aplikasi.
 OfflineBanner.tsx| Menampilkan status atau pemberitahuan ketika offline.
@@ -198,6 +198,7 @@ greeting.ts| Menghasilkan sapaan berdasarkan waktu.
 usePlaylistPrefs.ts| Mengelola preferensi playlist.
 useLyrics.ts| Mengambil dan mengelola data lirik.
 useMiniPlayerMode.ts| Mengatur mode mini player.
+useKeyboardOpen.ts| Mendeteksi keyboard layar terbuka (bersama utils/keyboardState.ts); dipakai BottomNav, MiniPlayer, AppShell.
 useAppUpdate.ts| Mengelola pengecekan pembaruan aplikasi.
 useOnlineStatus.ts| Memantau status koneksi internet.
 useLyricTiming.ts| Mengatur sinkronisasi waktu lirik.

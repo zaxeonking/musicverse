@@ -95,6 +95,9 @@ Lagu berikutnya diputar otomatis saat lagu selesai (lihat tahap 6).
 Keduanya hanya membaca `useAudioPlayer()` / `usePlaybackTime()`; tidak ada state playback kedua, dan endpoint tidak berubah.
 State UI satu-satunya yang baru adalah "full player terbuka" di `PlayerDock`.
 
+- **Keyboard layar (0.4.26).** Saat keyboard terbuka (WebView mengecil dan ada isian teks yang fokus), bottom nav menutup dengan animasi dan mini player mengecil jadi piringan (sementara: pilihan kartu/gelembung yang disimpan tidak berubah). Keyboard hilang: nav membuka lagi dan piringan membesar jadi kartu. Deteksi: `utils/keyboardState.ts` + `hooks/useKeyboardOpen.ts`.
+- **Bottom nav kaca cair (0.4.27).** Nav bawah (mobile) berbentuk pil melayang dengan latar kaca (blur + saturasi, warnanya mengikuti konten di belakangnya) dan satu lensa kaca beraksen yang meluncur ke tab aktif. Warna aksen/permukaan dari token tema. Konten kini meluas sampai tepi bawah dan diberi padding lewat variabel CSS `--dock-offset` (diatur `AppShell`; 0 saat keyboard terbuka dan di layar lebar); posisi mini player memakai variabel yang sama.
+
 - **Posisi.** Mobile: tepat di atas `BottomNav` (`bottom: 4rem + 1px + safe-area-inset-bottom`). Desktop: menempel di bawah,
   di kanan sidebar. Tinggi mini diekspos sebagai `--mini-player-h` agar `<main>` memberi padding bawah yang pas.
   Full player memakai `safe-area-inset-top/bottom` (index.html sudah `viewport-fit=cover`).
