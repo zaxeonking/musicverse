@@ -1,4 +1,4 @@
-import { Heart, ListMusic, Plus } from 'lucide-react'
+import { Heart, ListMusic, Pin, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
@@ -24,6 +24,7 @@ function PlaylistCard({ playlist }: { playlist: MyPlaylist }) {
         </span>
         <span title={playlist.name} className="flex items-start gap-1.5 font-display text-base font-bold leading-snug text-ink">
           {isLikedId(playlist.id) && <Heart className="mt-1 h-4 w-4 shrink-0 text-accent" fill="currentColor" aria-hidden="true" />}
+          {playlist.pinned && <Pin className="mt-1 h-4 w-4 shrink-0 text-accent" fill="currentColor" aria-label="Disematkan" />}
           <span className="line-clamp-2 break-words">{playlist.name}</span>
         </span>
         <span className="mt-1 text-sm text-ink-muted">{count === 0 ? 'Kosong' : `${count} lagu`}</span>

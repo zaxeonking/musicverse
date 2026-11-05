@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Play, RefreshCw, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, RefreshCw, Trash2, X } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
@@ -81,7 +81,7 @@ function TrackLine({
 export default function MyPlaylistPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack, saveDownloadedPlaylist } = useMyPlaylists()
+  const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack, saveDownloadedPlaylist, setPinned } = useMyPlaylists()
   const { removePlaylist: removeSaved } = useLibrary()
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
@@ -227,6 +227,22 @@ export default function MyPlaylistPage() {
           <button type="button" onClick={() => void syncFromSpotify()} disabled={syncing} className="btn-secondary">
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
             Unduh yang baru
+          </button>
+        )}
+        {!builtIn && (
+          <button
+            type="button"
+            onClick={() => {
+              const result = setPinned(playlist.id, !playlist.pinned)
+              if (!result.ok) fail(result.reason)
+              else showToast(result.value.pinned ? 'Playlist disematkan di atas' : 'Sematan dilepas')
+            }}
+            aria-pressed={playlist.pinned === true}
+            aria-label={playlist.pinned ? 'Lepas sematan playlist' : 'Sematkan playlist'}
+            title={playlist.pinned ? 'Lepas sematan' : 'Sematkan di atas'}
+            className={`icon-btn bg-raised ${playlist.pinned ? 'text-accent' : ''}`}
+          >
+            {playlist.pinned ? <PinOff className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
           </button>
         )}
         {builtIn ? null : confirmDelete ? (

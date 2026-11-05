@@ -48,4 +48,6 @@ export interface MyPlaylist {
   tracks: PlaylistTrack[]
   /** ID playlist Spotify asal jika playlist ini dibuat otomatis oleh "Unduh semua" (supaya unduh ulang memakai playlist yang sama). */
   sourceId?: string
+  /** Disematkan (pin): tampil tepat di bawah "Lagu Disukai", di atas playlist lain. */
+  pinned?: boolean
 }

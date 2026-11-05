@@ -65,7 +65,15 @@ export function parseMyPlaylist(raw: unknown): MyPlaylist | null {
   }
   const createdAt = time(raw.createdAt)
   const sourceId = typeof raw.sourceId === 'string' && raw.sourceId ? raw.sourceId : undefined
-  return { id, name: clean, createdAt, updatedAt: time(raw.updatedAt) || createdAt, tracks, ...(sourceId ? { sourceId } : {}) }
+  return {
+    id,
+    name: clean,
+    createdAt,
+    updatedAt: time(raw.updatedAt) || createdAt,
+    tracks,
+    ...(sourceId ? { sourceId } : {}),
+    ...(raw.pinned === true && id !== LIKED_ID ? { pinned: true } : {}),
+  }
 }
 
 export interface MyPlaylistsRead {
@@ -156,6 +164,16 @@ export function renameMyPlaylist(list: readonly MyPlaylist[], id: string, rawNam
   const name = cleanPlaylistName(rawName)
   if (!name) return { ok: false, reason: 'invalid' } as const
   return update(list, id, (p) => ({ ...p, name, updatedAt: now }))
+}
+
+/** Sematkan / lepas sematan. Tidak mengubah `updatedAt` (urutan terbaru tidak ikut bergeser). "Lagu Disukai" selalu di atas. */
+export function setPinnedIn(list: readonly MyPlaylist[], id: string, pinned: boolean): MyPlaylistChange<MyPlaylist> {
+  if (isLikedId(id)) return { ok: false, reason: 'protected' }
+  return update(list, id, (p) => {
+    const { pinned: _old, ...rest } = p
+    void _old
+    return pinned ? { ...rest, pinned: true } : rest
+  })
 }
 
 export function deleteMyPlaylist(list: readonly MyPlaylist[], id: string): MyPlaylistChange<null> {

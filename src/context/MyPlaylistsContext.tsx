@@ -13,6 +13,7 @@ import {
   removeTrackFromMyPlaylist,
   ensureLiked,
   toggleLikeIn,
+  setPinnedIn,
   trackIdentity,
   LIKED_ID,
   renameMyPlaylist,
@@ -49,6 +50,8 @@ export interface MyPlaylistsContextValue {
    * Menyalin (`copy`) atau memindahkan (`move`) lagu antar playlist buatanmu dalam satu perubahan.
    * `trackIds` = ID lagu di playlist asal; null = semua lagunya.
    */
+  /** Sematkan / lepas sematan playlist (disematkan tampil tepat di bawah Lagu Disukai). */
+  setPinned: (id: string, pinned: boolean) => MyPlaylistResult<MyPlaylist>
   /** Lagu ini ada di playlist bawaan "Lagu Disukai"? */
   isLiked: (track: Pick<PlaylistTrack, 'url'>) => boolean
   /** Suka / batal suka (playlist bawaan dibuat otomatis). */
@@ -59,9 +62,11 @@ export interface MyPlaylistsContextValue {
 const MyPlaylistsContext = createContext<MyPlaylistsContextValue | null>(null)
 
 const byRecent = (list: readonly MyPlaylist[]) => {
-  const sorted = [...list].filter((item) => item.id !== LIKED_ID).sort((a, b) => b.updatedAt - a.updatedAt)
-  // Playlist bawaan "Lagu Disukai" selalu ada dan selalu di paling atas.
-  return ensureLiked(list).slice(0, 1).concat(sorted)
+  const others = [...list].filter((item) => item.id !== LIKED_ID).sort((a, b) => b.updatedAt - a.updatedAt)
+  const pinned = others.filter((item) => item.pinned)
+  const rest = others.filter((item) => !item.pinned)
+  // Urutan tetap: "Lagu Disukai" (bawaan, tak bisa digeser) -> yang disematkan -> sisanya menurut perubahan terbaru.
+  return ensureLiked(list).slice(0, 1).concat(pinned, rest)
 }
 
 /** Pesan singkat untuk pengguna dari alasan gagal. */
@@ -151,6 +156,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       }),
     [mutate],
   )
+  const setPinned = useCallback((id: string, pinned: boolean) => mutate((l) => setPinnedIn(l, id, pinned)), [mutate])
   const toggleLike = useCallback((track: PlaylistTrack) => mutate((l) => toggleLikeIn(l, track)), [mutate])
   const removeTrack = useCallback((id: string, trackId: string) => mutate((l) => removeTrackFromMyPlaylist(l, id, trackId)), [mutate])
   const moveTrack = useCallback((id: string, from: number, to: number) => mutate((l) => moveTrackInMyPlaylist(l, id, from, to)), [mutate])
@@ -191,9 +197,10 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
         return playlists.find((item) => item.id === LIKED_ID)?.tracks.some((item) => trackIdentity(item) === identity) ?? false
       },
       toggleLike,
+      setPinned,
       transferTracks,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike, setPinned],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>
