@@ -16,6 +16,18 @@ export const MAX_MY_PLAYLISTS = 100
 export const MAX_MY_PLAYLIST_TRACKS = 1000
 export const MAX_MY_PLAYLIST_NAME = 60
 
+/** Playlist bawaan "Lagu Disukai" (tombol hati). ID tetap; tidak bisa dihapus atau diganti namanya. */
+export const LIKED_ID = 'my-liked'
+export const LIKED_NAME = 'Lagu Disukai'
+export const isLikedId = (id: string): boolean => id === LIKED_ID
+
+/** Pastikan playlist bawaan ada (kosong bila belum pernah ada). Selalu di urutan pertama. */
+export function ensureLiked(list: readonly MyPlaylist[], now = Date.now()): MyPlaylist[] {
+  const liked = list.find((item) => item.id === LIKED_ID)
+  const rest = list.filter((item) => item.id !== LIKED_ID)
+  return [liked ? { ...liked, name: LIKED_NAME } : { id: LIKED_ID, name: LIKED_NAME, createdAt: now, updatedAt: now, tracks: [] }, ...rest]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -91,7 +103,7 @@ export function writeMyPlaylists(list: readonly MyPlaylist[]): WriteOutcome {
 /* Pengubah murni                                                       */
 /* ------------------------------------------------------------------ */
 
-export type MyPlaylistFailure = 'limit' | 'invalid' | 'duplicate' | 'missing'
+export type MyPlaylistFailure = 'limit' | 'invalid' | 'duplicate' | 'missing' | 'protected'
 export type MyPlaylistChange<T> = { ok: true; list: MyPlaylist[]; value: T } | { ok: false; reason: MyPlaylistFailure }
 
 let counter = 0
@@ -140,14 +152,29 @@ function update(
 }
 
 export function renameMyPlaylist(list: readonly MyPlaylist[], id: string, rawName: string, now = Date.now()) {
+  if (isLikedId(id)) return { ok: false, reason: 'protected' } as const
   const name = cleanPlaylistName(rawName)
   if (!name) return { ok: false, reason: 'invalid' } as const
   return update(list, id, (p) => ({ ...p, name, updatedAt: now }))
 }
 
 export function deleteMyPlaylist(list: readonly MyPlaylist[], id: string): MyPlaylistChange<null> {
+  if (isLikedId(id)) return { ok: false, reason: 'protected' }
   if (!list.some((item) => item.id === id)) return { ok: false, reason: 'missing' }
   return { ok: true, list: list.filter((item) => item.id !== id), value: null }
+}
+
+/** Suka / batal suka sebuah lagu di playlist bawaan. Lagu baru ditaruh di paling atas (seperti Spotify). */
+export function toggleLikeIn(list: readonly MyPlaylist[], track: PlaylistTrack, now = Date.now()): MyPlaylistChange<{ liked: boolean }> {
+  const base = ensureLiked(list, now)
+  const liked = base[0]
+  const identity = trackIdentity(track)
+  const exists = liked.tracks.some((item) => trackIdentity(item) === identity)
+  if (!exists && liked.tracks.length >= MAX_MY_PLAYLIST_TRACKS) return { ok: false, reason: 'limit' }
+  const nextTracks = exists
+    ? liked.tracks.filter((item) => trackIdentity(item) !== identity)
+    : [{ ...toStoredTrack(track), id: `${uid()}-${extractTrackId(track.url) ?? 'track'}` }, ...liked.tracks]
+  return { ok: true, list: [{ ...liked, tracks: nextTracks, updatedAt: now }, ...base.slice(1)], value: { liked: !exists } }
 }
 
 /** Menambah salinan lagu di akhir playlist. Lagu yang sama (ID Spotify/URL) tidak ditambahkan dua kali. */

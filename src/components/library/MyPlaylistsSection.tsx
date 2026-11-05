@@ -1,9 +1,10 @@
-import { ListMusic, Plus } from 'lucide-react'
+import { Heart, ListMusic, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import type { MyPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { isLikedId } from '../../utils/myPlaylistStorage'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
@@ -21,8 +22,9 @@ function PlaylistCard({ playlist }: { playlist: MyPlaylist }) {
         <span className="mb-3 block">
           <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
         </span>
-        <span title={playlist.name} className="line-clamp-2 break-words font-display text-base font-bold leading-snug text-ink">
-          {playlist.name}
+        <span title={playlist.name} className="flex items-start gap-1.5 font-display text-base font-bold leading-snug text-ink">
+          {isLikedId(playlist.id) && <Heart className="mt-1 h-4 w-4 shrink-0 text-accent" fill="currentColor" aria-hidden="true" />}
+          <span className="line-clamp-2 break-words">{playlist.name}</span>
         </span>
         <span className="mt-1 text-sm text-ink-muted">{count === 0 ? 'Kosong' : `${count} lagu`}</span>
       </Link>
@@ -48,7 +50,7 @@ export default function MyPlaylistsSection() {
     <section aria-label="Playlist saya">
       <SectionHeader
         title="Playlist saya"
-        subtitle={playlists.length > 0 ? `${playlists.length} playlist buatanmu` : 'Playlist yang kamu buat dan isi sendiri'}
+        subtitle={playlists.length > 1 ? `${playlists.length - 1} playlist buatanmu + Lagu Disukai` : 'Playlist yang kamu buat dan isi sendiri'}
         action={
           !creating ? (
             <button type="button" onClick={() => setCreating(true)} className="btn-secondary h-10 px-4 text-sm">
@@ -63,21 +65,18 @@ export default function MyPlaylistsSection() {
           <NewPlaylistForm onCreate={create} onCancel={() => setCreating(false)} />
         </div>
       )}
-      {playlists.length === 0 ? (
-        !creating && (
-          <EmptyState
-            compact
-            icon={ListMusic}
-            title="Belum ada playlist buatanmu"
-            description="Buat playlist, lalu tambahkan lagu lewat menu lagu (tahan lama pada lagu) atau tombol Simpan di pemutar."
-          />
-        )
-      ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-          {playlists.map((playlist) => (
-            <PlaylistCard key={playlist.id} playlist={playlist} />
-          ))}
-        </ul>
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+        {playlists.map((playlist) => (
+          <PlaylistCard key={playlist.id} playlist={playlist} />
+        ))}
+      </ul>
+      {playlists.length <= 1 && !creating && (
+        <EmptyState
+          compact
+          icon={ListMusic}
+          title="Belum ada playlist buatanmu"
+          description="Buat playlist, lalu tambahkan lagu lewat menu lagu (tahan lama pada lagu). Ketuk ikon hati di pemutar untuk mengumpulkan lagu ke Lagu Disukai."
+        />
       )}
     </section>
   )

@@ -11,6 +11,10 @@ import {
   MY_PLAYLISTS_KEY,
   readMyPlaylists,
   removeTrackFromMyPlaylist,
+  ensureLiked,
+  toggleLikeIn,
+  trackIdentity,
+  LIKED_ID,
   renameMyPlaylist,
   writeMyPlaylists,
   type BulkAddResult,
@@ -45,12 +49,20 @@ export interface MyPlaylistsContextValue {
    * Menyalin (`copy`) atau memindahkan (`move`) lagu antar playlist buatanmu dalam satu perubahan.
    * `trackIds` = ID lagu di playlist asal; null = semua lagunya.
    */
+  /** Lagu ini ada di playlist bawaan "Lagu Disukai"? */
+  isLiked: (track: Pick<PlaylistTrack, 'url'>) => boolean
+  /** Suka / batal suka (playlist bawaan dibuat otomatis). */
+  toggleLike: (track: PlaylistTrack) => MyPlaylistResult<{ liked: boolean }>
   transferTracks: (fromId: string, toId: string, trackIds: readonly string[] | null, mode: 'copy' | 'move') => MyPlaylistResult<TransferResult>
 }
 
 const MyPlaylistsContext = createContext<MyPlaylistsContextValue | null>(null)
 
-const byRecent = (list: readonly MyPlaylist[]) => [...list].sort((a, b) => b.updatedAt - a.updatedAt)
+const byRecent = (list: readonly MyPlaylist[]) => {
+  const sorted = [...list].filter((item) => item.id !== LIKED_ID).sort((a, b) => b.updatedAt - a.updatedAt)
+  // Playlist bawaan "Lagu Disukai" selalu ada dan selalu di paling atas.
+  return ensureLiked(list).slice(0, 1).concat(sorted)
+}
 
 /** Pesan singkat untuk pengguna dari alasan gagal. */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -60,6 +72,8 @@ export function myPlaylistErrorText(reason: MyPlaylistError): string {
       return 'Batas playlist atau jumlah lagu sudah tercapai'
     case 'invalid':
       return 'Nama atau data tidak valid'
+    case 'protected':
+      return 'Playlist bawaan tidak bisa dihapus atau diganti namanya'
     case 'duplicate':
       return 'Lagu ini sudah ada di playlist itu'
     case 'missing':
@@ -137,6 +151,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       }),
     [mutate],
   )
+  const toggleLike = useCallback((track: PlaylistTrack) => mutate((l) => toggleLikeIn(l, track)), [mutate])
   const removeTrack = useCallback((id: string, trackId: string) => mutate((l) => removeTrackFromMyPlaylist(l, id, trackId)), [mutate])
   const moveTrack = useCallback((id: string, from: number, to: number) => mutate((l) => moveTrackInMyPlaylist(l, id, from, to)), [mutate])
   const transferTracks = useCallback(
@@ -171,9 +186,14 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       saveDownloadedPlaylist,
       removeTrack,
       moveTrack,
+      isLiked: (track: Pick<PlaylistTrack, 'url'>) => {
+        const identity = trackIdentity(track)
+        return playlists.find((item) => item.id === LIKED_ID)?.tracks.some((item) => trackIdentity(item) === identity) ?? false
+      },
+      toggleLike,
       transferTracks,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>

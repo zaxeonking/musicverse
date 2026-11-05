@@ -2,6 +2,7 @@ import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
+import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useLongPress } from '../../hooks/useLongPress'
@@ -27,7 +28,8 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const { status, currentTrack, playbackInfo } = useAudioPlayer()
   const now = useNowPlaying()
   const { notice, dismissNotice } = useLibrary()
-  const { openTrackMenu } = useTrackMenu()
+  const { openTrackMenu, showToast } = useTrackMenu()
+  const { isLiked, toggleLike } = useMyPlaylists()
   // Tahan lama pada sampul atau judul = menu lagu yang sedang diputar.
   const press = useLongPress(() => {
     if (currentTrack) openTrackMenu(currentTrack, { place: 'player' })
@@ -230,6 +232,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   }
 
   if (!now || !currentTrack) return null
+  const liked = isLiked(currentTrack)
   const isError = status === 'error'
   const mismatch = playbackInfo !== null && !looksLikeSameTrack(currentTrack, playbackInfo)
   const iconBtn =
@@ -302,13 +305,17 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
             </div>
             <button
               type="button"
-              onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
-              aria-haspopup="dialog"
-              aria-label="Simpan ke playlist"
-              title="Simpan ke playlist"
-              className={`-mr-1 mt-0.5 text-ink hover:text-accent ${iconBtn}`}
+              onClick={() => {
+                const result = toggleLike(currentTrack)
+                if (!result.ok) showToast(myPlaylistErrorText(result.reason))
+                else showToast(result.value.liked ? 'Ditambahkan ke Lagu Disukai' : 'Dihapus dari Lagu Disukai')
+              }}
+              aria-pressed={liked}
+              aria-label={liked ? 'Hapus dari Lagu Disukai' : 'Sukai lagu ini'}
+              title={liked ? 'Hapus dari Lagu Disukai' : 'Tambahkan ke Lagu Disukai'}
+              className={`-mr-1 mt-0.5 ${iconBtn} ${liked ? 'text-accent' : 'text-ink hover:text-accent'}`}
             >
-              <Heart className="h-7 w-7" aria-hidden="true" />
+              <Heart className={`h-7 w-7 transition-transform duration-200 ${liked ? 'scale-110' : ''}`} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
             </button>
           </div>
 

@@ -14,7 +14,7 @@ import { describeApiError, fetchPlaylist } from '../services/spotifyApi'
 import { isNativeApp } from '../native/platform'
 import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
-import { MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
+import { isLikedId, MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
 import { getRowActivity } from '../utils/playerStatus'
 
 function TrackLine({
@@ -86,6 +86,7 @@ export default function MyPlaylistPage() {
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
   const playlist = getPlaylist(id)
+  const builtIn = playlist ? isLikedId(playlist.id) : false
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -163,7 +164,7 @@ export default function MyPlaylistPage() {
           <CoverArt cover={fallbackCover(playlist.name)} src={tracks[0]?.cover} className="shadow-xl shadow-black/50" />
         </div>
         <div className="min-w-0 flex-1 basis-56">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Playlist saya</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{builtIn ? 'Playlist bawaan' : 'Playlist saya'}</p>
           {renaming ? (
             <form onSubmit={submitRename} className="mt-1 flex items-center gap-2">
               <label htmlFor="rename-playlist" className="sr-only">
@@ -187,17 +188,19 @@ export default function MyPlaylistPage() {
           ) : (
             <h1 className="mt-1 flex items-center gap-1 font-display text-2xl font-extrabold leading-tight tracking-tight sm:text-4xl">
               <span className="min-w-0 break-words">{playlist.name}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setName(playlist.name)
-                  setRenaming(true)
-                }}
-                aria-label="Ganti nama playlist"
-                className="icon-btn shrink-0"
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              </button>
+              {!builtIn && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(playlist.name)
+                    setRenaming(true)
+                  }}
+                  aria-label="Ganti nama playlist"
+                  className="icon-btn shrink-0"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
             </h1>
           )}
           <p className="mt-1 text-sm text-ink-muted">{tracks.length === 0 ? 'Belum ada lagu' : `${tracks.length} lagu`}</p>
@@ -226,7 +229,7 @@ export default function MyPlaylistPage() {
             Unduh yang baru
           </button>
         )}
-        {confirmDelete ? (
+        {builtIn ? null : confirmDelete ? (
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Konfirmasi hapus playlist">
             <span className="text-sm text-ink-muted">Hapus playlist ini?</span>
             <button type="button" onClick={() => setConfirmDelete(false)} className="btn-secondary px-4">
@@ -258,7 +261,7 @@ export default function MyPlaylistPage() {
           compact
           icon={ListMusic}
           title="Playlist ini masih kosong"
-          description="Tahan lama pada lagu mana pun (Beranda, Cari, atau pemutar) lalu pilih “Simpan ke playlist saya”."
+          description={builtIn ? 'Ketuk ikon hati di pemutar untuk menyukai lagu; semuanya terkumpul di sini.' : 'Tahan lama pada lagu mana pun (Beranda, Cari, atau pemutar) lalu pilih “Simpan ke playlist saya”.'}
         />
       ) : (
         <ul>
