@@ -23,9 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Sama dengan apk.yml: repo tempat rilis (public). Kosong = repo ini sendiri.
-      RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
-      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+      # Sama dengan apk.yml: repo tempat rilis (public). Variabel repo RELEASE_REPO kosong = zaxeonking/musicverse-releases.
+      RELEASE_REPO: ${{ vars.RELEASE_REPO || 'zaxeonking/musicverse-releases' }}
+      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || 'zaxeonking/musicverse-releases' }}
     steps:
       - uses: actions/checkout@v4
 

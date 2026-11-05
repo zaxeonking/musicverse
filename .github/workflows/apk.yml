@@ -17,9 +17,9 @@ jobs:
     env:
       # Repo TEMPAT RILIS (harus public supaya APK/web bisa membacanya tanpa login). Isi variabel repo
       # RELEASE_REPO (Settings > Secrets and variables > Actions > Variables) mis. USER/musicverse-releases.
-      # Kosong = pakai repo ini sendiri (hanya berfungsi jika repo ini public).
-      RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
-      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+      # Kosong = zaxeonking/musicverse-releases (bawaan).
+      RELEASE_REPO: ${{ vars.RELEASE_REPO || 'zaxeonking/musicverse-releases' }}
+      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || 'zaxeonking/musicverse-releases' }}
     steps:
       - uses: actions/checkout@v4
 

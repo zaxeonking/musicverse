@@ -443,3 +443,5 @@ Release `ota` (pre-release bergulir) di repo rilis (`RELEASE_REPO`, sama dengan 
   bila paket baru macet sebelum UI tampil plugin otomatis mundur ke paket sebelumnya (`notifyAppReady`, batas 15 dtk).
 - Syarat: repo rilis harus **public** (sama dengan cek pembaruan APK). Untuk repo rilis lain, pakai secret `RELEASES_TOKEN` seperti `apk.yml`.
 - APK yang dibuat sebelum 0.4.34 belum punya pluginnya: pasang APK 0.4.34+ sekali, sesudah itu tampilan ikut otomatis.
+
+Repo rilis bawaan: `zaxeonking/musicverse-releases` (bisa diganti lewat variabel repo `RELEASE_REPO`). Menulis ke repo itu dari repo source butuh secret `RELEASES_TOKEN` (PAT fine-grained, izin Contents: Read and write pada repo rilis saja).
