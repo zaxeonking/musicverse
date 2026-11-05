@@ -330,6 +330,8 @@ public class PlaybackService extends Service {
   private final List<UpcomingItem> upcoming = new ArrayList<>();
   /** Indeks antrean lagu yang diputar native hasil pindah sendiri; -1 = lagu dimuat JS (JS yang tahu posisinya). */
   private int playingIndex = -1;
+  /** Indeks antrean lagu yang sedang diputar menurut pembaruan terakhir (JS atau rantai native); -1 = belum diketahui. */
+  private int knownIndex = -1;
   /** Item yang sedang dimuat di pemutar cadangan oleh rantai native (bukan oleh JS). */
   private UpcomingItem standbyItem = null;
   private int coverToken = 0;
@@ -370,8 +372,13 @@ public class PlaybackService extends Service {
         // Lagu cadangan sudah siap dan JS mengizinkan: pindah sendiri tanpa menunggu WebView (bisa ditahan di latar belakang).
         if (autoAdvance && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
           autoAdvance = false;
+          // Daftar rantai dibuat untuk lagu yang BARU SAJA selesai: isinya (lagu cadangan ini) sudah diputar. Tanpa dibuang,
+          // saat lagu cadangan selesai rantai memutarnya LAGI (lagu berulang walau mode ulang mati).
+          upcoming.clear();
+          standbyItem = null;
+          knownIndex = -1;
           emitEngine("advanced", 0, null);
-        } else if (chainAdvance(false)) {
+        } else if (!jsAlive() && chainAdvance(false)) {
           // Pindah ke lagu berikutnya dari daftar native (JS tidak diperlukan).
         } else {
           if (nativeInCharge()) markNativePlaying(false); // rantai habis saat JS beku: tombol notifikasi harus jadi "putar"
@@ -816,6 +823,7 @@ public class PlaybackService extends Service {
   /** Lagu dimuat oleh JS: JS yang memegang antrean, daftar native lama dibuang (JS mengirim yang baru). */
   void doLoad(String url, long startMs, String cacheKey) {
     playingIndex = -1;
+    knownIndex = -1;
     upcoming.clear();
     loadMedia(url, startMs, cacheKey);
   }
@@ -850,6 +858,7 @@ public class PlaybackService extends Service {
   void doStopEngine() {
     upcoming.clear();
     playingIndex = -1;
+    knownIndex = -1;
     if (resumer != null) resumer.end();
     autoAdvance = false;
     hasMedia = false;
@@ -1008,7 +1017,8 @@ public class PlaybackService extends Service {
               }
 
               @Override public void resumePlayback() {
-                if (!stopped && hasMedia) doResume();
+                // Lagu sudah selesai saat gangguan: jangan putar ulang lagu yang sama dari awal.
+                if (!stopped && hasMedia && player != null && player.getPlaybackState() != Player.STATE_ENDED) doResume();
               }
 
               @Override public void holdWake(long ms) {
@@ -1087,6 +1097,7 @@ public class PlaybackService extends Service {
     if (stopped) return;
     // Native sudah pindah sendiri dan JS belum menyamakan: daftar ini dibuat dari keadaan lama.
     if (playingIndex != -1 && currentIndex != playingIndex) return;
+    knownIndex = currentIndex;
     upcoming.clear();
     if (items != null) upcoming.addAll(items);
     // Pemutar cadangan milik rantai ini sudah tidak sesuai daftar baru: buang.
@@ -1102,11 +1113,19 @@ public class PlaybackService extends Service {
     // JS masih hidup dan mengatur pergantian lagu sendiri (ulang lagu, sleep timer akhir lagu, dst. dikecualikan di sisinya
     // dengan mengosongkan daftar ini); hanya saat 'ended' kita ambil alih, atau saat JS beku.
     UpcomingItem item = upcoming.get(0);
+    // Pengaman loop: lagu yang akan "berikutnya" ternyata lagu yang sedang diputar = daftar usang. Buang, jangan putar ulang.
+    if (item.index == knownIndex || item.index == playingIndex) {
+      upcoming.clear();
+      releaseStandby();
+      pushHasNext();
+      return false;
+    }
     boolean viaStandby = standby != null && standbyItem == item && standby.getPlayerError() == null && doCrossfade(150);
     if (!viaStandby) loadMedia(item.url, 0, item.cacheKey);
     player.setPlayWhenReady(true);
     upcoming.remove(0);
     playingIndex = item.index;
+    knownIndex = item.index;
     standbyItem = null;
     State s = snapshot();
     s.title = item.title;
