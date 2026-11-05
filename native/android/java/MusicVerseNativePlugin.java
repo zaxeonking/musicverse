@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
 import android.os.BatteryManager;
 import android.database.Cursor;
 import android.media.AudioManager;
@@ -66,6 +67,8 @@ public class MusicVerseNativePlugin extends Plugin {
   public void load() {
     // Dipakai StreamProxy & NativeDownloader untuk menunggu jaringan kembali saat sinyal putus.
     NetWatch.attach(getContext());
+    // Bersihkan sampah APK pembaruan (berkas + entri unduhan sistem) bila versinya sudah terpasang.
+    downloadPool.execute(this::cleanupStaleUpdate);
     DownloadQueue.init(getContext());
     DownloadQueue.setListener(
         new DownloadQueue.Listener() {
@@ -139,6 +142,52 @@ public class MusicVerseNativePlugin extends Plugin {
     // Folder khusus pembaruan. JANGAN memakai "Download": di penyimpanan yang tidak membedakan huruf besar/kecil
     // namanya sama dengan folder unduhan lagu ("download"), dan folder lagu tidak boleh disentuh pembaruan.
     return new File(getContext().getExternalFilesDir(UPDATE_DIR), UPDATE_FILE);
+  }
+
+  private static long versionCodeOf(PackageInfo info) {
+    return Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+  }
+
+  /**
+   * Dipanggil tiap app dibuka: menghapus berkas pembaruan (musicverse-update.apk) beserta entri DownloadManager-nya bila
+   * APK itu sudah terpasang (versionCode <= versi yang berjalan) atau rusak/sisa unduhan yang tidak aktif. Berkas lama
+   * yang menumpuk bisa menghalangi pembaruan berikutnya. Unduhan yang sedang berjalan tidak disentuh.
+   */
+  private void cleanupStaleUpdate() {
+    try {
+      Context ctx = getContext();
+      DownloadManager dm = downloadManager();
+      long id = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(PREF_ID, -1);
+      if (id >= 0 && dm != null) {
+        try (Cursor c = dm.query(new DownloadManager.Query().setFilterById(id))) {
+          if (c != null && c.moveToFirst()) {
+            int status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+            if (status == DownloadManager.STATUS_RUNNING || status == DownloadManager.STATUS_PENDING || status == DownloadManager.STATUS_PAUSED) return;
+          }
+        }
+      }
+      if (watchedId >= 0) return;
+      File file = updateFile();
+      boolean stale = true;
+      if (file.exists() && file.length() > 0) {
+        PackageInfo apk = ctx.getPackageManager().getPackageArchiveInfo(file.getAbsolutePath(), 0);
+        PackageInfo me = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
+        // APK yang lebih baru dari yang berjalan = pembaruan yang belum dipasang: biarkan.
+        if (apk != null && versionCodeOf(apk) > versionCodeOf(me)) stale = false;
+      }
+      if (!stale) return;
+      if (id >= 0 && dm != null) dm.remove(id);
+      ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(PREF_ID).apply();
+      File dir = file.getParentFile();
+      File[] leftovers = dir == null ? null : dir.listFiles();
+      if (leftovers != null) {
+        for (File f : leftovers) {
+          if (f.isFile() && f.getName().toLowerCase().endsWith(".apk")) f.delete();
+        }
+      }
+    } catch (Exception ignored) {
+      // pembersihan hanya upaya terbaik; jangan mengganggu start aplikasi
+    }
   }
 
   private DownloadManager downloadManager() {
