@@ -30,18 +30,6 @@ export interface NowPlayingUpdate {
 }
 
 /** Event mesin audio ExoPlayer (nama `type` sama dengan event HTMLAudioElement). */
-export interface NativeUpcomingItem {
-  /** Indeks lagu ini di antrean JS. */
-  index: number
-  url: string
-  cacheKey?: string
-  title: string
-  artist: string
-  album: string
-  cover: string
-  durationMs: number
-}
-
 export interface NativeEngineEvent {
   type: 'play' | 'playing' | 'pause' | 'waiting' | 'timeupdate' | 'durationchange' | 'loadedmetadata' | 'progress' | 'seeked' | 'ended' | 'error' | 'standby_ready' | 'standby_error' | 'advanced'
   currentTime: number
@@ -289,12 +277,6 @@ export interface MusicVerseNativePlugin {
   engineSetVolume(options: { volume: number }): Promise<void>
   /** Memuat lagu berikutnya di pemutar cadangan (senyap). Dibalas event `standby_ready` / `standby_error`. */
   engineStandbyLoad(options: { url: string; cacheKey?: string }): Promise<void>
-  /**
-   * Daftar lagu berikutnya yang URL-nya sudah di-resolve. Native memutarnya sendiri saat lagu aktif selesai (juga saat
-   * WebView dibekukan di latar belakang); event `advanced` membawa `reason: "idx:<indeks antrean>"`. Kosong = tidak pindah sendiri.
-   * `currentIndex` = indeks antrean lagu yang sedang diputar menurut JS (daftar usang diabaikan native).
-   */
-  engineSetUpcoming(options: { currentIndex: number; items: NativeUpcomingItem[] }): Promise<void>
   /** Mode langsung (tanpa StreamProxy) untuk lagu berikutnya yang dimuat. Default mati. */
   engineSetDirect(options: { enabled: boolean }): Promise<void>
   /**

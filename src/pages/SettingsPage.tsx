@@ -1,4 +1,4 @@
-import { ChevronRight, Download, HardDriveDownload, ListMusic, Play, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, Download, HardDriveDownload, Play, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { isNativeApp } from '../native/platform'
 
@@ -13,7 +13,6 @@ interface Category {
 const CATEGORIES: readonly Category[] = [
   { to: '/settings/downloads', label: 'Unduhan', hint: 'Syarat unduhan: Wi-Fi, saat dicas', icon: Download },
   { to: '/settings/playback', label: 'Pemutaran', hint: 'Mode langsung (eksperimen)', icon: Play },
-  { to: '/settings/playlist', label: 'Playlist', hint: 'Tambah otomatis, konfirmasi pindah lagu', icon: ListMusic },
   { to: '/settings/equalizer', label: 'Equalizer', hint: '10-band dengan preset', icon: SlidersHorizontal },
   { to: '/settings/backup', label: 'Cadangan', hint: 'Simpan dan pulihkan Koleksi, playlist, riwayat', icon: HardDriveDownload },
 ]

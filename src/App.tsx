@@ -13,7 +13,6 @@ import BackupPage from './pages/BackupPage'
 import BrowsePage from './pages/BrowsePage'
 import EqualizerPage from './pages/EqualizerPage'
 import PlaybackSettingsPage from './pages/PlaybackSettingsPage'
-import PlaylistSettingsPage from './pages/PlaylistSettingsPage'
 import HistoryPage from './pages/HistoryPage'
 import DownloadSettingsPage from './pages/DownloadSettingsPage'
 import DownloadsPage from './pages/DownloadsPage'
@@ -41,7 +40,6 @@ const router = createBrowserRouter([
       { path: '/settings', element: <SettingsPage /> },
       { path: '/settings/downloads', element: <DownloadSettingsPage /> },
       { path: '/settings/playback', element: <PlaybackSettingsPage /> },
-      { path: '/settings/playlist', element: <PlaylistSettingsPage /> },
       { path: '/settings/equalizer', element: <EqualizerPage /> },
       { path: '/settings/backup', element: <BackupPage /> },
       { path: '/history', element: <HistoryPage /> },

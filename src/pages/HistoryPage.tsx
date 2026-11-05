@@ -1,14 +1,12 @@
 import { ArrowLeft, History, Play } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import SectionHeader from '../components/ui/SectionHeader'
-import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
-import { useLongPress } from '../hooks/useLongPress'
 import { fallbackCover } from '../utils/fallbackCover'
-import { clearPlayLog, computeStats, PLAY_LOG_EVENT, readPlayLog, type PlayLogEntry } from '../utils/playLog'
+import { clearPlayLog, computeStats, readPlayLog } from '../utils/playLog'
 
 function dayLabel(at: number): string {
   const d = new Date(at)
@@ -20,38 +18,10 @@ function dayLabel(at: number): string {
   return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Satu entri riwayat. Tahan lama (atau klik kanan) = menu lagu, termasuk "Hapus dari riwayat". */
-function HistoryRow({ entry, onPlay }: { entry: PlayLogEntry; onPlay: () => void }) {
-  const { openTrackMenu } = useTrackMenu()
-  const press = useLongPress(() => openTrackMenu(entry.track, { place: 'history', historyAt: entry.at }))
-  return (
-    <li {...press} className="flex select-none items-center gap-3 rounded-lg px-1 py-1 [-webkit-touch-callout:none]">
-      <div className="w-12 shrink-0">
-        <CoverArt cover={fallbackCover(`${entry.track.title}${entry.track.album}`)} src={entry.track.cover} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink">{entry.track.title}</p>
-        <p className="truncate text-xs text-ink-muted">
-          {entry.track.artists} · {new Date(entry.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-        </p>
-      </div>
-      <button type="button" className="icon-btn" aria-label={`Putar ${entry.track.title}`} onClick={onPlay}>
-        <Play className="h-5 w-5" aria-hidden="true" />
-      </button>
-    </li>
-  )
-}
-
 /** Riwayat putar lengkap + statistik sederhana. */
 export default function HistoryPage() {
   const player = useAudioPlayer()
   const [log, setLog] = useState(readPlayLog)
-  // Entri dihapus dari menu lagu (tahan lama): segarkan daftar.
-  useEffect(() => {
-    const refresh = () => setLog(readPlayLog())
-    window.addEventListener(PLAY_LOG_EVENT, refresh)
-    return () => window.removeEventListener(PLAY_LOG_EVENT, refresh)
-  }, [])
   const stats = useMemo(() => computeStats(log), [log])
   const groups = useMemo(() => {
     const out: Array<{ label: string; items: typeof log }> = []
@@ -118,7 +88,25 @@ export default function HistoryPage() {
               <SectionHeader title={group.label} />
               <ul className="space-y-1">
                 {group.items.map((entry) => (
-                  <HistoryRow key={`${entry.at}-${entry.track.url}`} entry={entry} onPlay={() => player.playAll([entry.track])} />
+                  <li key={`${entry.at}-${entry.track.url}`} className="flex items-center gap-3 rounded-lg px-1 py-1">
+                    <div className="w-12 shrink-0">
+                      <CoverArt cover={fallbackCover(`${entry.track.title}${entry.track.album}`)} src={entry.track.cover} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-ink">{entry.track.title}</p>
+                      <p className="truncate text-xs text-ink-muted">
+                        {entry.track.artists} · {new Date(entry.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Putar ${entry.track.title}`}
+                      onClick={() => player.playAll([entry.track])}
+                    >
+                      <Play className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                  </li>
                 ))}
               </ul>
             </section>

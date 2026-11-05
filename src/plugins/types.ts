@@ -31,12 +31,3 @@ export interface ResolverPlugin {
   /** Urutan: stream terbaik dulu. */
   getStreams(id: string, signal?: AbortSignal): Promise<StreamSource[]>
 }
-
-/** Satu hasil pencarian untuk dipilih manual (lihat `searchManualCandidates`): hasil plugin + plugin asalnya. */
-export interface ManualCandidate extends PluginTrackHit {
-  pluginId: string
-  pluginName: string
-}
-
-/** Pilihan manual pengguna untuk satu lagu yang gagal diunduh otomatis. */
-export type ManualPick = ManualCandidate

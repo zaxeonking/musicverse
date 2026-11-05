@@ -1,10 +1,6 @@
-import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, History, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { Download, ExternalLink, FolderPlus, Link2, ListEnd, ListPlus, ListX, Play, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
-import type { TrackMenuPlace } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { useOnlineStatus } from '../../hooks/useOnlineStatus'
-import { removePlayLogEntry } from '../../utils/playLog'
 import type { QueueAddResult } from '../../types/player'
 import { QUEUE_RESULT_TEXT } from '../../utils/queueResultText'
 import type { PlaylistTrack } from '../../types/spotify'
@@ -16,10 +12,8 @@ import { removeDownload, trackKey, useOffline } from '../../native/offline'
 import { isNativeApp } from '../../native/platform'
 import CoverArt from '../ui/CoverArt'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
-import PlaylistTransferPanel from '../library/PlaylistTransferPanel'
 import AddToPlaylistPicker from './AddToPlaylistPicker'
 import Action from './SheetAction'
-import OverlayPortal from '../ui/OverlayPortal'
 
 const FOCUS = 'focus-ring'
 
@@ -27,12 +21,6 @@ interface TrackMenuSheetProps {
   track: PlaylistTrack
   /** Lagu ini dibuka dari hasil pencarian, jadi boleh dicampurkan ke antrean yang sedang berjalan. */
   fromSearch: boolean
-  /** ID "Playlist saya" tempat lagu ini berada; menambah opsi salin / pindahkan ke playlist lain. */
-  fromPlaylistId?: string
-  /** Tempat menu dibuka (opsi tambahan menyesuaikan, mis. "Hapus dari riwayat" hanya dari Riwayat). */
-  place?: TrackMenuPlace
-  /** Waktu putar entri Riwayat yang ditekan lama; dipakai bersama place 'history'. */
-  historyAt?: number
   onClose: () => void
   onToast: (message: string) => void
 }
@@ -43,13 +31,8 @@ interface TrackMenuSheetProps {
  * hanya bisa dimasukkan ke antrean jika dibuka dari lagu satuan hasil pencarian (`fromSearch`: halaman Cari atau hasil cari judul/tautan lagu di Beranda), bukan dari playlist.
  * Mobile: bottom sheet. Desktop: kartu di tengah bawah.
  */
-export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, place, historyAt, onClose, onToast }: TrackMenuSheetProps) {
+export default function TrackMenuSheet({ track, fromSearch, onClose, onToast }: TrackMenuSheetProps) {
   const player = useAudioPlayer()
-  const online = useOnlineStatus()
-  const { getPlaylist, removeTrack } = useMyPlaylists()
-  const sourcePlaylist = fromPlaylistId ? getPlaylist(fromPlaylistId) : undefined
-  const inSource = sourcePlaylist?.tracks.some((item) => item.id === track.id) === true
-  const [relocate, setRelocate] = useState<{ mode: 'copy' | 'move'; all: boolean } | null>(null)
   useOverlayHistory(true, onClose)
   const sheetRef = useRef<HTMLDivElement>(null)
   const [picking, setPicking] = useState(false)
@@ -88,7 +71,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   // Berpindah antara opsi lagu dan pilihan playlist: fokus ke elemen pertama tampilan baru.
   useEffect(() => {
     sheetRef.current?.querySelector<HTMLElement>('input, button:not([disabled])')?.focus()
-  }, [picking, relocate])
+  }, [picking])
 
   const run = (action: () => QueueAddResult) => {
     onToast(QUEUE_RESULT_TEXT[action()])
@@ -110,18 +93,6 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
     onToast(
       result === 'queued' ? 'Mengunduh… lihat progres di Unduhan' : result === 'already' ? 'Lagu sudah diunduh' : 'Sedang diunduh',
     )
-    onClose()
-  }
-
-  const removeFromPlaylist = () => {
-    if (!sourcePlaylist) return
-    const result = removeTrack(sourcePlaylist.id, track.id)
-    onToast(result.ok ? 'Dihapus dari playlist' : myPlaylistErrorText(result.reason))
-    onClose()
-  }
-
-  const removeFromHistory = () => {
-    onToast(historyAt !== undefined && removePlayLogEntry(historyAt, track.id) ? 'Dihapus dari riwayat' : 'Entri riwayat tidak ditemukan')
     onClose()
   }
 
@@ -154,7 +125,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   }
 
   return (
-    <OverlayPortal>
+    <div className="fixed inset-0 z-[62]">
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
@@ -174,18 +145,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
           </span>
         </div>
 
-        {relocate && sourcePlaylist ? (
-          <PlaylistTransferPanel
-            source={sourcePlaylist}
-            trackIds={relocate.all ? null : [track.id]}
-            mode={relocate.mode}
-            onBack={() => setRelocate(null)}
-            onDone={(message) => {
-              onToast(message)
-              onClose()
-            }}
-          />
-        ) : picking ? (
+        {picking ? (
           <AddToPlaylistPicker
             track={track}
             onBack={() => setPicking(false)}
@@ -210,9 +170,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
 
             <ul className="border-t border-line px-2 pt-2">
               <Action
-                icon={isCurrent ? RotateCcw : Play}
-                label={isCurrent ? 'Putar ulang dari awal' : 'Putar sekarang'}
-                hint={!online && !downloaded && !isCurrent ? 'Tidak ada internet dan lagu ini belum diunduh' : undefined}
+                icon={Play}
+                label="Putar sekarang"
                 onClick={() => {
                   player.playTrack(track, -1)
                   onClose()
@@ -250,38 +209,6 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                 )
               )}
               <Action icon={FolderPlus} label="Simpan ke playlist saya" onClick={() => setPicking(true)} />
-              {sourcePlaylist && inSource && (
-                <>
-                  <Action
-                    icon={Copy}
-                    label="Salin ke playlist lain"
-                    hint="Lagu tetap ada di playlist ini"
-                    onClick={() => setRelocate({ mode: 'copy', all: false })}
-                  />
-                  <Action
-                    icon={ArrowRightLeft}
-                    label="Pindahkan ke playlist lain"
-                    hint="Dihapus dari playlist ini"
-                    onClick={() => setRelocate({ mode: 'move', all: false })}
-                  />
-                  <Action
-                    icon={FolderInput}
-                    label={`Pindahkan semua lagu (${sourcePlaylist.tracks.length})`}
-                    hint="Seluruh isi playlist ini ke playlist lain"
-                    onClick={() => setRelocate({ mode: 'move', all: true })}
-                  />
-                  <Action
-                    icon={Trash2}
-                    label="Hapus dari playlist ini"
-                    hint="Lagu tetap ada di playlist lain"
-                    onClick={removeFromPlaylist}
-                    danger
-                  />
-                </>
-              )}
-              {place === 'history' && historyAt !== undefined && (
-                <Action icon={History} label="Hapus dari riwayat" hint="Hanya entri putar ini" onClick={removeFromHistory} danger />
-              )}
               {native &&
                 (downloaded ? (
                   <Action icon={Trash2} label="Hapus unduhan" hint="Lagu ini bisa diputar offline" onClick={deleteDownload} danger />
@@ -289,15 +216,9 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                   <Action
                     icon={Download}
                     label={downloading ? 'Sedang diunduh…' : 'Unduh untuk offline'}
-                    hint={
-                      downloading
-                        ? undefined
-                        : !online
-                          ? 'Perlu internet untuk mengunduh'
-                          : 'Simpan di perangkat agar bisa diputar tanpa internet'
-                    }
+                    hint={downloading ? undefined : 'Simpan di perangkat agar bisa diputar tanpa internet'}
                     onClick={startDownload}
-                    disabled={downloading || !online}
+                    disabled={downloading}
                   />
                 ))}
               {href && <Action icon={Link2} label="Salin tautan Spotify" onClick={() => void copyLink()} />}
@@ -319,6 +240,6 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
           </>
         )}
       </div>
-    </OverlayPortal>
+    </div>
   )
 }

@@ -1,8 +1,6 @@
 import { AlertCircle, ListMusic, Loader2, Pause, Play, RotateCw, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { useLongPress } from '../../hooks/useLongPress'
 import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { getUpcomingTracks } from '../../utils/playerQueue'
@@ -40,11 +38,6 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
     moveUpcoming,
     removeUpcoming,
   } = useAudioPlayer()
-  const { openTrackMenu } = useTrackMenu()
-  // Tahan lama pada baris "Sedang diputar" = menu lagu yang sedang diputar (ketuk biasa tetap jeda/putar).
-  const nowPress = useLongPress(() => {
-    if (currentTrack) openTrackMenu(currentTrack, { place: 'player' })
-  })
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -163,7 +156,6 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
             </h3>
             <button
               type="button"
-              {...nowPress}
               onClick={togglePlayPause}
               aria-disabled={main.disabled}
               aria-label={`${main.label}: ${currentTrack.title}${by}`}
@@ -241,12 +233,6 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
           onRemove={() => {
             removeUpcoming(menuPosition)
             closeMenu()
-          }}
-          onMore={() => {
-            // Opsi lain (simpan ke playlist, unduh, dll.) ada di menu lagu umum; menu antrean ditutup dulu.
-            const track = menuItem.track
-            closeMenu()
-            openTrackMenu(track, { place: 'queue' })
           }}
           onClose={closeMenu}
         />

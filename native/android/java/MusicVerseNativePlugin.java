@@ -881,39 +881,6 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve();
   }
 
-  /**
-   * Daftar lagu berikutnya yang URL-nya sudah di-resolve JS. Native memutarnya sendiri saat lagu aktif selesai, jadi
-   * pemutaran berlanjut walau WebView dibekukan di latar belakang. Daftar kosong = native tidak pindah lagu sendiri.
-   */
-  @PluginMethod
-  public void engineSetUpcoming(PluginCall call) {
-    java.util.List<PlaybackService.UpcomingItem> list = new java.util.ArrayList<>();
-    JSArray items = call.getArray("items");
-    if (items != null) {
-      for (int i = 0; i < items.length(); i++) {
-        try {
-          org.json.JSONObject o = items.getJSONObject(i);
-          String url = o.optString("url", "");
-          if (url.isEmpty()) continue;
-          list.add(
-              new PlaybackService.UpcomingItem(
-                  o.optInt("index", -1),
-                  url,
-                  o.has("cacheKey") && !o.isNull("cacheKey") ? o.optString("cacheKey") : null,
-                  o.optString("title", ""),
-                  o.optString("artist", ""),
-                  o.optString("album", ""),
-                  o.optString("cover", ""),
-                  o.optLong("durationMs", 0)));
-        } catch (org.json.JSONException ignored) {
-          // butir rusak dilewati
-        }
-      }
-    }
-    PlaybackService.engineSetUpcoming(call.getInt("currentIndex", -1), list);
-    call.resolve();
-  }
-
   @PluginMethod
   public void engineClearStandby(PluginCall call) {
     PlaybackService.engineClearStandby();

@@ -1,8 +1,7 @@
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
-import { forgetResolved, isNativeUnimplemented, searchManualCandidates } from '../plugins/registry'
-import type { ManualCandidate, ManualPick } from '../plugins/types'
+import { forgetResolved, isNativeUnimplemented } from '../plugins/registry'
 import { markClientRejected } from '../plugins/ytmusic'
 import type { ApiSourceName, PlaybackInfo, PlaylistTrack } from '../types/spotify'
 import { isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
@@ -24,7 +23,6 @@ import {
   replaceItem,
   setDownloadQuality,
   setExportMusic,
-  setThirdPartyFallback,
   setUpgrade,
   setChargingOnly,
   setItems,
@@ -77,8 +75,6 @@ interface Job {
   held?: boolean
   /** Sumber yang sudah dilewati untuk lagu ini (dipakai saat me-resolve ulang). */
   avoid?: ApiSourceName[]
-  /** Hasil yang dipilih pengguna secara manual (tombol "Cari manual"): pencarian otomatis dilewati dan tidak ada putaran ulang. */
-  manual?: ManualPick
   /** Lagu ini sudah (atau sedang) diserahkan ke antrean native lebih awal; `downloadOne` tinggal menunggu hasilnya. */
   handoff?: Handoff
 }
@@ -457,14 +453,6 @@ function isTransientApiError(error: unknown): boolean {
  * beberapa lagu di depannya (NATIVE_LOOKAHEAD) tetap selesai walau aplikasi digeser dari recent apps. Hasilnya dicatat di
  * native (jurnal + metadata) dan dibaca JS lewat event `queueResult` atau `queueSync` saat aplikasi dibuka lagi. */
 
-/**
- * Durasi acuan untuk memeriksa berkas yang terunduh: durasi lagu di playlist, atau (pilihan manual) durasi hasil yang
- * dipilih pengguna, karena itulah yang dia anggap benar.
- */
-function expectedFor(job: Job): number | null {
-  return job.manual ? job.manual.durationSec : parseDuration(job.track.duration)
-}
-
 function buildQueueJob(job: Job, info: PlaybackInfo, sourceUrl: string, expected: number | null): NativeQueueJob {
   const { track, key } = job
   const coverUrl = track.cover || info.cover
@@ -521,16 +509,10 @@ function startHandoff(job: Job): Handoff {
   })
   const pending = (async (): Promise<HandoffOutcome | null> => {
     try {
-      const info = await fetchPlaybackInfo(job.track, {
-        strict: true,
-        avoid: [...(job.avoid ?? [])],
-        quality: getOfflineState().downloadQuality,
-        thirdParty: getOfflineState().thirdPartyFallback,
-        manual: job.manual,
-      })
+      const info = await fetchPlaybackInfo(job.track, { strict: true, avoid: [...(job.avoid ?? [])], quality: getOfflineState().downloadQuality })
       const sourceUrl = info.directUrl ?? info.audioUrl
       if (!isSafeHttpUrl(sourceUrl)) throw new Error('Sumber audio tidak valid.')
-      const handed = await submitToNative(job, info, sourceUrl, expectedFor(job))
+      const handed = await submitToNative(job, info, sourceUrl, parseDuration(job.track.duration))
       markReady(true)
       const result = await handed.result
       return result ? { result, info } : null
@@ -680,7 +662,7 @@ async function downloadOne(job: Job): Promise<void> {
 
   // Berakhiran .mp3 supaya durasinya bisa dibaca sebelum berkas dianggap sah.
   const partPath = `${DOWNLOAD_DIR}/${key}.part.mp3`
-  const expected = expectedFor(job)
+  const expected = parseDuration(track.duration)
   const avoid: ApiSourceName[] = [...(job.avoid ?? [])]
   let netFailures = 0
   /** Sumber menolak URL (HTTP 4xx) berturut-turut; dua kali = plugin itu dilewati, plugin berikutnya yang dipakai. */
@@ -704,11 +686,10 @@ async function downloadOne(job: Job): Promise<void> {
     const api = avoidKeyOf(outcome.info)
     if (out.reason === 'notaudio' || out.reason === 'mismatch') {
       // Isi tidak cocok: singkirkan sumber itu, atau ulangi semua sumber dari awal bila sudah habis.
-      if (!job.manual && api && !avoid.includes(api)) {
+      if (api && !avoid.includes(api)) {
         avoid.push(api)
       } else {
-        // Pilihan manual yang tidak cocok langsung gagal (tidak ada sumber lain untuk dicoba).
-        mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+        mismatchRounds += 1
         if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(out.message || 'Isi unduhan tidak cocok.')
         avoid.length = 0
         await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -763,17 +744,11 @@ async function downloadOne(job: Job): Promise<void> {
         message: netFailures > 0 ? `Mencoba lagi (${netFailures}/${NET_RETRY_MAX})` : undefined,
       })
       try {
-        info = await fetchPlaybackInfo(track, {
-          strict: true,
-          avoid,
-          quality: getOfflineState().downloadQuality,
-          thirdParty: getOfflineState().thirdPartyFallback,
-          manual: job.manual,
-        })
+        info = await fetchPlaybackInfo(track, { strict: true, avoid, quality: getOfflineState().downloadQuality })
       } catch (error) {
         // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
         if (error instanceof SpotifyApiError && error.code === 'clip_only') {
-          mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+          mismatchRounds += 1
           console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
           if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
           avoid.length = 0
@@ -907,10 +882,10 @@ async function downloadOne(job: Job): Promise<void> {
           await safeDeletePart(partPath)
           const api = avoidKeyOf(info)
           console.warn(`[MusicVerse] Isi unduhan dari ${api ?? 'sumber tak dikenal'} bukan audio; sumber dilewati.`)
-          if (!job.manual && api && !avoid.includes(api)) {
+          if (api && !avoid.includes(api)) {
             avoid.push(api)
           } else {
-            mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+            mismatchRounds += 1
             if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error('Isi unduhan bukan audio.')
             avoid.length = 0
             await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -939,10 +914,10 @@ async function downloadOne(job: Job): Promise<void> {
     }
     // Berkas tidak cocok: singkirkan sumber itu dan coba sumber lain. Bila semua sudah dicoba, ulangi dari awal
     // (maks. MISMATCH_ROUNDS_MAX putaran) sebelum menyerah.
-    if (!job.manual && api && !avoid.includes(api)) {
+    if (api && !avoid.includes(api)) {
       avoid.push(api)
     } else {
-      mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+      mismatchRounds += 1
       if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(problem.reason)
       avoid.length = 0
       await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -1098,14 +1073,14 @@ async function pump(): Promise<void> {
 
 export type EnqueueResult = 'queued' | 'already' | 'busy' | 'unsupported'
 
-function enqueue(track: PlaylistTrack, manual?: ManualPick): EnqueueResult {
+function enqueue(track: PlaylistTrack): EnqueueResult {
   const key = trackKey(track)
   const state = getOfflineState()
   if (state.items.some((item) => item.key === key)) return 'already'
   const current = state.transfers.get(key)
   if (current && current.status !== 'error') return 'busy'
   adopted.delete(key)
-  queue.push({ track, key, manual })
+  queue.push({ track, key })
   sessionTotal += 1
   setTransfer(key, { key, title: track.title, status: 'queued', percent: null })
   persistQueue()
@@ -1216,34 +1191,6 @@ export function retryDownload(key: string): boolean {
   // Gagal yang sudah dihitung di sesi berjalan dicabut; sesi yang sudah selesai tidak diubah.
   if (entry.epoch === sessionEpoch) sessionFailed = Math.max(0, sessionFailed - 1)
   const result = enqueue(entry.job.track)
-  if (result === 'queued') {
-    askNotificationPermissionOnce()
-    void pump()
-  }
-  persistQueue()
-  return result === 'queued'
-}
-
-/**
- * Mencari manual untuk lagu yang gagal: sampai 5 hasil YouTube Music / YouTube (judul, artis, durasi) untuk dipilih
- * pengguna. Melempar bila sumber pencarian tidak bisa dihubungi.
- */
-export async function findManualCandidates(key: string): Promise<ManualCandidate[]> {
-  const entry = failedJobs.get(key)
-  if (!entry) return []
-  return searchManualCandidates(entry.job.track)
-}
-
-/**
- * Mengunduh lagu yang gagal memakai hasil yang DIPILIH pengguna. Audionya tetap diperiksa (terbaca, bukan cuplikan,
- * durasi sesuai pilihan, isi berkas benar-benar audio) lewat jalur unduhan yang sama; yang tidak cocok langsung gagal.
- */
-export function downloadWithPick(key: string, pick: ManualPick): boolean {
-  const entry = failedJobs.get(key)
-  if (!entry) return false
-  failedJobs.delete(key)
-  if (entry.epoch === sessionEpoch) sessionFailed = Math.max(0, sessionFailed - 1)
-  const result = enqueue(entry.job.track, pick)
   if (result === 'queued') {
     askNotificationPermissionOnce()
     void pump()
@@ -1363,15 +1310,6 @@ export function setDownloadQualityPreference(quality: DownloadQuality): void {
   saveSettings()
 }
 
-/**
- * Cadangan TERAKHIR (default mati): bila YouTube Music dan YouTube tidak menemukan yang cocok, coba sumber pihak ketiga.
- * Hasilnya tetap diverifikasi (judul, artis, durasi, isi berkas). Hanya untuk lagu bertautan Spotify.
- */
-export function setThirdPartyFallbackEnabled(on: boolean): void {
-  setThirdPartyFallback(on)
-  saveSettings()
-}
-
 /** Menyalakan/mematikan "Unduh hanya saat dicas" (disimpan di perangkat). */
 export function setChargingOnlyEnabled(on: boolean): void {
   setChargingOnly(on)
@@ -1467,13 +1405,7 @@ async function runUpgrade(): Promise<UpgradeSummary> {
 
 function saveSettings(): void {
   const s = getOfflineState()
-  writeJson(SETTINGS_KEY, {
-    wifiOnly: s.wifiOnly,
-    chargingOnly: s.chargingOnly,
-    exportMusic: s.exportMusic,
-    downloadQuality: s.downloadQuality,
-    thirdPartyFallback: s.thirdPartyFallback,
-  })
+  writeJson(SETTINGS_KEY, { wifiOnly: s.wifiOnly, chargingOnly: s.chargingOnly, exportMusic: s.exportMusic, downloadQuality: s.downloadQuality })
   pushConditions()
 }
 
@@ -1500,10 +1432,9 @@ export function initDownloads(): void {
   })
   const settings = readJson(SETTINGS_KEY)
   if (settings.status === 'ok' && typeof settings.value === 'object' && settings.value !== null) {
-    const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown; exportMusic?: unknown; downloadQuality?: unknown; thirdPartyFallback?: unknown }
+    const saved = settings.value as { wifiOnly?: unknown; chargingOnly?: unknown; exportMusic?: unknown; downloadQuality?: unknown }
     if (isDownloadQuality(saved.downloadQuality)) setDownloadQuality(saved.downloadQuality)
     if (saved.exportMusic === true) setExportMusic(true)
-    if (saved.thirdPartyFallback === true) setThirdPartyFallback(true)
     if (saved.wifiOnly === true) setWifiOnly(true)
     if (saved.chargingOnly === true) setChargingOnly(true)
     updateWatch()

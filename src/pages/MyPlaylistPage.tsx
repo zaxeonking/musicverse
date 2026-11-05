@@ -7,7 +7,6 @@ import { useLibrary } from '../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsContext'
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
-import { useLongPress } from '../hooks/useLongPress'
 import { bulkDownloadText, downloadTracks } from '../native/downloads'
 import { trackKey } from '../native/offline'
 import { describeApiError, fetchPlaylist } from '../services/spotifyApi'
@@ -18,7 +17,6 @@ import { MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
 import { getRowActivity } from '../utils/playerStatus'
 
 function TrackLine({
-  playlistId,
   track,
   index,
   last,
@@ -27,7 +25,6 @@ function TrackLine({
   onRemove,
   onMove,
 }: {
-  playlistId: string
   track: PlaylistTrack
   index: number
   last: boolean
@@ -37,13 +34,11 @@ function TrackLine({
   onMove: (to: number) => void
 }) {
   const { openTrackMenu } = useTrackMenu()
-  // Tahan lama pada baris = menu lagu dengan opsi salin / pindahkan ke playlist lain.
-  const press = useLongPress(() => openTrackMenu(track, { fromPlaylistId: playlistId, place: 'my-playlist' }))
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
   const current = activity !== 'none'
   return (
-    <li {...press} className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-raised ${current ? 'bg-raised' : ''}`}>
+    <li className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-raised ${current ? 'bg-raised' : ''}`}>
       <button
         type="button"
         onClick={onPlay}
@@ -66,7 +61,7 @@ function TrackLine({
         <button type="button" onClick={() => onMove(index + 1)} disabled={last} aria-label={`Turunkan ${track.title}`} className="icon-btn h-9 w-9">
           <ArrowDown className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" onClick={() => openTrackMenu(track, { fromPlaylistId: playlistId, place: 'my-playlist' })} aria-label={`Opsi untuk ${track.title}`} className="icon-btn h-9 w-9">
+        <button type="button" onClick={() => openTrackMenu(track)} aria-label={`Opsi untuk ${track.title}`} className="icon-btn h-9 w-9">
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
         <button type="button" onClick={onRemove} aria-label={`Hapus ${track.title} dari playlist`} className="icon-btn h-9 w-9 hover:text-danger">
@@ -265,7 +260,6 @@ export default function MyPlaylistPage() {
           {tracks.map((track, index) => (
             <TrackLine
               key={track.id}
-              playlistId={playlist.id}
               track={track}
               index={index}
               last={index === tracks.length - 1}

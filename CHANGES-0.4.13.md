@@ -1,48 +1,32 @@
-# MusicVerse 0.4.13 — saran pencarian dari iTunes + MusicBrainz
+# MusicVerse 0.4.13 — geser ke ujung lagu tidak lagi mengulang lagu yang sama; saran pencarian dari 3 sumber
 
-## Peta plugin StreamBeats (bloomfactory) terhadap MusicVerse
-| Plugin StreamBeats | Status di MusicVerse |
-| --- | --- |
-| `ytmusic` (v5) | Sudah ada (`plugins/ytmusic.ts`) |
-| `ytvideo` (v4) | Sudah ada (`plugins/ytvideo.ts`) |
-| `spotify-importer` (v4) | Sudah ada (`plugins/spotifyImporter.ts`) |
-| `ytmusic-search-suggestion` | Sudah ada (`plugins/suggestions.ts`) |
-| `lrcnet` (LRCLIB) | Sudah tercakup, malah lebih lengkap: LRCLIB + NetEase + lyrics.ovh (`services/lyricsApi.ts`) |
-| `itunes-search-suggestions` | **Baru di 0.4.13** |
-| `musicbrainz-suggestions` | **Baru di 0.4.13** |
-| `billboard` (chart) | Belum: butuh bagian baru di UI dan pemilihan sumber data |
-| `ytmusic-importer`, `apple-music-importer`, `jiosaavn-importer` | Belum: alur impor di UI masih khusus Spotify (validasi URL, muat otomatis, teks form, `fetchPlaylist`) |
+## 1. Geser ke ujung lagu lalu malah mengulang lagu yang sama
+**Gejala:** lagu digeser (seek) sampai dekat akhir; saat seharusnya pindah ke lagu berikutnya, lagu yang sama diputar lagi.
 
-## Apa
-Ketik judul di kolom impor: saran sekarang berasal dari tiga sumber.
-1. **YouTube Music** dicoba sendirian dulu (seperti sebelumnya). Bila sudah memberi cukup saran, tidak ada permintaan lain.
-2. Bila kurang / gagal: **iTunes Search API** (`itunes.apple.com/search`, `entity=song`) dan **MusicBrainz**
-   (`musicbrainz.org/ws/2/recording`) dipanggil BERSAMAAN, hasilnya digabung berurutan, tanpa duplikat (tak peka huruf
-   besar/kecil), tanpa yang sama dengan teks yang diketik, dan dipotong sesuai batas.
-- Format saran: `judul artis` (iTunes dan MusicBrainz; MusicBrainz memakai `artist-credit` + `joinphrase`, mis. "Under Pressure Queen & David Bowie").
-- MusicBrainz: hasil dengan `score` < 60 dibuang; teks dicari setelah karakter khusus Lucene di-escape (judul seperti
-  `Hello: (Live)` tidak lagi membuat HTTP 400).
-- Galat satu penyedia tidak membatalkan yang lain; semua gagal = daftar kosong tanpa melempar. Hasil kosong tidak di-cache.
-- Cache kini per (teks, batas) agar batas berbeda tidak saling menimpa.
+**Penyebab yang paling masuk akal (belum bisa direproduksi di perangkat):** setelah geser ke ujung, ExoPlayer bisa tertahan di
+BUFFERING di akhir (durasi di wadah lebih panjang dari data yang benar-benar ada, atau permintaan Range di ekor ditolak).
+Tangga pemulihan macet (`handleStall`) lalu menganggapnya stream putus: buka ulang -> laporkan galat jaringan ke JS -> JS
+memuat ulang LAGU YANG SAMA (`fail` -> percobaan ulang). Hasilnya terdengar seperti "lagu mengulang dari awal".
 
-## Berkas
-`src/plugins/suggestions.ts` saja (`itunesSuggestionProvider`, `musicBrainzSuggestionProvider`, `parseItunesSuggestions`,
-`parseMusicBrainzSuggestions`, `escapeLucene`, `mergeSuggestions`). Tanpa perubahan Java; build web saja.
+**Perbaikan (dua lapis):**
+- Native `PlaybackService`: macet di dalam 12 dtk terakhir lagu (`nearEnd`) = lagu selesai, bukan stream putus -> `finishTrack()`
+  (pindah ke lagu cadangan bila sudah siap, kalau tidak kirim `ended` ke JS). Logika "lagu selesai" yang sama dipakai
+  `STATE_ENDED` (dirapikan jadi satu metode).
+- JS `useAudioPlayerController`: event `error` yang datang di dalam 12 dtk terakhir lagu (`NEAR_END_SECONDS`) dikirim ulang sebagai
+  `ended`, sehingga mode ulang / lanjut ke lagu berikutnya / acak / berhenti-setelah-lagu berjalan seperti biasa.
+- Konsekuensi: galat jaringan sungguhan di 12 dtk terakhir melewati sisa lagu (bukan memuat ulang dari awal).
 
-## Pengujian
-Dijalankan di Node dengan `fetch` tiruan (17 pemeriksaan): parser kedua sumber (duplikat, kosong, respons aneh, limit,
-skor rendah, joinphrase), escape Lucene, penggabungan, "YTM cukup = 1 permintaan saja", "YTM kurang = digabung",
-"YTM 500 + MusicBrainz error = iTunes tetap jalan", semua gagal, tidak di-cache saat kosong, cache tak peka huruf,
-bentuk URL dan header, pembatalan. `tsc`: tidak ada galat baru dibanding 0.4.12.
-**BELUM diuji ke server iTunes / MusicBrainz asli maupun di perangkat.**
+Kalau masih terjadi, cek pengaturan ulang (Ulang 1x / Ulang lagu) dan kirim log `[MusicVerse] Galat ... di ujung lagu`.
 
-## Catatan jujur
-- Kode plugin aslinya tidak bisa dibaca dari sini (halaman folder GitHub memblokir akses otomatis), jadi ini dibuat dari
-  API publik kedua layanan, bukan salinan plugin StreamBeats. Perilakunya bisa sedikit berbeda dari plugin aslinya.
-- **MusicBrainz meminta User-Agent berisi kontak pengembang** (email/URL):
-  https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting . Isi `MB_USER_AGENT` di `suggestions.ts` sebelum dirilis ke banyak
-  orang. Batas MusicBrainz ±1 permintaan/detik; di sini hanya dipanggil bila YouTube Music kurang, dan lewat tunda 300 ms +
-  cache, jadi jauh di bawah batas.
-- iTunes Search API membatasi sekitar 20 permintaan/menit per IP; sama, hanya sebagai pelengkap.
+## 2. Saran pencarian dari plugin StreamBeats lain
+`plugins/suggestions.ts` sekarang memakai TIGA penyedia sekaligus (bersamaan, masing-masing maks. 6 dtk; yang gagal dilewati):
+YouTube Music (sudah ada), **iTunes** (Search API, padanan `itunes-search-suggestions`), **MusicBrainz** (`/ws/2/recording`, padanan
+`musicbrainz-suggestions`). Hasil digabung bergiliran, duplikat dibuang, YouTube Music di depan.
+Diuji dengan fetch tiruan (parser dua API, penggabungan, satu penyedia gagal). Format respons asli kedua API tidak diuji dari jaringan.
 
-## Tidak perlu Java baru; build ulang APK seperti biasa (`npm run android:sync`).
+## Belum dikerjakan dari daftar plugin StreamBeats
+- `apple-music-importer`, `jiosaavn-importer`, `ytmusic-importer`: impor playlist dari layanan lain. `utils/playlistStorage.ts` dan
+  form impor mengasumsikan URL Spotify, jadi perlu perubahan identitas playlist di beberapa tempat.
+- `billboard`: tangga lagu untuk Beranda.
+
+## Build: ada perubahan Java (`PlaybackService.java`), jadi butuh APK baru.

@@ -54,16 +54,9 @@ export function pickRestartIndex(length: number, avoid: number | null, random: (
   return pick >= avoid ? pick + 1 : pick
 }
 
-/**
- * Saat antrean habis, apakah antrean yang sama diputar ulang secara acak? Dulu SELALU (untuk antrean > 1 lagu), sehingga
- * lagu terus berulang walau mode ulang mati dan pengguna tidak meminta. Sekarang mati: antrean habis = berhenti.
- * Ubah ke true untuk mengembalikan perilaku lama.
- */
-export const AUTO_RESTART_QUEUE = false
-
-/** Antrean yang habis diputar ulang secara acak hanya jika AUTO_RESTART_QUEUE menyala dan isinya lebih dari satu lagu. */
+/** Antrean yang habis diputar ulang secara acak hanya jika isinya lebih dari satu lagu. */
 export function canRestartQueue(length: number): boolean {
-  return AUTO_RESTART_QUEUE && length > 1
+  return length > 1
 }
 
 /** Indeks lagu berikutnya, atau null jika sudah di akhir queue (tanpa mengulang dari awal). */

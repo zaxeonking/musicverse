@@ -5,9 +5,7 @@ import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import { useLibrary } from '../context/LibraryContext'
 import { useMyPlaylists } from '../context/MyPlaylistsContext'
-import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
-import { useLongPress } from '../hooks/useLongPress'
 import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
 import { recentKey } from '../utils/libraryStorage'
@@ -18,26 +16,6 @@ type Tab = 'artist' | 'album'
 interface Group {
   name: string
   tracks: PlaylistTrack[]
-}
-
-/** Satu lagu di detail Artis / Album. Tahan lama (atau klik kanan) = menu lagu. */
-function BrowseTrackRow({ track, subtitle, onPlay }: { track: PlaylistTrack; subtitle: string; onPlay: () => void }) {
-  const { openTrackMenu } = useTrackMenu()
-  const press = useLongPress(() => openTrackMenu(track, { place: 'browse' }))
-  return (
-    <li {...press} className="flex select-none items-center gap-3 px-1 py-1 [-webkit-touch-callout:none]">
-      <div className="w-12 shrink-0">
-        <CoverArt cover={fallbackCover(`${track.title}${track.album}`)} src={track.cover} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink">{track.title}</p>
-        <p className="truncate text-xs text-ink-muted">{subtitle}</p>
-      </div>
-      <button type="button" className="icon-btn" aria-label={`Putar ${track.title}`} onClick={onPlay}>
-        <Play className="h-5 w-5" aria-hidden="true" />
-      </button>
-    </li>
-  )
 }
 
 function norm(s: string): string {
@@ -125,12 +103,18 @@ export default function BrowsePage() {
           </div>
           <ul className="space-y-1">
             {active.tracks.map((track, i) => (
-              <BrowseTrackRow
-                key={recentKey(track)}
-                track={track}
-                subtitle={tab === 'artist' ? track.album || track.artists : track.artists}
-                onPlay={() => player.playList(active.tracks, i)}
-              />
+              <li key={recentKey(track)} className="flex items-center gap-3 px-1 py-1">
+                <div className="w-12 shrink-0">
+                  <CoverArt cover={fallbackCover(`${track.title}${track.album}`)} src={track.cover} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">{track.title}</p>
+                  <p className="truncate text-xs text-ink-muted">{tab === 'artist' ? track.album || track.artists : track.artists}</p>
+                </div>
+                <button type="button" className="icon-btn" aria-label={`Putar ${track.title}`} onClick={() => player.playList(active.tracks, i)}>
+                  <Play className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </li>
             ))}
           </ul>
         </>

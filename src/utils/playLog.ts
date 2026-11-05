@@ -57,22 +57,6 @@ export function clearPlayLog(): void {
   removeKey(KEY)
 }
 
-/** Dikirim ke `window` setelah satu entri riwayat dihapus, supaya halaman Riwayat yang terbuka ikut menyegarkan diri. */
-export const PLAY_LOG_EVENT = 'musicverse:play-log-changed'
-
-/**
- * Menghapus satu entri riwayat (diidentifikasi waktu putarnya `at`; `trackId` mempersempit bila dua entri kebetulan
- * sama waktunya). Mengembalikan false bila tidak ada yang cocok. Entri lain tidak disentuh.
- */
-export function removePlayLogEntry(at: number, trackId?: string): boolean {
-  const list = readPlayLog()
-  const next = list.filter((entry) => !(entry.at === at && (trackId === undefined || entry.track.id === trackId)))
-  if (next.length === list.length) return false
-  writeJson(KEY, { version: 1, items: next })
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(PLAY_LOG_EVENT))
-  return true
-}
-
 export interface PlayStats {
   total: number
   unique: number

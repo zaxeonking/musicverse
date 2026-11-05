@@ -102,12 +102,10 @@ interface OfflineState {
   exportMusic: boolean
   /** Kualitas unduhan baru (hanya sumber plugin). */
   downloadQuality: DownloadQuality
-  /** Cadangan terakhir: sumber pihak ketiga untuk unduhan yang tidak ditemukan di YouTube (default mati). */
-  thirdPartyFallback: boolean
   upgrade: UpgradeProgress | null
 }
 
-let state: OfflineState = { items: [], transfers: new Map(), ready: false, paused: false, wifiOnly: false, cellular: false, chargingOnly: false, unplugged: false, restored: 0, exportMusic: false, downloadQuality: DEFAULT_DOWNLOAD_QUALITY, thirdPartyFallback: false, upgrade: null }
+let state: OfflineState = { items: [], transfers: new Map(), ready: false, paused: false, wifiOnly: false, cellular: false, chargingOnly: false, unplugged: false, restored: 0, exportMusic: false, downloadQuality: DEFAULT_DOWNLOAD_QUALITY, upgrade: null }
 const listeners = new Set<() => void>()
 
 function setState(next: Partial<OfflineState>): void {
@@ -205,10 +203,6 @@ export function setUnplugged(unplugged: boolean): void {
 
 export function setExportMusic(exportMusic: boolean): void {
   if (state.exportMusic !== exportMusic) setState({ exportMusic })
-}
-
-export function setThirdPartyFallback(thirdPartyFallback: boolean): void {
-  if (state.thirdPartyFallback !== thirdPartyFallback) setState({ thirdPartyFallback })
 }
 
 export function setUpgrade(upgrade: UpgradeProgress | null): void {
