@@ -1,0 +1,665 @@
+MusicVerse — Project Structure
+
+Project: MusicVerse
+Version: v0.4.17
+Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
+Platform: Web / Android
+
+---
+
+1. Project Overview
+
+MusicVerse merupakan aplikasi pemutar musik yang dibangun menggunakan React dan TypeScript, dengan Vite sebagai development dan build tool, Tailwind CSS untuk styling, serta Capacitor untuk integrasi Android native.
+
+Dokumentasi ini berfungsi sebagai panduan utama struktur project MusicVerse. Setiap pengembangan, penambahan fitur, perbaikan bug, maupun perubahan kode harus memperhatikan struktur yang sudah ada.
+
+Tujuan dokumentasi ini:
+
+- Mengetahui lokasi setiap file.
+- Memahami fungsi setiap folder dan file.
+- Menghindari pembuatan file atau sistem yang duplikat.
+- Mempertahankan konsistensi arsitektur.
+- Mempermudah pengembangan fitur berikutnya.
+- Menjadi referensi utama ketika melakukan perubahan project.
+
+---
+
+2. Main Project Structure
+
+MusicVerse/
+├── src/
+├── public/
+├── native/
+├── api/
+├── scripts/
+├── docs/
+├── .github/
+├── package.json
+├── vite.config.ts
+├── capacitor.config.ts
+├── tsconfig.json
+├── tailwind.config.js
+├── postcss.config.js
+├── index.html
+├── vercel.json
+├── .env.example
+└── README.md
+
+---
+
+3. SOURCE CODE — src/
+
+Folder "src/" merupakan folder utama yang menyimpan seluruh source code aplikasi MusicVerse.
+
+3.1. src/components/
+
+Menyimpan seluruh komponen antarmuka (UI) yang digunakan dalam aplikasi.
+
+components/layout/
+
+Berisi komponen yang mengatur tata letak dan navigasi aplikasi.
+
+File| Fungsi
+AppShell.tsx| Kerangka utama aplikasi dan pengatur layout.
+Sidebar.tsx| Navigasi samping untuk tampilan desktop.
+BottomNav.tsx| Navigasi bawah untuk tampilan mobile.
+MobileHeader.tsx| Header khusus tampilan mobile.
+UpdateBanner.tsx| Menampilkan pemberitahuan pembaruan aplikasi.
+OfflineBanner.tsx| Menampilkan status atau pemberitahuan ketika offline.
+ApkPromo.tsx| Menampilkan promosi atau informasi unduhan APK.
+
+components/ui/
+
+Berisi komponen UI umum yang dapat digunakan kembali di berbagai halaman.
+
+File| Fungsi
+CoverArt.tsx| Menampilkan gambar cover musik.
+Logo.tsx| Komponen logo MusicVerse.
+EmptyState.tsx| Tampilan ketika belum ada data atau konten.
+MarqueeText.tsx| Menampilkan teks berjalan.
+PauseLines.tsx| Komponen animasi indikator jeda.
+SettingSwitch.tsx| Komponen tombol pengaturan ON/OFF.
+Chip.tsx| Komponen label atau kategori kecil.
+SectionHeader.tsx| Komponen judul bagian atau section.
+
+components/music/
+
+Berisi komponen yang berkaitan dengan tampilan musik, artis, album, dan rekomendasi.
+
+File| Fungsi
+ArtistCard.tsx| Menampilkan informasi artis dalam bentuk kartu.
+HorizontalRow.tsx| Menampilkan daftar konten secara horizontal.
+TrackRow.tsx| Menampilkan informasi lagu dalam bentuk baris.
+QuickPickCard.tsx| Kartu pilihan musik cepat.
+PlaylistCard.tsx| Kartu informasi playlist.
+GenreTile.tsx| Menampilkan kategori atau genre musik.
+
+components/playlist/
+
+Berisi komponen yang mengatur tampilan dan pengelolaan playlist.
+
+File| Fungsi
+PlaylistHeader.tsx| Menampilkan header dan informasi playlist.
+TrackList.tsx| Menampilkan daftar lagu dalam playlist.
+PlaylistSkeleton.tsx| Tampilan loading playlist.
+AddToPlaylistSheet.tsx| Panel untuk menambahkan lagu ke playlist.
+TrackRow.tsx| Menampilkan satu lagu dalam daftar playlist.
+PlaylistView.tsx| Tampilan utama playlist.
+PlaylistImportForm.tsx| Form untuk mengimpor playlist.
+
+components/library/
+
+Berisi komponen untuk mengelola koleksi musik pengguna.
+
+File| Fungsi
+PlaylistsSection.tsx| Menampilkan bagian daftar playlist.
+NewPlaylistForm.tsx| Form pembuatan playlist baru.
+SavedPlaylistCard.tsx| Kartu playlist yang sudah disimpan.
+PlaylistMenuSheet.tsx| Panel menu tindakan playlist.
+ManualSearchSheet.tsx| Panel pencarian manual.
+MoveDownloadSheet.tsx| Panel untuk memindahkan unduhan.
+DownloadsSection.tsx| Menampilkan bagian daftar unduhan.
+PlaylistTransferPanel.tsx| Panel pemindahan atau transfer playlist.
+RecentlyPlayedList.tsx| Menampilkan daftar musik yang baru diputar.
+MyPlaylistsSection.tsx| Menampilkan playlist milik pengguna.
+
+components/player/
+
+Berisi seluruh komponen yang berkaitan dengan sistem pemutar musik.
+
+File| Fungsi
+FullPlayer.tsx| Tampilan pemutar musik penuh.
+NativeMediaSync.tsx| Sinkronisasi media dengan sistem native.
+SheetAction.tsx| Komponen aksi pada bottom sheet.
+UpcomingList.tsx| Menampilkan daftar lagu berikutnya.
+TrackMenuSheet.tsx| Panel menu tindakan lagu.
+AddToPlaylistPicker.tsx| Pemilih playlist untuk menambahkan lagu.
+MiniPlayer.tsx| Tampilan pemutar musik mini.
+TrackActionSheet.tsx| Panel tindakan untuk lagu.
+LyricLine.tsx| Menampilkan satu baris lirik.
+AutoResumeSync.tsx| Sinkronisasi fitur melanjutkan pemutaran otomatis.
+MiniBubble.tsx| Tampilan pemutar berbentuk gelembung mini.
+PlayerControls.tsx| Kontrol pemutaran musik.
+CrossfadeSheet.tsx| Panel pengaturan crossfade.
+MediaSessionSync.tsx| Sinkronisasi dengan Media Session API.
+LyricsPanel.tsx| Panel tampilan lirik musik.
+PlayerDock.tsx| Pengatur posisi atau area pemutar.
+SeekBar.tsx| Pengatur posisi waktu pemutaran lagu.
+SleepTimerSheet.tsx| Panel pengaturan sleep timer.
+QueuePanel.tsx| Panel daftar antrean pemutaran.
+
+---
+
+3.2. src/pages/
+
+Folder yang menyimpan halaman utama aplikasi.
+
+File| Fungsi
+HomePage.tsx| Halaman utama MusicVerse.
+SearchPage.tsx| Halaman pencarian musik.
+BrowsePage.tsx| Halaman penjelajahan artis dan album.
+LibraryPage.tsx| Halaman koleksi musik pengguna.
+MyPlaylistPage.tsx| Halaman playlist pribadi.
+DownloadsPage.tsx| Halaman daftar musik yang diunduh.
+HistoryPage.tsx| Halaman riwayat pemutaran musik.
+SettingsPage.tsx| Halaman pengaturan utama.
+PlaybackSettingsPage.tsx| Halaman pengaturan pemutaran musik.
+DownloadSettingsPage.tsx| Halaman pengaturan unduhan.
+PlaylistSettingsPage.tsx| Halaman pengaturan playlist.
+EqualizerPage.tsx| Halaman equalizer audio.
+BackupPage.tsx| Halaman pencadangan dan pemulihan data.
+
+---
+
+3.3. src/context/
+
+Menyimpan React Context untuk pengelolaan state global aplikasi.
+
+File| Fungsi
+AudioPlayerContext.tsx| Mengelola state global pemutar musik.
+LibraryContext.tsx| Mengelola state koleksi musik.
+PlaylistContext.tsx| Mengelola state playlist.
+MyPlaylistsContext.tsx| Mengelola state playlist pribadi.
+PlayerUiContext.tsx| Mengelola state tampilan UI pemutar musik.
+SleepTimerContext.tsx| Mengelola state sleep timer.
+TrackMenuContext.tsx| Mengelola state menu tindakan lagu.
+
+---
+
+3.4. src/hooks/
+
+Menyimpan custom React Hooks untuk memisahkan logika aplikasi dari komponen UI.
+
+File| Fungsi
+useAudioPlayer.ts| Mengakses fungsi dan state pemutar musik.
+useAudioPlayerController.ts| Mengatur logika kontrol pemutaran audio.
+useLongPress.ts| Mendeteksi interaksi tekan lama.
+greeting.ts| Menghasilkan sapaan berdasarkan waktu.
+usePlaylistPrefs.ts| Mengelola preferensi playlist.
+useLyrics.ts| Mengambil dan mengelola data lirik.
+useMiniPlayerMode.ts| Mengatur mode mini player.
+useAppUpdate.ts| Mengelola pengecekan pembaruan aplikasi.
+useOnlineStatus.ts| Memantau status koneksi internet.
+useLyricTiming.ts| Mengatur sinkronisasi waktu lirik.
+useNowPlaying.ts| Mengakses informasi lagu yang sedang diputar.
+useOverlayHistory.ts| Mengelola riwayat tampilan overlay.
+
+---
+
+3.5. src/services/
+
+Menyimpan layanan utama yang digunakan aplikasi.
+
+File| Fungsi
+audioEngine.ts| Mesin utama untuk pemutaran audio.
+lyricsApi.ts| Mengelola komunikasi dengan API lirik.
+spotifyApi.ts| Mengelola integrasi API Spotify.
+equalizer.ts| Mengatur pemrosesan dan pengaturan equalizer audio.
+
+---
+
+3.6. src/plugins/
+
+Menyimpan sistem plugin dan integrasi berbagai sumber musik.
+
+File| Fungsi
+suggestions.ts| Mengelola rekomendasi sumber musik.
+spotifyImporter.ts| Mengimpor data dari Spotify.
+http.ts| Mengelola permintaan HTTP.
+quality.ts| Mengatur kualitas sumber atau streaming.
+registry.ts| Mengelola registrasi plugin.
+ytmusic.ts| Integrasi sumber YouTube Music.
+ytvideo.ts| Integrasi sumber video YouTube.
+thirdParty.ts| Mengelola integrasi pihak ketiga.
+types.ts| Definisi tipe data untuk sistem plugin.
+
+---
+
+3.7. src/native/
+
+Berisi penghubung antara aplikasi React dan fitur native Android.
+
+File| Fungsi
+offline.ts| Mengelola fitur dan status offline.
+appUpdate.ts| Mengelola pembaruan aplikasi native.
+musicVerseNative.ts| Penghubung aplikasi dengan fitur MusicVerse native.
+platform.ts| Mendeteksi platform yang sedang digunakan.
+offlineLyrics.ts| Mengelola lirik yang tersedia secara offline.
+engineSettings.ts| Mengatur konfigurasi mesin audio native.
+backButton.ts| Mengelola tombol kembali Android.
+downloads.ts| Mengelola proses unduhan native.
+connection.ts| Mengelola koneksi jaringan.
+nativeStorage.ts| Mengelola penyimpanan data native.
+
+---
+
+3.8. src/utils/
+
+Berisi fungsi utilitas yang digunakan untuk mendukung berbagai fitur aplikasi.
+
+File| Fungsi
+libraryNotice.ts| Mengelola pemberitahuan koleksi.
+playerStatus.ts| Mengelola informasi status pemutar.
+playLog.ts| Mencatat aktivitas pemutaran musik.
+backGuard.ts| Mengelola pengamanan navigasi kembali.
+playlistStorage.ts| Mengelola penyimpanan data playlist.
+fallbackCover.ts| Menyediakan cover pengganti ketika gambar tidak tersedia.
+trackTitle.ts| Mengolah dan memformat judul lagu.
+allSongs.ts| Mengelola data seluruh lagu.
+config/navigation.ts| Konfigurasi navigasi aplikasi.
+libraryStorage.ts| Mengelola penyimpanan data koleksi.
+playlistPrefs.ts| Mengelola preferensi playlist.
+searchPlaylist.ts| Mengelola pencarian playlist.
+swallowNextClick.ts| Mengendalikan klik berikutnya.
+spotifyUrl.ts| Mengolah dan memvalidasi URL Spotify.
+formatTime.ts| Memformat informasi waktu.
+notificationCover.ts| Mengelola gambar cover pada notifikasi.
+lrc.ts| Mengolah file lirik berformat LRC.
+queueResultText.ts| Menghasilkan teks hasil antrean.
+probeAudio.ts| Memeriksa informasi file audio.
+networkQuality.ts| Memeriksa kualitas jaringan.
+playerSession.ts| Mengelola sesi pemutar musik.
+myPlaylistStorage.ts| Mengelola penyimpanan playlist pribadi.
+formatRelativeTime.ts| Memformat waktu relatif.
+playlistMapper.ts| Memetakan struktur data playlist.
+matchTrack.ts| Mencocokkan data lagu.
+trackSearch.ts| Mengelola pencarian lagu.
+backup.ts| Mengelola sistem backup dan pemulihan.
+clipDetect.ts| Mendeteksi klip atau bagian audio.
+playerQueue.ts| Mengelola antrean pemutaran.
+safeStorage.ts| Mengelola penyimpanan data secara aman.
+lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
+
+---
+
+3.9. src/data/
+
+Menyimpan data yang digunakan oleh aplikasi.
+
+File| Fungsi
+mock.ts| Menyimpan data contoh atau mock untuk kebutuhan aplikasi.
+
+---
+
+3.10. src/config/
+
+Menyimpan konfigurasi internal aplikasi.
+
+File| Fungsi
+navigation.ts| Mengatur konfigurasi navigasi.
+apk.ts| Menyimpan konfigurasi terkait APK.
+
+---
+
+3.11. src/types/
+
+Menyimpan definisi tipe data TypeScript.
+
+File| Fungsi
+index.ts| Definisi tipe data umum aplikasi.
+spotify.ts| Definisi tipe data integrasi Spotify.
+player.ts| Definisi tipe data pemutar musik.
+library.ts| Definisi tipe data koleksi musik.
+
+---
+
+3.12. Root files dalam src/
+
+File| Fungsi
+App.tsx| Komponen utama dan pengatur struktur aplikasi React.
+main.tsx| Entry point utama aplikasi React.
+index.css| Style global aplikasi.
+vite-env.d.ts| Deklarasi tipe lingkungan Vite.
+
+---
+
+4. PUBLIC/
+
+Folder "public/" menyimpan aset statis yang digunakan aplikasi.
+
+File / Folder| Fungsi
+favicon.svg| Ikon aplikasi untuk browser.
+icons/icon-192.png| Ikon aplikasi berukuran 192 × 192 piksel.
+icons/icon-512.png| Ikon aplikasi berukuran 512 × 512 piksel.
+
+---
+
+5. NATIVE ANDROID/
+
+Folder "native/android/" menyimpan implementasi fitur native Android yang berhubungan dengan aplikasi MusicVerse.
+
+5.1. Java Source Files
+
+File| Fungsi
+MusicVerseNativePlugin.java| Plugin penghubung antara JavaScript dan Android native.
+MainActivity.java| Activity utama aplikasi Android.
+NetWatch.java| Memantau kondisi dan perubahan jaringan.
+PlaybackService.java| Layanan pemutaran musik di background.
+DownloadQueue.java| Mengelola antrean unduhan.
+NativeDownloader.java| Menangani proses pengunduhan native.
+MediaExporter.java| Mengelola ekspor file media.
+InterruptionResumer.java| Mengelola pemulihan pemutaran setelah gangguan.
+AudioFinalizer.java| Menangani proses akhir audio.
+UpdateFileProvider.java| Menyediakan akses file untuk proses pembaruan.
+DownloadService.java| Layanan unduhan Android.
+StreamProxy.java| Mengelola proxy streaming audio.
+
+5.2. Android Resources
+
+res/drawable-nodpi/
+
+Menyimpan aset gambar yang tidak mengikuti skala density layar Android.
+
+Fungsi:
+
+- Menyimpan gambar yang digunakan pada tampilan native.
+- Menyediakan aset gambar untuk kebutuhan notifikasi dan media.
+
+res/xml/
+
+File| Fungsi
+update_file_paths.xml| Mengatur konfigurasi jalur file untuk proses pembaruan aplikasi.
+
+res/values/
+
+File| Fungsi
+mv_colors.xml| Menyimpan definisi warna untuk tampilan native MusicVerse.
+
+res/drawable/
+
+Menyimpan gambar dan ikon yang digunakan pada tampilan Android native.
+
+res/mipmap-mdpi/
+
+Menyimpan ikon launcher untuk perangkat dengan density MDPI.
+
+res/mipmap-hdpi/
+
+Menyimpan ikon launcher untuk perangkat dengan density HDPI.
+
+res/mipmap-xhdpi/
+
+Menyimpan ikon launcher untuk perangkat dengan density XHDPI.
+
+res/mipmap-xxhdpi/
+
+Menyimpan ikon launcher untuk perangkat dengan density XXHDPI.
+
+res/mipmap-xxxhdpi/
+
+Menyimpan ikon launcher untuk perangkat dengan density XXXHDPI.
+
+res/mipmap-anydpi-v26/
+
+Menyimpan ikon launcher adaptif untuk Android versi yang mendukung adaptive icon.
+
+---
+
+6. API/
+
+Folder "api/" menyimpan kode yang digunakan untuk mendukung layanan backend atau API.
+
+File| Fungsi
+proxy.js| Menangani permintaan proxy API.
+
+---
+
+7. SCRIPTS/
+
+Folder "scripts/" menyimpan skrip pendukung untuk proses konfigurasi dan pengembangan.
+
+File| Fungsi
+setup-android.mjs| Membantu menyiapkan konfigurasi Android.
+check-android-env.sh| Memeriksa konfigurasi dan lingkungan pengembangan Android.
+
+---
+
+8. DOCS/
+
+Folder "docs/" menyimpan dokumentasi teknis project.
+
+File| Fungsi
+ANDROID.md| Dokumentasi mengenai konfigurasi dan pengembangan Android MusicVerse.
+
+---
+
+9. GITHUB WORKFLOWS/
+
+Folder ".github/workflows/" berisi konfigurasi otomatisasi GitHub Actions.
+
+File| Fungsi
+apk.yml| Mengatur workflow otomatis untuk proses build APK.
+
+---
+
+10. ROOT CONFIGURATION FILES
+
+File konfigurasi utama yang terletak di root project.
+
+File| Fungsi
+package.json| Menyimpan informasi project, dependencies, dan scripts npm.
+vite.config.ts| Mengatur konfigurasi Vite.
+capacitor.config.ts| Mengatur konfigurasi Capacitor.
+tsconfig.json| Konfigurasi utama TypeScript.
+tsconfig.app.json| Konfigurasi TypeScript untuk aplikasi.
+tsconfig.node.json| Konfigurasi TypeScript untuk lingkungan Node.js.
+tailwind.config.js| Konfigurasi Tailwind CSS.
+postcss.config.js| Konfigurasi PostCSS.
+index.html| HTML utama sebagai entry point aplikasi web.
+vercel.json| Konfigurasi deployment Vercel.
+.env.example| Contoh konfigurasi environment variables.
+.gitignore| Menentukan file dan folder yang diabaikan oleh Git.
+README.md| Dokumentasi pengenalan project.
+
+---
+
+11. CHANGELOG / VERSION HISTORY
+
+File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
+
+File| Fungsi
+CHANGES-0.3.7.md| Riwayat perubahan versi 0.3.7.
+CHANGES-0.3.8.md| Riwayat perubahan versi 0.3.8.
+CHANGES-0.4.0.md| Riwayat perubahan versi 0.4.0.
+CHANGES-0.4.1.md| Riwayat perubahan versi 0.4.1.
+CHANGES-0.4.2.md| Riwayat perubahan versi 0.4.2.
+CHANGES-0.4.3.md| Riwayat perubahan versi 0.4.3.
+CHANGES-0.4.4.md| Riwayat perubahan versi 0.4.4.
+CHANGES-0.4.5.md| Riwayat perubahan versi 0.4.5.
+CHANGES-0.4.6.md| Riwayat perubahan versi 0.4.6.
+CHANGES-0.4.7.md| Riwayat perubahan versi 0.4.7.
+CHANGES-0.4.8.md| Riwayat perubahan versi 0.4.8.
+CHANGES-0.4.9.md| Riwayat perubahan versi 0.4.9.
+CHANGES-0.4.10.md| Riwayat perubahan versi 0.4.10.
+CHANGES-0.4.11.md| Riwayat perubahan versi 0.4.11.
+CHANGES-0.4.12.md| Riwayat perubahan versi 0.4.12.
+CHANGES-0.4.13.md| Riwayat perubahan versi 0.4.13.
+CHANGES-0.4.14.md| Riwayat perubahan versi 0.4.14.
+CHANGES-0.4.15.md| Riwayat perubahan versi 0.4.15.
+CHANGES-0.4.16.md| Riwayat perubahan versi 0.4.16.
+CHANGES-0.4.17.md| Riwayat perubahan versi 0.4.17.
+
+---
+
+12. APPLICATION ARCHITECTURE
+
+Berikut gambaran sederhana hubungan antara bagian-bagian utama MusicVerse.
+
+                    main.tsx
+                       |
+                       v
+                     App.tsx
+                       |
+                       v
+                  AppShell.tsx
+                       |
+          +------------+------------+------------+
+          |            |            |
+          v            v            v
+        Pages      Components    Context
+          |            |            |
+          |            |            |
+          +------------+------------+------------+
+                       |
+                       v
+                     Hooks
+                       |
+                       v
+                    Services
+                       |
+          +------------+------------+------------+
+          |            |            |
+          v            v            v
+       Plugins       Utils      Native Bridge
+          |                         |
+          v                         v
+    Music Sources              Android Native
+
+12.1. Main Application Flow
+
+- "main.tsx" menjadi titik awal aplikasi React.
+- "App.tsx" mengatur komponen utama aplikasi.
+- "AppShell.tsx" menyediakan kerangka tampilan aplikasi.
+- "Pages/" menyimpan halaman yang dapat diakses pengguna.
+- "Components/" menyediakan komponen UI.
+- "Context/" mengelola state global.
+- "Hooks/" menyediakan logika yang dapat digunakan kembali.
+- "Services/" mengelola layanan utama aplikasi.
+- "Plugins/" menghubungkan berbagai sumber musik.
+- "Utils/" menyediakan fungsi pendukung.
+- "Native/" menghubungkan aplikasi dengan fitur Android native.
+
+---
+
+13. DEVELOPMENT RULES
+
+Bagian ini merupakan aturan penting yang harus diikuti setiap kali melakukan pengembangan MusicVerse.
+
+13.1. Sebelum Mengubah Kode
+
+1. Periksa file yang berkaitan dengan fitur yang akan diubah.
+2. Baca implementasi yang sudah ada.
+3. Periksa hubungan antarcomponent, context, hooks, services, dan utils.
+4. Pastikan tidak ada fungsi serupa yang sudah tersedia.
+5. Pertahankan arsitektur project yang sudah digunakan.
+
+13.2. Penempatan File
+
+Gunakan lokasi sesuai tanggung jawab masing-masing.
+
+Jenis kode| Lokasi
+Komponen UI| "src/components/"
+Halaman aplikasi| "src/pages/"
+State global| "src/context/"
+Custom hooks| "src/hooks/"
+Layanan aplikasi| "src/services/"
+Integrasi sumber musik| "src/plugins/"
+Android native bridge| "src/native/"
+Fungsi utilitas| "src/utils/"
+Data aplikasi| "src/data/"
+Konfigurasi internal| "src/config/"
+Definisi tipe| "src/types/"
+Aset statis| "public/"
+Kode Android| "native/android/"
+Backend/API| "api/"
+Skrip pengembangan| "scripts/"
+Dokumentasi| "docs/"
+
+13.3. Hindari Duplikasi
+
+- Jangan membuat fungsi baru apabila fungsi yang sama sudah tersedia.
+- Jangan membuat Context baru tanpa memeriksa Context yang sudah ada.
+- Jangan membuat custom hook baru apabila logikanya sudah ditangani hook yang tersedia.
+- Jangan membuat komponen player yang menduplikasi fungsi komponen player lama.
+- Gunakan kembali sistem penyimpanan yang sudah tersedia.
+- Pertahankan integrasi dengan sistem audio yang sudah digunakan.
+
+13.4. Konsistensi Aplikasi
+
+Setiap perubahan harus mempertahankan:
+
+- Konsistensi tampilan UI.
+- Konsistensi sistem navigasi.
+- Konsistensi state aplikasi.
+- Konsistensi pemutaran musik.
+- Konsistensi antrean lagu.
+- Konsistensi penyimpanan playlist.
+- Kompatibilitas Android.
+- Kompatibilitas tampilan mobile dan desktop.
+
+13.5. Aturan Perubahan Android Native
+
+Jika perubahan berhubungan dengan Android native:
+
+1. Periksa implementasi Java yang sudah tersedia.
+2. Periksa native bridge di "src/native/".
+3. Periksa konfigurasi Capacitor.
+4. Pertahankan komunikasi antara JavaScript dan Android.
+5. Jangan menghapus layanan background yang masih digunakan.
+6. Pastikan perubahan tidak mengganggu playback dan download service.
+
+---
+
+14. PROJECT STRUCTURE MAINTENANCE
+Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami perubahan.
+
+ Ketika Menambahkan File Baru
+  • Tambahkan informasi berikut:
+  • Nama file.
+  • Lokasi folder.
+  • Fungsi file.
+  • Hubungannya dengan fitur lain jika diperlukan.
+
+ Ketika Menghapus File
+  • Hapus file tersebut dari dokumentasi.
+  • Pastikan tidak ada referensi yang tertinggal.
+  • Periksa apakah fungsi file sudah tidak digunakan.
+ 
+ Ketika Memindahkan File
+  • Perbarui lokasi file.
+  • Perbarui hubungan antarbagian jika berubah.
+  • Pastikan dokumentasi sesuai dengan struktur      terbaru.
+  
+ Ketika Menambahkan Folder Baru
+  • Tambahkan folder ke struktur utama.
+  • Jelaskan tanggung jawab folder.
+  • Dokumentasikan file penting di dalamnya.
+  
+15. IMPORTANT NOTES FOR FUTURE DEVELOPMENT
+ PROJECT_STRUCTURE.md merupakan dokumentasi referensi struktur project MusicVerse.
+ 
+ Setiap kali melakukan perubahan project:
+  • Gunakan dokumentasi ini untuk menemukan       lokasi file.
+  • Periksa source code asli sebelum mengubahnya.
+  • Jangan mengandalkan dokumentasi saja apabila   implementasi aktual berbeda.
+  • Jangan membuat struktur baru tanpa alasan       yang jelas.
+  • Jangan menghapus fitur lama yang tidak          berhubungan dengan perubahan.
+  • Pertahankan kompatibilitas dengan sistem yang     sudah ada.
+  • Perbarui dokumentasi setelah perubahan selesai.
+  • Pastikan seluruh informasi dokumentasi sesuai    dengan kondisi source code terbaru.
+  • Prioritas utama: menjaga stabilitas, konsistensi, dan struktur MusicVerse agar pengembangan berikutnya tidak merusak fitur yang sudah berjalan.
+  
+End of Project Structure Documentation
+Project: MusicVerse
+Reference Version: v0.4.17
+Document: PROJECT_STRUCTURE.md

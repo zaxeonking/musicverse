@@ -1,0 +1,170 @@
+import { ListMusic, Search, SearchX, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { RowActivity } from '../../types/player'
+import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
+import { buildSearchIndex, filterSearchIndex } from '../../utils/trackSearch'
+import EmptyState from '../ui/EmptyState'
+import TrackRow, { TRACK_GRID } from './TrackRow'
+
+interface TrackListProps {
+  /** Seluruh lagu playlist, urutan asli dari API. */
+  tracks: PlaylistTrack[]
+  /** Menerima lagu dan posisi aslinya di `tracks` (aman dipakai sebagai indeks queue). */
+  onPlay: PlayTrackHandler
+  /** ID lagu yang sedang aktif di pemutar (atau null). */
+  playingTrackId?: string | null
+  /** Status playback untuk lagu aktif tersebut. */
+  playbackActivity?: RowActivity
+  /**
+   * Mode terkontrol: jika diisi, kata kunci dikendalikan pemanggil dan kolom pencarian bawaan
+   * disembunyikan (dipakai halaman Cari). Tanpa prop ini perilaku lama tetap sama.
+   */
+  query?: string
+  /** Dipanggil saat tombol "Hapus pencarian" di keadaan tanpa hasil ditekan (mode terkontrol). */
+  onQueryChange?: (query: string) => void
+  /** Ikutkan album dalam pencarian. Bawaan true; halaman Cari mematikannya (judul + artis saja). */
+  includeAlbum?: boolean
+  /** Mengganti empty state bawaan saat `tracks` kosong. */
+  emptyState?: ReactNode
+  /**
+   * Daftar ini halaman Cari. Lagu satuan di sini (dengan atau tanpa kata kunci) boleh dimasukkan ke antrean
+   * lewat menu lagu, meski berasal dari luar antrean yang sedang berjalan. Tanpa prop ini (mis. tampilan
+   * playlist) antrean tidak dicampur dengan lagu dari luar.
+   */
+  searchable?: boolean
+}
+
+export default function TrackList({
+  tracks,
+  onPlay,
+  playingTrackId = null,
+  playbackActivity = 'none',
+  query: controlledQuery,
+  onQueryChange,
+  includeAlbum = true,
+  emptyState,
+  searchable = false,
+}: TrackListProps) {
+  const controlled = controlledQuery !== undefined
+  const [innerQuery, setInnerQuery] = useState('')
+  const query = controlled ? controlledQuery : innerQuery
+  const setQuery = useCallback(
+    (value: string) => (controlled ? onQueryChange?.(value) : setInnerQuery(value)),
+    [controlled, onQueryChange],
+  )
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Simpan callback terbaru di ref agar baris tidak dirender ulang tiap parent render.
+  const onPlayRef = useRef(onPlay)
+  useEffect(() => {
+    onPlayRef.current = onPlay
+  }, [onPlay])
+
+  const entries = useMemo(() => buildSearchIndex(tracks, { includeAlbum }), [tracks, includeAlbum])
+  const visible = useMemo(() => filterSearchIndex(entries, query), [entries, query])
+  const isFiltering = query.trim() !== ''
+
+  const handlePlay = useCallback<PlayTrackHandler>((track, index) => {
+    setSelectedId(track.id)
+    onPlayRef.current(track, index)
+  }, [])
+
+  if (tracks.length === 0) {
+    if (emptyState) return <>{emptyState}</>
+    return (
+      <EmptyState
+        icon={ListMusic}
+        title="Playlist ini belum punya lagu"
+        description="Tambahkan lagu di Spotify, lalu klik Muat ulang."
+      />
+    )
+  }
+
+  return (
+    <section aria-label="Daftar lagu" className="space-y-3">
+      <div>
+        {!controlled && (
+          <>
+        <label htmlFor="track-filter" className="sr-only">
+          Cari di playlist: judul, artis, atau album
+        </label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
+            aria-hidden="true"
+          />
+          <input
+            id="track-filter"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cari judul, artis, atau album"
+            enterKeyHint="search"
+            autoComplete="off"
+            className="h-11 w-full rounded-full bg-raised pl-12 pr-12 text-base text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Hapus pencarian"
+              className="icon-btn absolute right-0 top-1/2 h-11 w-11 -translate-y-1/2"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+          </>
+        )}
+        <p role="status" aria-live="polite" className="mt-2 min-h-5 px-1 text-xs text-ink-muted">
+          {isFiltering ? `${visible.length} dari ${tracks.length} lagu` : ''}
+        </p>
+      </div>
+
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title={`Tidak ada hasil untuk “${query.trim()}”`}
+          description="Periksa ejaan, atau coba judul, artis, atau album lain."
+          action={
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="btn-secondary"
+            >
+              Hapus pencarian
+            </button>
+          }
+        />
+      ) : (
+        <div>
+          <div
+            aria-hidden="true"
+            className={`${TRACK_GRID} mb-1 hidden border-b border-line px-2 pb-2 text-xs font-medium text-ink-faint sm:grid`}
+          >
+            <span className="text-center">#</span>
+            <span />
+            <span>Judul</span>
+            <span className="hidden md:block">Album</span>
+            <span className="text-right">Durasi</span>
+            <span />
+          </div>
+          <ul className="-mx-2">
+            {visible.map(({ track, index }) => (
+              <TrackRow
+                key={track.id}
+                track={track}
+                index={index}
+                selected={track.id === selectedId}
+                activity={track.id === playingTrackId ? playbackActivity : 'none'}
+                onSelect={setSelectedId}
+                onPlay={handlePlay}
+                fromSearch={searchable}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
