@@ -90,9 +90,8 @@ function readEverything(): InitialLibrary {
 /**
  * Sumber data Koleksi. Harus berada di dalam <PlaylistProvider> dan <AudioPlayerProvider>.
  *
- * - Playlist yang BERHASIL dimuat dari API otomatis disimpan. Playlist yang hanya dipulihkan
- *   dari penyimpanan (`fromCache`) tidak disimpan ulang, jadi menghapus dari Koleksi tidak
- *   "hidup kembali" hanya karena halaman dibuka lagi.
+ * - Playlist yang dimuat dari API TIDAK lagi disimpan otomatis: pengguna menambahkannya sendiri sebagai playlist
+ *   (tombol "Tambah ke playlist" di Beranda). Entri Koleksi yang sudah ada tetap tampil dan bisa dihapus.
  * - Lagu masuk Recently Played saat status playback benar-benar `playing` (event audio), bukan
  *   saat tombol ditekan atau URL audio didapat.
  * - Setiap perubahan membaca ulang penyimpanan dulu (baca-ubah-tulis), sehingga dua tab tidak saling menimpa.
@@ -222,16 +221,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [commitRecent, commitSaved])
 
-  /* Simpan otomatis playlist yang baru berhasil dimuat dari API. */
-  const { playlist, status: playlistStatus, fromCache } = usePlaylist()
-  const lastAutoSavedRef = useRef<PlaylistDetail | null>(null)
-  useEffect(() => {
-    if (!playlist || playlistStatus !== 'success' || fromCache || playlist.source === 'search') return
-    if (lastAutoSavedRef.current === playlist) return
-    lastAutoSavedRef.current = playlist
-    savePlaylist(playlist, { allowMemoryOnly: true })
-  }, [playlist, playlistStatus, fromCache, savePlaylist])
-
+  const { playlist } = usePlaylist()
   /* Catat Recently Played saat audio benar-benar terdengar. */
   const { status: playerStatus, currentTrack } = useAudioPlayer()
   const recordedTrackIdRef = useRef<string | null>(null)

@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useLongPress } from '../../hooks/useLongPress'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { STATUS_TEXT } from '../../utils/playerStatus'
@@ -23,7 +25,8 @@ const DRAG_START_PX = 8
  * lewat useAudioPlayer; tidak punya state playback sendiri.
  */
 export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void; onOpenQueue: () => void }) {
-  const { status } = useAudioPlayer()
+  const { status, currentTrack } = useAudioPlayer()
+  const { openTrackMenu } = useTrackMenu()
   const now = useNowPlaying()
   const { collapsed, side, setCollapsed, setSide } = useMiniPlayerMode()
   const dockRef = useRef<HTMLDivElement>(null)
@@ -33,6 +36,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const [growFrom, setGrowFrom] = useState<'left' | 'right' | null>(null)
   const drag = useRef({ id: -1, x: 0, y: 0, active: false, crossed: false, lastY: 0, lastT: 0, velocity: 0 })
   const swallowClick = useRef(false)
+  // Tahan lama pada info lagu = menu lagu yang sedang diputar. Tidak jalan bila sedang menyeret kartu.
+  const press = useLongPress(() => {
+    if (drag.current.active || !currentTrack) return
+    openTrackMenu(currentTrack, { place: 'player' })
+  })
   const collapseTimer = useRef(0)
   const resetTimer = useRef(0)
 
@@ -239,9 +247,10 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 px-4 pb-2.5 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] lg:gap-x-6 lg:px-6 lg:py-2">
         <button
           type="button"
+          {...press}
           onClick={onOpen}
           aria-haspopup="dialog"
-          aria-label={`Buka pemutar penuh: ${now.title}${now.artists ? `, ${now.artists}` : ''}`}
+          aria-label={`Buka pemutar penuh (tahan lama untuk opsi lagu): ${now.title}${now.artists ? `, ${now.artists}` : ''}`}
           className="flex min-w-0 items-center gap-3 rounded-md text-left transition-opacity active:opacity-80 focus-ring lg:row-span-2"
         >
           <div className="w-11 shrink-0 lg:w-14">

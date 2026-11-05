@@ -2,11 +2,13 @@ import { isNativeApp } from '../native/platform'
 import { pluginFetch } from './http'
 
 /**
- * Modul saran pencarian (padanan jenis plugin `search-suggestion-provider` StreamBeats). Penyedia disusun sebagai
- * daftar supaya mudah ditambah. Saat ini: YouTube Music `music/get_search_suggestions` (port dari plugin
- * `ytmusic-search-suggestion`), iTunes Search API (padanan `itunes-search-suggestions`), dan MusicBrainz (padanan
- * `musicbrainz-suggestions`). Semua penyedia dijalankan BERSAMAAN dan hasilnya digabung (YouTube Music di depan). Hanya jalan di APK (butuh HTTP native bebas CORS); di browser
- * hasilnya selalu kosong. Galat jaringan tidak pernah dilempar: saran hanyalah bonus.
+ * Modul saran pencarian (padanan jenis plugin `search-suggestion-provider` StreamBeats). Penyedia disusun sebagai daftar:
+ *  1. YouTube Music `music/get_search_suggestions` (port `ytmusic-search-suggestion`): saran kata kunci asli, dicoba dulu.
+ *  2. iTunes Search API (padanan `itunes-search-suggestions`): "judul artis" dari katalog Apple Music.
+ *  3. MusicBrainz (padanan `musicbrainz-suggestions`): rekaman dari basis data musik terbuka.
+ * Bila YouTube Music sudah memberi cukup saran, penyedia lain tidak dipanggil sama sekali (tanpa permintaan tambahan).
+ * Bila kurang / gagal, 2 dan 3 dipanggil bersamaan dan hasilnya digabung berurutan tanpa duplikat. Hanya jalan di APK
+ * (butuh HTTP native bebas CORS); di browser hasilnya selalu kosong. Galat jaringan tidak pernah dilempar: saran hanyalah bonus.
  */
 
 export interface SuggestionOptions {
@@ -74,17 +76,19 @@ export const ytmSuggestionProvider: SuggestionProvider = {
   },
 }
 
-/** Judul + artis dari hasil pencarian iTunes (`/search?entity=song`), tanpa duplikat. */
+const ITUNES_URL = 'https://itunes.apple.com/search'
+
+/** "judul artis" dari hasil iTunes Search API (`results[].trackName` + `artistName`), tanpa duplikat. */
 export function parseItunesSuggestions(body: unknown, limit = 8): string[] {
   const results = (body as { results?: unknown } | null)?.results
   if (!Array.isArray(results)) return []
   const out: string[] = []
   const seen = new Set<string>()
   for (const item of results) {
-    const r = item as { trackName?: unknown; artistName?: unknown }
-    const title = typeof r.trackName === 'string' ? r.trackName.trim() : ''
-    const artist = typeof r.artistName === 'string' ? r.artistName.trim() : ''
+    const record = item as { trackName?: unknown; artistName?: unknown }
+    const title = typeof record.trackName === 'string' ? record.trackName.trim() : ''
     if (!title) continue
+    const artist = typeof record.artistName === 'string' ? record.artistName.trim() : ''
     const text = artist ? `${title} ${artist}` : title
     const key = text.toLowerCase()
     if (seen.has(key)) continue
@@ -99,24 +103,44 @@ export const itunesSuggestionProvider: SuggestionProvider = {
   id: 'itunes-search-suggestions',
   name: 'iTunes',
   async suggest(query, { signal, limit = 8 }) {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=${Math.min(25, limit * 2)}`
-    const response = await pluginFetch(url, { headers: { Accept: 'application/json', 'User-Agent': USER_AGENT }, timeoutMs: 6_000, signal })
+    const url = `${ITUNES_URL}?term=${encodeURIComponent(query)}&media=music&entity=song&limit=${Math.min(25, limit * 3)}`
+    const response = await pluginFetch(url, { headers: { Accept: 'application/json' }, timeoutMs: 5_000, signal })
     return parseItunesSuggestions(JSON.parse(await response.text()), limit)
   },
 }
 
-/** Judul + artis dari pencarian rekaman MusicBrainz (`/ws/2/recording`), tanpa duplikat. */
+const MB_URL = 'https://musicbrainz.org/ws/2/recording'
+/**
+ * MusicBrainz mewajibkan User-Agent yang jelas dan meminta info kontak pengembang (email/URL) di dalamnya:
+ * https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting . Isi kontak Anda di sini sebelum merilis ke banyak orang.
+ */
+const MB_USER_AGENT = 'MusicVerse/0.4 (Android app; saran pencarian)'
+
+/** Escape karakter khusus Lucene supaya judul seperti "Hello: (Live)" tidak membuat MusicBrainz menolak (HTTP 400). */
+export function escapeLucene(text: string): string {
+  return text.replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, '\\$&')
+}
+
+/** "judul artis" dari `recordings[]` MusicBrainz (`title` + `artist-credit`), tanpa duplikat (satu rekaman muncul di banyak rilis). */
 export function parseMusicBrainzSuggestions(body: unknown, limit = 8): string[] {
   const recordings = (body as { recordings?: unknown } | null)?.recordings
   if (!Array.isArray(recordings)) return []
   const out: string[] = []
   const seen = new Set<string>()
   for (const item of recordings) {
-    const r = item as { title?: unknown; 'artist-credit'?: unknown }
-    const title = typeof r.title === 'string' ? r.title.trim() : ''
+    const record = item as { title?: unknown; score?: unknown; 'artist-credit'?: unknown }
+    const title = typeof record.title === 'string' ? record.title.trim() : ''
     if (!title) continue
-    const credit = Array.isArray(r['artist-credit']) ? (r['artist-credit'] as Array<{ name?: unknown }>) : []
-    const artist = typeof credit[0]?.name === 'string' ? credit[0].name.trim() : ''
+    if (typeof record.score === 'number' && record.score < 60) continue
+    const credit = Array.isArray(record['artist-credit']) ? (record['artist-credit'] as Array<{ name?: unknown; joinphrase?: unknown; artist?: { name?: unknown } }>) : []
+    const artist = credit
+      .map((part, index) => {
+        const name = typeof part.name === 'string' ? part.name : typeof part.artist?.name === 'string' ? part.artist.name : ''
+        const join = typeof part.joinphrase === 'string' ? part.joinphrase : ''
+        return index < credit.length - 1 ? `${name}${join}` : name
+      })
+      .join('')
+      .trim()
     const text = artist ? `${title} ${artist}` : title
     const key = text.toLowerCase()
     if (seen.has(key)) continue
@@ -131,10 +155,9 @@ export const musicBrainzSuggestionProvider: SuggestionProvider = {
   id: 'musicbrainz-suggestions',
   name: 'MusicBrainz',
   async suggest(query, { signal, limit = 8 }) {
-    const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=${Math.min(25, limit * 2)}`
-    // MusicBrainz mewajibkan User-Agent yang menyebut aplikasi.
+    const url = `${MB_URL}?query=${encodeURIComponent(escapeLucene(query))}&fmt=json&limit=${Math.min(25, limit * 3)}`
     const response = await pluginFetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'MusicVerse/0.4 ( https://github.com/musicverse )' },
+      headers: { 'User-Agent': MB_USER_AGENT, Accept: 'application/json' },
       timeoutMs: 6_000,
       signal,
     })
@@ -142,7 +165,27 @@ export const musicBrainzSuggestionProvider: SuggestionProvider = {
   },
 }
 
-const providers: SuggestionProvider[] = [ytmSuggestionProvider, itunesSuggestionProvider, musicBrainzSuggestionProvider]
+/** Penyedia utama (dicoba sendirian dulu) dan penyedia pelengkap (dipanggil bersamaan bila yang utama kurang / gagal). */
+const primary: SuggestionProvider = ytmSuggestionProvider
+const fallbacks: SuggestionProvider[] = [itunesSuggestionProvider, musicBrainzSuggestionProvider]
+const providers: SuggestionProvider[] = [primary, ...fallbacks]
+
+/** Menggabungkan daftar saran berurutan, tanpa duplikat (tak peka huruf besar/kecil) dan tanpa yang sama dengan `query`. */
+export function mergeSuggestions(lists: readonly (readonly string[])[], query: string, limit: number): string[] {
+  const q = query.trim().toLowerCase()
+  const seen = new Set<string>([q])
+  const out: string[] = []
+  for (const list of lists) {
+    for (const text of list) {
+      const key = text.trim().toLowerCase()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      out.push(text.trim())
+      if (out.length >= limit) return out
+    }
+  }
+  return out
+}
 const cache = new Map<string, string[]>()
 const CACHE_MAX = 50
 
@@ -150,50 +193,33 @@ export function listSuggestionProviders(): Array<{ id: string; name: string }> {
   return providers.map(({ id, name }) => ({ id, name }))
 }
 
-/**
- * Menggabungkan saran beberapa penyedia: urutan penyedia dipertahankan, duplikat (tanpa beda huruf besar) dibuang, dan
- * tiap penyedia diberi jatah bergiliran supaya satu penyedia tidak memenuhi seluruh daftar.
- */
-export function mergeSuggestions(lists: ReadonlyArray<readonly string[]>, limit: number): string[] {
-  const out: string[] = []
-  const seen = new Set<string>()
-  for (let round = 0; out.length < limit; round += 1) {
-    let any = false
-    for (const list of lists) {
-      if (round >= list.length) continue
-      any = true
-      const text = list[round]
-      const key = text.toLowerCase()
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push(text)
-      if (out.length >= limit) break
-    }
-    if (!any) break
-  }
-  return out
-}
-
-/**
- * Saran untuk `query`. Semua penyedia jalan bersamaan (masing-masing dibatasi 6 dtk); yang gagal/kosong dilewati.
- * Selalu mengembalikan array (kosong bila semuanya gagal).
- */
+/** Saran untuk `query`: penyedia utama dulu; bila kurang dari `limit`, penyedia pelengkap melengkapi. Selalu mengembalikan array. */
 export async function getSearchSuggestions(query: string, options: SuggestionOptions = {}): Promise<string[]> {
   const text = query.trim()
   if (text.length < 2 || !isNativeApp()) return []
-  const key = text.toLowerCase()
-  const cached = cache.get(key)
-  if (cached) return cached
   const limit = options.limit ?? 8
-  const settled = await Promise.allSettled(providers.map((provider) => provider.suggest(text, options)))
-  if (options.signal?.aborted) return []
-  const lists = settled.map((result) =>
-    result.status === 'fulfilled' ? result.value.filter((s) => s.toLowerCase() !== key) : [],
-  )
-  const merged = mergeSuggestions(lists, limit)
-  if (merged.length > 0) {
-    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string)
-    cache.set(key, merged)
+  const key = text.toLowerCase()
+  const cacheKey = `${key}|${limit}`
+  const cached = cache.get(cacheKey)
+  if (cached) return cached
+  const attempt = async (provider: SuggestionProvider): Promise<string[]> => {
+    try {
+      return await provider.suggest(text, options)
+    } catch {
+      return [] // saran hanyalah bonus: gagal = kosong
+    }
   }
-  return merged
+  const first = mergeSuggestions([await attempt(primary)], text, limit)
+  if (options.signal?.aborted) return []
+  let found = first
+  if (first.length < limit) {
+    const rest = await Promise.all(fallbacks.map(attempt))
+    if (options.signal?.aborted) return []
+    found = mergeSuggestions([first, ...rest], text, limit)
+  }
+  if (found.length > 0) {
+    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string)
+    cache.set(cacheKey, found)
+  }
+  return found
 }

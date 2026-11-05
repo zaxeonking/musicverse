@@ -161,9 +161,9 @@ ini lewat `LibraryProvider` (di dalam `PlaylistProvider` dan `AudioPlayerProvide
 
 - **Kompatibel dengan struktur track.** `SavedPlaylist` = `PlaylistDetail` + `savedAt`, dan lagunya `PlaylistTrack`
   apa adanya (`id, title, artists, album, duration, cover, url`), jadi bisa langsung jadi playlist aktif atau masuk queue.
-- **Simpan otomatis.** Playlist yang berhasil dimuat dari API (termasuk Muat ulang) disimpan/diperbarui. Playlist yang hanya
-  dipulihkan dari penyimpanan (`fromCache`) tidak disimpan ulang, jadi playlist yang sudah dihapus tidak muncul lagi setelah
-  halaman dibuka ulang. Playlist aktif yang belum ada di Koleksi menampilkan tombol **Simpan ke Koleksi**.
+- **Tidak lagi disimpan otomatis (0.4.16).** Playlist Spotify yang dibuka hanya tampil di Beranda. Agar masuk tab Playlist, tekan
+  **Tambah ke playlist** di Beranda (membuat playlist buatanmu dengan lagunya; dikenali lewat `sourceId`, jadi menekan lagi hanya
+  menambah lagu yang baru). Entri Koleksi lama tetap tampil dan bisa dihapus. Mau yang otomatis? Nyalakan di Pengaturan > Playlist.
 - **Buka.** `restorePlaylist` (di `PlaylistContext`) menampilkan salinan tersimpan tanpa memanggil API, lalu pindah ke Beranda.
   Salinan itu bisa lebih lama dari playlist di Spotify (header menyebutnya; tombol **Muat ulang** memperbarui). Membuka playlist
   yang sudah aktif tidak mengubah apa pun. Membuka atau memuat playlist lain tidak menghentikan lagu yang sedang diputar; audio baru berganti hanya saat pengguna memilih lagu.
@@ -404,6 +404,11 @@ Berkas hanya disimpan jika SEMUA lolos (kalau tidak, sumber lain dicoba; jika se
 - Menambah lagu: tahan lama baris lagu mana pun (Beranda, Cari, riwayat, halaman playlist) atau tombol **Simpan** di pemutar penuh.
   Lagu yang sama (ID Spotify/URL) tidak ditambahkan dua kali ke satu playlist.
 - Halaman `/my/:id`: Putar semua, ganti nama, naik/turun urutan, hapus lagu, hapus playlist (dengan konfirmasi).
+- **Salin / pindah antar playlist (0.4.16).** Tahan lama sebuah lagu di halaman playlist: *Salin ke playlist lain*, *Pindahkan ke
+  playlist lain* (dihapus dari asal), atau *Pindahkan semua lagu*. Tahan lama kartu playlist di tab Playlist: *Salin semua lagu* atau
+  *Pindahkan semua lagu*. Tujuan bisa playlist baru. Satu perubahan atomik (`transferTracks`): lagu duplikat di tujuan tidak
+  ditambah dua kali, lagu yang tak muat (tujuan penuh, 1000 lagu) tetap di asal. Pindah meminta konfirmasi (bisa dimatikan di
+  Pengaturan > Playlist).
 - Tersimpan di `localStorage` kunci `musicverse:my-playlists:v1` (`utils/myPlaylistStorage.ts`), terpisah dari Koleksi dan
   **tidak** kena batas 30 playlist Koleksi. Batas: 100 playlist, 1000 lagu per playlist, nama 60 karakter. Hanya metadata lagu
   yang disimpan (tanpa URL audio). Kuota penuh / penyimpanan terblokir: perubahan ditolak dengan pesan, tidak pura-pura berhasil.

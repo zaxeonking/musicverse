@@ -27,7 +27,7 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
   const { track } = entry
   const { openTrackMenu } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
-  const longPress = useLongPress(() => openTrackMenu(track))
+  const longPress = useLongPress(() => openTrackMenu(track, { place: 'history' }))
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const time = formatRelativeTime(entry.playedAt)
   const highlighted = activity !== 'none'
