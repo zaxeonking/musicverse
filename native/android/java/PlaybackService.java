@@ -523,6 +523,20 @@ public class PlaybackService extends Service {
    * diambil ulang dan lagu dimuat ulang dari posisi terakhir. Sebelumnya macet seperti ini bisa berputar selamanya.
    */
   private void handleStall(int stage) {
+    // Macet di UJUNG lagu (stream lebih pendek dari durasi yang dilaporkan): anggap selesai. Membuka ulang di sini memutar
+    // lagu yang sama dari awal lagi dan lagi.
+    ExoPlayer ep = player;
+    if (ep != null) {
+      long dur = ep.getDuration();
+      if (dur != C.TIME_UNSET && dur > 0 && ep.getCurrentPosition() >= dur - 4_000L) {
+        bufferingSince = 0;
+        stallStage = 0;
+        if (!jsAlive() && chainAdvance(false)) return;
+        if (nativeInCharge()) markNativePlaying(false);
+        emitEngine("ended", 0, null);
+        return;
+      }
+    }
     if (stage == 1) {
       reopenActive();
     } else if (stage == 2) {

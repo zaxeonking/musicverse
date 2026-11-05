@@ -309,6 +309,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const crossfadeRetryAtRef = useRef(0)
   /** Berapa kali lagu aktif dimuat ulang otomatis karena jaringan putus/lambat; direset saat pemutaran jalan atau lagu baru dipilih. */
   const streamRetryRef = useRef(0)
+  /** Total muat-ulang untuk lagu ini (tidak direset oleh event `playing`): memutus loop galat-di-ujung-lagu. */
+  const trackRetryTotalRef = useRef(0)
   /** User-Agent klien YouTube yang menghasilkan stream lagu aktif; dipakai untuk berganti klien bila stream terus putus. */
   const activeUaRef = useRef<string | undefined>(undefined)
   /** True selama lagu menunggu internet kembali (jaringan putus di tengah lagu); mencegah penantian ganda. */
@@ -369,6 +371,21 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       // Jaringan putus / audio tak kunjung mulai: muat ulang lagu yang sama dari posisi terakhir beberapa kali
       // sebelum menyerah dengan pesan sinyal jelek.
       const current = stateRef.current
+      // Galat jaringan di UJUNG lagu (stream lebih pendek dari durasi / koneksi ditutup saat habis) = lagu sudah selesai.
+      // Memuat ulang di sini membuat lagu yang sama diputar lagi dari awal terus-menerus.
+      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null) {
+        const { currentTime, duration } = timeRef.current
+        if (duration > 0 && currentTime >= duration - 5) {
+          console.warn(`[MusicVerse] Galat ${code} di ujung lagu (${currentTime.toFixed(1)}/${duration.toFixed(1)}): dianggap selesai, lanjut.`)
+          const following = getNextIndex(current.queue, current.currentIndex, current.shuffleOrder)
+          if (following !== null) playAtRef.current(following)
+          else {
+            audioEngine.stop()
+            setStatus('ended')
+          }
+          return
+        }
+      }
       // Internet benar-benar hilang: jangan habiskan 3 percobaan muat-ulang dalam hitungan detik lalu menampilkan error.
       // Lagu tetap "buffering", lalu dilanjutkan dari posisi terakhir begitu internet kembali (maks. OFFLINE_WAIT_MAX_MS).
       if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && isDeviceOffline()) {
@@ -397,10 +414,11 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         })
         return
       }
-      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX) {
+      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX && trackRetryTotalRef.current < STREAM_RETRY_MAX * 2) {
         // Muat-ulang sudah dijadwalkan: error susulan dari elemen yang sama tidak boleh menghabiskan percobaan.
         if (retryTimerRef.current !== null) return
         streamRetryRef.current += 1
+        trackRetryTotalRef.current += 1
         console.warn(`[MusicVerse] Audio putus (${code}), memuat ulang (${streamRetryRef.current}/${STREAM_RETRY_MAX}).`)
         const retryIndex = current.currentIndex
         // Muat ulang HARUS mengambil link baru: hasil resolve disimpan di cache sampai ±30 menit, jadi tanpa ini percobaan
@@ -672,7 +690,10 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const track = queue[index]
       if (!track) return
       restoredRef.current = false
-      if (!options.isRetry) streamRetryRef.current = 0
+      if (!options.isRetry) {
+        streamRetryRef.current = 0
+        trackRetryTotalRef.current = 0
+      }
       if (retryTimerRef.current !== null) {
         clearTimeout(retryTimerRef.current)
         retryTimerRef.current = null
