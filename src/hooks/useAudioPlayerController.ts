@@ -20,6 +20,7 @@ import { prefetchLyrics } from './useLyrics'
 import { warmResolve } from '../plugins/registry'
 import { isLikelyClip } from '../utils/clipDetect'
 import { getNetworkTier, PRELOAD_LEAD_BY_TIER_S, startNetworkMonitor } from '../utils/networkQuality'
+import { plog } from '../utils/playbackLog'
 import { readJson, writeJson } from '../utils/safeStorage'
 import {
   createShuffleOrder,
@@ -39,6 +40,7 @@ import {
   resolveQueueForPlayAll,
   resolveQueueForTrack,
 } from '../utils/playerQueue'
+import { judgeNativeAdvance, type AdvanceStreak } from '../utils/nativeAdvance'
 import { removeDownload, trackKey } from '../native/offline'
 
 /** Batas menunggu event `playing` pertama setelah URL audio didapat. */
@@ -79,6 +81,11 @@ interface Preload {
   retryAt: number
 }
 
+/** Berapa lagu di depan yang URL-nya di-resolve lebih awal dan diserahkan ke native (pindah lagu tanpa JS saat WebView beku). */
+const NATIVE_UPCOMING_DEPTH = 5
+/** URL hasil resolve yang lebih tua dari ini tidak diserahkan lagi ke native (link YouTube kedaluwarsa setelah beberapa jam). */
+const UPCOMING_MAX_AGE_MS = 90 * 60_000
+
 /** Preload gagal dicoba lagi terus sampai berhasil (selama lagu masih berjalan), jeda naik bertahap sampai batas ini. */
 const PRELOAD_RETRY_DELAY_MS = 2_500
 const PRELOAD_RETRY_MAX_DELAY_MS = 6_000
@@ -89,8 +96,6 @@ const RESOLVE_RETRY_MAX_DELAY_MS = 8_000
 const RESOLVE_RETRY_MAX = 6
 /** Audio putus di tengah jalan (error jaringan) / tidak mulai: dimuat ulang dari posisi terakhir sekian kali sebelum menyerah. */
 const STREAM_RETRY_MAX = 3
-/** Galat/macet sedekat ini dari akhir lagu dianggap lagu selesai (lanjut ke berikutnya), bukan stream putus. */
-const NEAR_END_SECONDS = 12
 /** Jeda sebelum muat-ulang karena error jaringan (dikali nomor percobaan), supaya tidak jadi retry beruntun. */
 const STREAM_RETRY_DELAY_MS = 1_500
 /** `waiting` yang lebih singkat dari ini tidak ditampilkan sebagai "buffering" (hindari tombol kedip-kedip). */
@@ -206,6 +211,13 @@ function loadPrefs(): PlayerPrefs {
 const POSITION_SAVE_INTERVAL_MS = 5_000
 /** Posisi tersimpan yang terlalu dekat dengan akhir lagu diabaikan: lagu mulai dari awal. */
 const RESUME_END_MARGIN_S = 3
+/**
+ * Pemuatan ulang otomatis (jaringan putus) yang posisi terakhirnya sudah sedekat ini dari ujung lagu dianggap lagu SELESAI:
+ * lanjut ke lagu berikutnya. Memuat ulang di sana membuat lagu yang sama mulai lagi dari awal.
+ */
+const RETRY_END_MARGIN_S = 12
+/** Dua event `ended` untuk lagu yang sama dalam selang ini dianggap satu (pindah lagu dua kali = melompati lagu). */
+const ENDED_DEDUP_MS = 2_500
 
 /** "3:45" / "1:02:10" -> detik; null jika formatnya tidak dikenali. */
 export function parseDurationText(text: string): number | null {
@@ -305,18 +317,29 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const crossfadeRetryAtRef = useRef(0)
   /** Berapa kali lagu aktif dimuat ulang otomatis karena jaringan putus/lambat; direset saat pemutaran jalan atau lagu baru dipilih. */
   const streamRetryRef = useRef(0)
-  /** Menyalurkan event ke handler terbaru (dipakai handler untuk mengirim ulang galat di ujung lagu sebagai `ended`). */
-  const engineEventRef = useRef<(event: AudioEngineEvent) => void>(() => {})
+  /** Total muat-ulang untuk lagu ini (tidak direset oleh event `playing`): memutus loop galat-di-ujung-lagu. */
+  const trackRetryTotalRef = useRef(0)
   /** User-Agent klien YouTube yang menghasilkan stream lagu aktif; dipakai untuk berganti klien bila stream terus putus. */
   const activeUaRef = useRef<string | undefined>(undefined)
   /** True selama lagu menunggu internet kembali (jaringan putus di tengah lagu); mencegah penantian ganda. */
   const offlineWaitRef = useRef(false)
   const startPlaybackRef = useRef<(queue: readonly PlaylistTrack[], index: number, options?: StartOptions) => void>(() => {})
   const lastPositionSaveRef = useRef(0)
+  /** Lagu yang baru saja dilaporkan selesai (untuk membuang event `ended` ganda). */
+  const lastEndedRef = useRef<{ id: string; at: number } | null>(null)
   // Diisi setelah `persistPosition` didefinisikan; dipanggil dari handler event audio.
   const persistPositionRef = useRef<(force: boolean, position?: number) => void>(() => {})
   const requestIdRef = useRef(0)
   const preloadRef = useRef<Preload | null>(null)
+  /** Hasil resolve lagu-lagu di depan (kunci: id lagu), dipakai ulang agar tidak di-resolve berulang. */
+  const upcomingCacheRef = useRef(new Map<string, { info: PlaybackInfo; at: number }>())
+  /** Lagu yang sedang diserahkan ke native (kunci: indeks antrean): untuk menyamakan state saat native pindah sendiri. */
+  const upcomingByIndexRef = useRef(new Map<number, { trackId: string; info: PlaybackInfo }>())
+  const upcomingSentRef = useRef('')
+  /** Beruntun berapa kali native mengirim `advanced` dengan indeks yang sama (deteksi loop rantai native). */
+  const advanceStreakRef = useRef<AdvanceStreak | null>(null)
+  /** True setelah loop rantai terdeteksi: rantai native dimatikan selama sesi ini, JS yang memindah lagu (seperti 0.4.17). */
+  const nativeChainOffRef = useRef(false)
   // True dari saat crossfade diputuskan sampai engine selesai berpindah; mencegah pemicu ganda.
   const crossfadingRef = useRef(false)
   const controllerRef = useRef<AbortController | null>(null)
@@ -353,11 +376,27 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const fail = useCallback(
     (code: PlayerErrorCode, message?: string) => {
       clearStartTimer()
+      plog(`fail ${code} pos=${timeRef.current.currentTime.toFixed(1)} dur=${timeRef.current.duration?.toFixed(1) ?? '?'}`)
       // Event `error` dan penolakan play() bisa datang berurutan; ambil yang pertama.
       if (stateRef.current.status === 'error') return
       // Jaringan putus / audio tak kunjung mulai: muat ulang lagu yang sama dari posisi terakhir beberapa kali
       // sebelum menyerah dengan pesan sinyal jelek.
       const current = stateRef.current
+      // Galat jaringan di UJUNG lagu (stream lebih pendek dari durasi / koneksi ditutup saat habis) = lagu sudah selesai.
+      // Memuat ulang di sini membuat lagu yang sama diputar lagi dari awal terus-menerus.
+      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null) {
+        const { currentTime, duration } = timeRef.current
+        if (duration !== null && duration > 0 && currentTime >= duration - RETRY_END_MARGIN_S) {
+          console.warn(`[MusicVerse] Galat ${code} di ujung lagu (${currentTime.toFixed(1)}/${duration.toFixed(1)}): dianggap selesai, lanjut.`)
+          const following = getNextIndex(current.queue, current.currentIndex, current.shuffleOrder)
+          if (following !== null) playAtRef.current(following)
+          else {
+            audioEngine.stop()
+            setStatus('ended')
+          }
+          return
+        }
+      }
       // Internet benar-benar hilang: jangan habiskan 3 percobaan muat-ulang dalam hitungan detik lalu menampilkan error.
       // Lagu tetap "buffering", lalu dilanjutkan dari posisi terakhir begitu internet kembali (maks. OFFLINE_WAIT_MAX_MS).
       if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && isDeviceOffline()) {
@@ -386,10 +425,11 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         })
         return
       }
-      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX) {
+      if ((code === 'network' || code === 'timeout') && current.currentIndex !== null && streamRetryRef.current < STREAM_RETRY_MAX && trackRetryTotalRef.current < STREAM_RETRY_MAX * 2) {
         // Muat-ulang sudah dijadwalkan: error susulan dari elemen yang sama tidak boleh menghabiskan percobaan.
         if (retryTimerRef.current !== null) return
         streamRetryRef.current += 1
+        trackRetryTotalRef.current += 1
         console.warn(`[MusicVerse] Audio putus (${code}), memuat ulang (${streamRetryRef.current}/${STREAM_RETRY_MAX}).`)
         const retryIndex = current.currentIndex
         // Muat ulang HARUS mengambil link baru: hasil resolve disimpan di cache sampai ±30 menit, jadi tanpa ini percobaan
@@ -511,7 +551,54 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           )
           break
         case 'advanced': {
+          if (event.advancedIndex !== undefined) {
+            // Native pindah sendiri memakai daftar `setUpcoming` (JS beku di latar belakang): samakan state dengan lagu itu.
+            const index = event.advancedIndex
+            plog(`advanced (rantai native) -> #${index} dari #${stateRef.current.currentIndex}`)
+            const { queue: currentQueue, currentIndex: activeIndex, shuffleOrder: activeOrder } = stateRef.current
+            const track = currentQueue[index]
+            const handed = upcomingByIndexRef.current.get(index)
+            const { verdict, streak } = judgeNativeAdvance({
+              index,
+              currentIndex: activeIndex,
+              mappable: !!track && !!handed && handed.trackId === track.id,
+              streak: advanceStreakRef.current,
+            })
+            advanceStreakRef.current = streak
+            if (verdict === 'loop') {
+              // Native memutar ulang lagu yang SAMA lewat rantai (indeks sama datang lagi): matikan rantai dan lanjut lewat JS,
+              // seperti alur `ended` biasa. Tanpa ini JS mengabaikan event dan lagu berulang tanpa henti walau mode ulang mati.
+              console.warn(`[MusicVerse] Rantai native mengulang lagu #${index} terus-menerus; rantai dimatikan, JS melanjutkan.`)
+              nativeChainOffRef.current = true
+              upcomingByIndexRef.current.clear()
+              upcomingSentRef.current = ''
+              audioEngine.setUpcoming(index, [])
+              clearStartTimer()
+              const following = getNextIndex(currentQueue, index, activeOrder)
+              if (following !== null) playAtRef.current(following)
+              else if (canRestartQueue(currentQueue.length)) restartQueueRef.current()
+              else {
+                audioEngine.stop()
+                setStatus('ended')
+              }
+              break
+            }
+            if (verdict !== 'accept' || !track || !handed) break
+            console.info(`[MusicVerse] rantai native pindah ke lagu #${index} (dari #${activeIndex})`)
+            preloadRef.current?.controller.abort()
+            preloadRef.current = null
+            crossfadingRef.current = false
+            crossfadeGaveUpRef.current = null
+            crossfadeRetryAtRef.current = 0
+            replayedRef.current = false
+            setRepeatingOnce(false)
+            clearStartTimer()
+            requestIdRef.current++
+            commit({ status: 'playing', currentTrack: track, currentIndex: index, playbackInfo: handed.info, error: null })
+            break
+          }
           // Native sudah pindah sendiri ke lagu cadangan (lagu aktif selesai saat JS tertahan): samakan state seperti crossfade.
+          plog('advanced (lagu cadangan)')
           const entry = preloadRef.current
           const nextTrack = entry ? stateRef.current.queue[entry.index] : undefined
           if (!entry || entry.status !== 'ready' || !entry.info || !nextTrack) break
@@ -527,6 +614,17 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           break
         }
         case 'ended': {
+          // Event `ended` ganda untuk lagu yang sama (mis. macet di ujung lagu + ExoPlayer selesai): hanya yang pertama
+          // memindah lagu, kalau tidak lagu berikutnya ikut terlewati / dimuat dua kali.
+          const endedId = stateRef.current.currentTrack?.id
+          if (endedId !== undefined) {
+            const last = lastEndedRef.current
+            if (last !== null && last.id === endedId && Date.now() - last.at < ENDED_DEDUP_MS) {
+              plog(`ended diabaikan (ganda) #${stateRef.current.currentIndex}`)
+              break
+            }
+            lastEndedRef.current = { id: endedId, at: Date.now() }
+          }
           clearStartTimer()
           // Lagu selesai: sesi berikutnya mulai dari awal lagu ini (bukan dari detik terakhir).
           if (stateRef.current.currentTrack) {
@@ -547,6 +645,15 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           }
           const { queue, currentIndex, shuffleOrder } = stateRef.current
           const { repeat } = prefsRef.current
+          plog(
+            `ended #${currentIndex}/${queue.length} pos=${event.currentTime.toFixed(1)} dur=${event.duration?.toFixed(1) ?? '?'} ` +
+              `ulang=${repeat} berikutnya=${getNextIndex(queue, currentIndex, shuffleOrder)}`,
+          )
+          // Jejak keputusan (ringan, sekali per lagu selesai): membantu melacak bila lagu tidak lanjut / berulang.
+          console.info(
+            `[MusicVerse] lagu selesai #${currentIndex} dari ${queue.length}: ulang=${repeat}${repeat === 'once' ? `(sudah=${replayedRef.current})` : ''}, ` +
+              `berikutnya=${getNextIndex(queue, currentIndex, shuffleOrder)}, rantaiNative=${nativeChainOffRef.current ? 'mati' : 'aktif'}`,
+          )
           // Ulang lagu yang sama: terus-menerus (`one`) atau tepat 1x (`once`), lalu lanjut.
           if (currentIndex !== null && (repeat === 'one' || (repeat === 'once' && !replayedRef.current))) {
             if (repeat === 'once') {
@@ -577,16 +684,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           break
         }
         case 'error': {
-          // Galat di UJUNG lagu (stream terpotong di akhir, atau macet setelah digeser ke akhir): itu lagu selesai, bukan
-          // stream putus. Tanpa ini jalur muat-ulang di `fail` memutar LAGU YANG SAMA lagi dari awal.
-          const duration = event.duration ?? timeRef.current.duration
-          const at = Math.max(event.currentTime, timeRef.current.currentTime)
-          if (stateRef.current.currentTrack && duration > 0 && Number.isFinite(duration) && at >= duration - NEAR_END_SECONDS) {
-            console.warn(`[MusicVerse] Galat ${event.mediaErrorCode ?? ''} di ujung lagu (${at.toFixed(1)}/${duration.toFixed(1)} dtk); dianggap selesai.`)
-            engineEventRef.current({ ...event, type: 'ended', ended: true })
-            break
-          }
           const code = mediaErrorToCode(event.mediaErrorCode)
+          plog(`error mesin kode=${event.mediaErrorCode ?? '?'} -> ${code ?? 'abaikan'} pos=${event.currentTime.toFixed(1)}`)
           if (code) fail(code)
           break
         }
@@ -594,10 +693,6 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
     },
     [clearBufferingTimer, clearStartTimer, commit, fail, setStatus, updateTime],
   )
-
-  useEffect(() => {
-    engineEventRef.current = handleEngineEvent
-  }, [handleEngineEvent])
 
   useEffect(() => {
     const unsubscribe = audioEngine.subscribe(handleEngineEvent)
@@ -623,8 +718,28 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
     (queue: readonly PlaylistTrack[], index: number, options: StartOptions = {}) => {
       const track = queue[index]
       if (!track) return
+      plog(`mulai #${index} "${track.title}" retry=${options.isRetry === true} resumeAt=${options.resumeAt?.toFixed(1) ?? '-'}`)
+      // Muat ulang otomatis dari posisi yang sudah di ujung lagu = lagu ini SELESAI. Tanpa ini posisi dibuang (terlalu dekat
+      // ujung) dan lagu mulai lagi dari awal: "lagu yang sama diputar ulang" setelah menggeser ke dekat akhir lagu.
+      if (options.isRetry === true && options.resumeAt !== undefined) {
+        const knownDuration = timeRef.current.duration
+        if (knownDuration !== null && knownDuration > 0 && options.resumeAt >= knownDuration - RETRY_END_MARGIN_S) {
+          const following = getNextIndex(queue, index, stateRef.current.shuffleOrder)
+          plog(`muat ulang di ujung lagu (${options.resumeAt.toFixed(1)}/${knownDuration.toFixed(1)}): dianggap selesai -> ${following ?? 'berhenti'}`)
+          if (following !== null) {
+            startPlaybackRef.current(queue, following, { keepOrder: true })
+          } else {
+            audioEngine.stop()
+            setStatus('ended')
+          }
+          return
+        }
+      }
       restoredRef.current = false
-      if (!options.isRetry) streamRetryRef.current = 0
+      if (!options.isRetry) {
+        streamRetryRef.current = 0
+        trackRetryTotalRef.current = 0
+      }
       if (retryTimerRef.current !== null) {
         clearTimeout(retryTimerRef.current)
         retryTimerRef.current = null
@@ -917,6 +1032,18 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const seekTo = useCallback(
     (seconds: number) => {
       if (!SEEKABLE_STATUSES.includes(stateRef.current.status)) return
+      const knownDuration = timeRef.current.duration
+      plog(`seek ${seconds.toFixed(1)} / ${knownDuration?.toFixed(1) ?? '?'}`)
+      // Menggeser sampai ujung lagu = ingin ganti lagu: langsung ke lagu berikutnya (tanpa menunggu ExoPlayer "selesai").
+      if (knownDuration !== null && knownDuration > 0 && seconds >= knownDuration - 0.75 && prefsRef.current.repeat === 'off') {
+        const { queue, currentIndex, shuffleOrder } = stateRef.current
+        const following = currentIndex === null ? null : getNextIndex(queue, currentIndex, shuffleOrder)
+        if (following !== null) {
+          lastEndedRef.current = { id: stateRef.current.currentTrack?.id ?? '', at: Date.now() }
+          playAtRef.current(following)
+          return
+        }
+      }
       const applied = audioEngine.seek(seconds)
       if (applied !== null) updateTime((prev) => ({ ...prev, currentTime: applied }))
     },
@@ -1337,6 +1464,84 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
   const { queue, currentIndex, shuffleOrder } = state
   const { shuffle, repeat, crossfadeSeconds } = prefs
+
+  /**
+   * Pindah lagu tanpa JS (APK): WebView yang dibekukan di latar belakang (layar mati) tidak bisa me-resolve link lagu
+   * berikutnya, sehingga pemutaran dulu putus setelah 2-3 lagu. Selama JS masih jalan, beberapa lagu di depan di-resolve lebih
+   * awal dan diserahkan ke native, yang lalu memutarnya sendiri. Ulang lagu / sleep timer "akhir lagu" mengosongkan daftar
+   * supaya native tidak melewati aturan itu.
+   */
+  const upcomingActive = state.status === 'playing'
+  const upcomingTrackId = state.currentTrack?.id ?? null
+  useEffect(() => {
+    if (!audioEngine.supportsNativeChain()) return
+    const publish = (items: Parameters<typeof audioEngine.setUpcoming>[1], current: number) => {
+      const signature = `${current}|${items.map((item) => `${item.index}:${item.url}`).join(',')}`
+      if (signature === upcomingSentRef.current) return
+      upcomingSentRef.current = signature
+      audioEngine.setUpcoming(current, items)
+    }
+    if (nativeChainOffRef.current) {
+      publish([], currentIndex ?? -1)
+      return
+    }
+    if (currentIndex === null) {
+      publish([], -1)
+      return
+    }
+    if (!upcomingActive) return
+    if (repeat === 'one' || repeat === 'once' || stopAfterTrack) {
+      upcomingByIndexRef.current.clear()
+      publish([], currentIndex)
+      return
+    }
+    const controller = new AbortController()
+    void (async () => {
+      const wanted: Array<{ index: number; track: PlaylistTrack }> = []
+      let from: number | null = currentIndex
+      for (let i = 0; i < NATIVE_UPCOMING_DEPTH; i += 1) {
+        const next: number | null = getNextIndex(queue, from, shuffleOrder)
+        if (next === null || next === currentIndex || wanted.some((item) => item.index === next) || !queue[next]) break
+        wanted.push({ index: next, track: queue[next] })
+        from = next
+      }
+      const items: Array<Parameters<typeof audioEngine.setUpcoming>[1][number]> = []
+      const byIndex = new Map<number, { trackId: string; info: PlaybackInfo }>()
+      for (const { index, track } of wanted) {
+        let cached = upcomingCacheRef.current.get(track.id)
+        if (!cached || Date.now() - cached.at > UPCOMING_MAX_AGE_MS) {
+          try {
+            const info = await fetchPlaybackInfo(track, { signal: controller.signal })
+            cached = { info, at: Date.now() }
+            upcomingCacheRef.current.set(track.id, cached)
+          } catch {
+            break // yang gagal di-resolve menghentikan daftar di situ; sisanya dicoba lagi pada pemicu berikutnya
+          }
+        }
+        if (controller.signal.aborted) return
+        const info = cached.info
+        byIndex.set(index, { trackId: track.id, info })
+        items.push({
+          index,
+          url: info.audioUrl,
+          cacheKey: diskCacheKey(track, info),
+          title: track.title,
+          artist: track.artists ?? '',
+          album: track.album ?? '',
+          cover: track.cover ?? '',
+          durationMs: Math.round((info.probedDuration ?? parseDurationText(track.duration ?? '') ?? 0) * 1000),
+        })
+        // Diserahkan bertahap: lagu pertama langsung berguna walau resolve yang lain belum selesai.
+        upcomingByIndexRef.current = new Map(byIndex)
+        publish([...items], currentIndex)
+      }
+      if (items.length === 0 && !controller.signal.aborted) {
+        upcomingByIndexRef.current.clear()
+        publish([], currentIndex)
+      }
+    })()
+    return () => controller.abort()
+  }, [currentIndex, queue, shuffleOrder, repeat, stopAfterTrack, upcomingActive, upcomingTrackId])
   const crossfadeSupported = audioEngine.supportsCrossfade()
   const queueState = useMemo<PlayerQueueState>(
     () => ({

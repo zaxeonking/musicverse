@@ -210,10 +210,9 @@ membuka menu opsi: **Putar sekarang**, **Putar berikutnya**, **Tambah ke antrean
   playlist atau riwayat, opsi antrean untuk lagu asing disembunyikan (aksi `addToQueue` /
   `playNextInQueue` juga menolak dengan hasil `blocked`). Lagu yang sudah ada di antrean tetap bisa
   diatur (dipindah ke depan / dihapus).
-- Antrean habis: jika berisi lebih dari satu lagu, antrean yang sama diputar ulang secara acak (mode acak
-  ikut menyala), dimulai dari lagu yang bukan lagu terakhir tadi. Tidak ada lagu dari playlist lain yang
-  masuk. Antrean satu lagu berhenti seperti biasa. Kode: `restartQueue` di `hooks/useAudioPlayerController.ts`,
-  `pickRestartIndex` di `utils/playerQueue.ts`.
+- Antrean habis: **berhenti** (sejak 0.4.23). Dulu antrean > 1 lagu diputar ulang acak otomatis sehingga lagu terus berulang
+  walau mode ulang mati. Perilaku lama bisa dinyalakan lagi lewat `AUTO_RESTART_QUEUE` di `utils/playerQueue.ts`
+  (`restartQueue` di `hooks/useAudioPlayerController.ts`, `pickRestartIndex`).
 - Jika belum ada antrean, opsi antrean memutar lagu itu langsung dan antreannya dimulai dari situ
   (menu menampilkan catatan soal ini).
 - Lagu yang sama tidak digandakan di daftar "Berikutnya": "Putar berikutnya" memindahkannya ke depan.

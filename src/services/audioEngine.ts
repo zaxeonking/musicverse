@@ -40,6 +40,8 @@ export interface AudioEngineEvent {
   seekable: boolean
   /** Hanya untuk event `error`: audio.error.code (1–4). */
   mediaErrorCode?: number
+  /** Hanya `advanced` dari rantai native: indeks antrean lagu yang kini diputar (native pindah sendiri tanpa JS). */
+  advancedIndex?: number
 }
 
 export type AudioEngineListener = (event: AudioEngineEvent) => void
@@ -308,6 +310,30 @@ class AudioEngine {
       } else {
         this.nativeStandby.error = true
       }
+      return
+    }
+    if (event.type === 'advanced' && typeof event.reason === 'string' && event.reason.startsWith('idx:')) {
+      // Native pindah sendiri memakai daftar `setUpcoming` (JS beku di latar belakang): samakan sumber aktif.
+      const index = Number(event.reason.slice(4))
+      const entry = this.upcomingMap.get(index)
+      if (!Number.isInteger(index) || !entry || this.activeSource === null) return
+      this.activeSource = entry.url
+      this.standbySource = null
+      this.standbyCacheKey = null
+      this.nativeAutoAdvance = false
+      Object.assign(this.mirror, {
+        pos: 0,
+        at: this.nativeNow(),
+        playing: true,
+        duration: typeof event.duration === 'number' && event.duration > 0 ? event.duration : null,
+        seekable: true,
+        ahead: 0,
+        url: toNativeUrl(entry.url),
+        cacheKey: entry.cacheKey,
+      })
+      this.userPaused = false
+      this.interrupted = false
+      this.emit({ type: 'advanced', currentTime: 0, duration: this.mirror.duration, ended: false, seekable: true, advancedIndex: index })
       return
     }
     if (event.type === 'advanced') {
@@ -771,6 +797,33 @@ class AudioEngine {
   /** Mesin native sedang berjalan dan melaporkan suara keluar (bukan buffering). Dipakai controller untuk memulihkan status. */
   isNativePlaying(): boolean {
     return this.isNative() && this.activeSource !== null && this.mirror.playing
+  }
+
+  /** True di APK (mesin native): daftar lagu berikutnya bisa diserahkan ke native lewat `setUpcoming`. */
+  supportsNativeChain(): boolean {
+    return this.isNative()
+  }
+
+  /** Indeks antrean -> sumber yang sudah diserahkan ke native lewat `setUpcoming` (untuk menyamakan saat native pindah sendiri). */
+  private upcomingMap = new Map<number, { url: string; cacheKey: string | null }>()
+
+  /**
+   * Mesin native: serahkan lagu-lagu berikutnya yang URL-nya sudah di-resolve supaya native bisa pindah sendiri tanpa JS
+   * (WebView dibekukan di latar belakang). Daftar kosong menonaktifkan pindah sendiri. Diabaikan di web / APK lama.
+   */
+  setUpcoming(
+    currentIndex: number,
+    items: ReadonlyArray<{ index: number; url: string; cacheKey?: string; title: string; artist: string; album: string; cover: string; durationMs: number }>,
+  ): void {
+    if (!this.isNative()) return
+    this.upcomingMap.clear()
+    for (const item of items) this.upcomingMap.set(item.index, { url: item.url, cacheKey: item.cacheKey ?? null })
+    void MusicVerseNative.engineSetUpcoming({
+      currentIndex,
+      items: items.map((item) => ({ ...item, url: toNativeUrl(item.url) })),
+    }).catch(() => {
+      // APK lama tanpa fitur ini: pemutaran berjalan seperti biasa.
+    })
   }
 
   /** Mesin native: izinkan/larang native pindah sendiri ke lagu cadangan saat lagu aktif selesai. */

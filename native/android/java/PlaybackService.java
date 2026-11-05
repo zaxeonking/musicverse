@@ -21,7 +21,13 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.media.audiofx.Equalizer;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -197,6 +203,10 @@ public class PlaybackService extends Service {
     if (running != null) running.handler.post(() -> {
       ExoPlayer p = running.player;
       if (p == null || !running.hasMedia) return;
+      // Lagu sudah SELESAI: seekTo() pada pemutar berstatus ENDED menghidupkannya lagi dan memutar lagu yang sama dari posisi itu.
+      // Seek yang datang terlambat (setelah event `ended`, sambil JS memuat lagu berikutnya) tidak boleh melakukan itu.
+      if (p.getPlaybackState() == Player.STATE_ENDED) return;
+      running.lastPosMs = Math.max(0, positionMs);
       running.bufferingSince = 0; // seek memulai hitungan macet dari awal
       running.stallStage = 0;
       if (p.getPlaybackState() == Player.STATE_IDLE) p.prepare(); // pemutar berhenti karena galat: bangunkan lagi
@@ -248,6 +258,41 @@ public class PlaybackService extends Service {
     }
   }
 
+  /**
+   * Satu lagu berikutnya yang URL-nya SUDAH di-resolve JS. Dengan daftar ini native pindah lagu sendiri tanpa JS: WebView
+   * yang dibekukan di latar belakang (layar mati) tidak lagi memutus pemutaran setelah 2-3 lagu.
+   */
+  public static final class UpcomingItem {
+    final int index;
+    final String url;
+    final String cacheKey;
+    final String title;
+    final String artist;
+    final String album;
+    final String coverUrl;
+    final long durationMs;
+
+    public UpcomingItem(int index, String url, String cacheKey, String title, String artist, String album, String coverUrl, long durationMs) {
+      this.index = index;
+      this.url = url;
+      this.cacheKey = cacheKey;
+      this.title = title == null ? "" : title;
+      this.artist = artist == null ? "" : artist;
+      this.album = album == null ? "" : album;
+      this.coverUrl = coverUrl == null ? "" : coverUrl;
+      this.durationMs = durationMs;
+    }
+  }
+
+  /**
+   * Daftar lagu berikutnya menurut JS. `currentIndex` = indeks antrean lagu yang sedang diputar menurut JS: bila native sudah
+   * pindah sendiri (JS belum tahu), daftar usang itu diabaikan supaya lagu yang sudah lewat tidak diputar lagi.
+   */
+  public static void engineSetUpcoming(int currentIndex, List<UpcomingItem> items) {
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(() -> running.setUpcoming(currentIndex, items));
+  }
+
   public static void engineClearStandby() {
     PlaybackService running = instance;
     if (running != null) running.handler.post(running::releaseStandby);
@@ -285,6 +330,19 @@ public class PlaybackService extends Service {
 
   private ExoPlayer player;
   private volatile boolean hasMedia = false;
+  /** Posisi terakhir yang diketahui valid (detak pemutar / seek). Dasar buka-ulang bila pemutar melapor posisi 0 setelah galat. */
+  private volatile long lastPosMs = 0;
+  /** Lagu berikutnya yang siap diputar native sendiri (hanya diubah di thread utama). */
+  private final List<UpcomingItem> upcoming = new ArrayList<>();
+  /** Indeks antrean lagu yang diputar native hasil pindah sendiri; -1 = lagu dimuat JS (JS yang tahu posisinya). */
+  private int playingIndex = -1;
+  /** Indeks antrean lagu yang sedang diputar menurut pembaruan terakhir (JS atau rantai native); -1 = belum diketahui. */
+  private int knownIndex = -1;
+  /** Item yang sedang dimuat di pemutar cadangan oleh rantai native (bukan oleh JS). */
+  private UpcomingItem standbyItem = null;
+  private int coverToken = 0;
+  /** Tanpa pembaruan JS selama ini saat memutar = WebView dibekukan di latar belakang: native menangani sendiri. */
+  private static final long JS_STALE_MS = 6_000L;
   private boolean metaSent = false;
   private int tickCount = 0;
   private Equalizer equalizer;
@@ -317,12 +375,39 @@ public class PlaybackService extends Service {
           emitEngine("loadedmetadata", 0, null);
         }
       } else if (state == Player.STATE_ENDED) {
-        finishTrack();
+        // Lagu cadangan sudah siap dan JS mengizinkan: pindah sendiri tanpa menunggu WebView (bisa ditahan di latar belakang).
+        // Hanya saat JS beku (!jsAlive): bila JS hidup, JS yang memproses `ended` dan memindah lagu sendiri. Dua pengendali
+        // sekaligus membuat lagu berikutnya diputar dua kali (native pindah ke cadangan, lalu JS memuatnya lagi).
+        if (autoAdvance && !jsAlive() && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
+          autoAdvance = false;
+          // Daftar rantai dibuat untuk lagu yang BARU SAJA selesai: isinya (lagu cadangan ini) sudah diputar. Tanpa dibuang,
+          // saat lagu cadangan selesai rantai memutarnya LAGI (lagu berulang walau mode ulang mati).
+          upcoming.clear();
+          standbyItem = null;
+          knownIndex = -1;
+          emitEngine("advanced", 0, null);
+        } else if (!jsAlive() && chainAdvance(false)) {
+          // Pindah ke lagu berikutnya dari daftar native (JS tidak diperlukan).
+        } else {
+          if (nativeInCharge()) markNativePlaying(false); // rantai habis saat JS beku: tombol notifikasi harus jadi "putar"
+          emitEngine("ended", 0, null);
+        }
       }
     }
 
     @Override public void onIsPlayingChanged(boolean isPlaying) {
-      if (isPlaying) emitEngine("playing", 0, null);
+      if (isPlaying) {
+        emitEngine("playing", 0, null);
+        // Lagu hasil pindah native (JS beku): lepas indikator memuat dan isi durasi dari pemutar.
+        if (nativeInCharge() && current.loading && player != null) {
+          State s = snapshot();
+          s.loading = false;
+          s.playing = true;
+          long dur = player.getDuration();
+          if (dur != C.TIME_UNSET && dur > 0) s.durationMs = dur;
+          applyInternal(s, false);
+        }
+      }
     }
 
     @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
@@ -385,7 +470,10 @@ public class PlaybackService extends Service {
         stallStage = 0;
       }
       if (st == Player.STATE_READY || st == Player.STATE_BUFFERING) {
-        if (player.isPlaying()) emitEngine("timeupdate", 0, null);
+        if (player.isPlaying()) {
+          lastPosMs = Math.max(0, player.getCurrentPosition());
+          emitEngine("timeupdate", 0, null);
+        }
         else if (++tickCount % 4 == 0) emitEngine("progress", 0, null);
       }
       handler.postDelayed(this, 250);
@@ -446,12 +534,19 @@ public class PlaybackService extends Service {
    * diambil ulang dan lagu dimuat ulang dari posisi terakhir. Sebelumnya macet seperti ini bisa berputar selamanya.
    */
   private void handleStall(int stage) {
-    // Macet di ujung lagu (mis. durasi di wadah lebih panjang dari data yang ada, atau geser sampai ke akhir): lagu ini
-    // dianggap selesai dan lanjut ke berikutnya. Tanpa ini tangga pemulihan di bawah memuat ulang LAGU YANG SAMA dan
-    // lagu terdengar mengulang dari awal alih-alih pindah.
-    if (nearEnd()) {
-      finishTrack();
-      return;
+    // Macet di UJUNG lagu (stream lebih pendek dari durasi yang dilaporkan): anggap selesai. Membuka ulang di sini memutar
+    // lagu yang sama dari awal lagi dan lagi.
+    ExoPlayer ep = player;
+    if (ep != null) {
+      long dur = ep.getDuration();
+      if (dur != C.TIME_UNSET && dur > 0 && ep.getCurrentPosition() >= dur - 4_000L) {
+        bufferingSince = 0;
+        stallStage = 0;
+        if (!jsAlive() && chainAdvance(false)) return;
+        if (nativeInCharge()) markNativePlaying(false);
+        emitEngine("ended", 0, null);
+        return;
+      }
     }
     if (stage == 1) {
       reopenActive();
@@ -463,34 +558,20 @@ public class PlaybackService extends Service {
     }
   }
 
-  /** Dalam jarak ini dari akhir, macet/galat dianggap "lagu selesai", bukan stream putus. */
-  private static final long NEAR_END_MS = 12_000;
-
-  private boolean nearEnd() {
-    ExoPlayer p = player;
-    if (p == null || !hasMedia) return false;
-    long duration = p.getDuration();
-    return duration != C.TIME_UNSET && duration > 0 && p.getCurrentPosition() >= duration - NEAR_END_MS;
-  }
-
   /**
-   * Lagu selesai: pindah ke lagu cadangan yang sudah siap (bila JS mengizinkan) tanpa menunggu WebView (bisa ditahan di
-   * latar belakang), atau beri tahu JS lewat `ended` supaya ia yang memilih lagu berikutnya / ulang / berhenti.
+   * Posisi untuk membuka ulang sumber. Setelah galat saat seek / di ujung stream ExoPlayer bisa melapor 0; membuka ulang di 0
+   * memutar lagu yang sama dari awal. Pakai posisi terakhir yang valid bila yang dilaporkan jelas keliru.
    */
-  private void finishTrack() {
-    if (autoAdvance && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
-      autoAdvance = false;
-      emitEngine("advanced", 0, null);
-    } else {
-      emitEngine("ended", 0, null);
-    }
+  private long resumePos(ExoPlayer p) {
+    long cur = Math.max(0, p.getCurrentPosition());
+    return (cur <= 500 && lastPosMs > 5_000) ? lastPosMs : cur;
   }
 
   private void reopenActive() {
     Src src = activeSrc;
     ExoPlayer p = player;
     if (src == null || p == null || !hasMedia) return;
-    long pos = Math.max(0, p.getCurrentPosition());
+    long pos = resumePos(p);
     p.setMediaSource(mediaSourceFor(src), pos);
     p.prepare();
   }
@@ -590,7 +671,7 @@ public class PlaybackService extends Service {
     src.fellBack = true;
     DIRECT_BLOCKED.add(domainKey(src.directUrl));
     bufferingSince = 0;
-    long pos = Math.max(0, p.getCurrentPosition());
+    long pos = resumePos(p);
     p.setMediaSource(mediaSourceFor(src), pos);
     p.prepare();
     return true;
@@ -676,6 +757,7 @@ public class PlaybackService extends Service {
 
   void releaseStandby() {
     ExoPlayer p = standby;
+    standbyItem = null;
     standby = null;
     standbyUrl = null;
     standbySrc = null;
@@ -772,7 +854,15 @@ public class PlaybackService extends Service {
     return p;
   }
 
+  /** Lagu dimuat oleh JS: JS yang memegang antrean, daftar native lama dibuang (JS mengirim yang baru). */
   void doLoad(String url, long startMs, String cacheKey) {
+    playingIndex = -1;
+    knownIndex = -1;
+    upcoming.clear();
+    loadMedia(url, startMs, cacheKey);
+  }
+
+  void loadMedia(String url, long startMs, String cacheKey) {
     if (stopped) return;
     ExoPlayer p = ensurePlayer();
     autoAdvance = false;
@@ -781,6 +871,7 @@ public class PlaybackService extends Service {
     metaSent = false;
     tickCount = 0;
     hasMedia = true;
+    lastPosMs = Math.max(0, startMs);
     activeSrc = makeSrc(url, cacheKey);
     bufferingSince = 0;
     p.setMediaSource(mediaSourceFor(activeSrc), Math.max(0, startMs));
@@ -800,6 +891,9 @@ public class PlaybackService extends Service {
   }
 
   void doStopEngine() {
+    upcoming.clear();
+    playingIndex = -1;
+    knownIndex = -1;
     if (resumer != null) resumer.end();
     autoAdvance = false;
     hasMedia = false;
@@ -905,7 +999,9 @@ public class PlaybackService extends Service {
   private final Runnable watchdog = new Runnable() {
     @Override public void run() {
       if (stopped) return;
-      if (current.playing && SystemClock.elapsedRealtime() - lastJsUpdateAt > JS_SILENCE_LIMIT_MS) {
+      // Hanya bila audio juga tidak berbunyi: JS yang beku di latar belakang tidak boleh mematikan lagu yang sedang jalan.
+      boolean audible = player != null && player.isPlaying();
+      if (current.playing && !audible && SystemClock.elapsedRealtime() - lastJsUpdateAt > JS_SILENCE_LIMIT_MS) {
         shutdown();
         return;
       }
@@ -956,7 +1052,8 @@ public class PlaybackService extends Service {
               }
 
               @Override public void resumePlayback() {
-                if (!stopped && hasMedia) doResume();
+                // Lagu sudah selesai saat gangguan: jangan putar ulang lagu yang sama dari awal.
+                if (!stopped && hasMedia && player != null && player.getPlaybackState() != Player.STATE_ENDED) doResume();
               }
 
               @Override public void holdWake(long ms) {
@@ -973,11 +1070,11 @@ public class PlaybackService extends Service {
     resumer.setEnabled(autoResumeEnabled);
     session = new MediaSession(this, "MusicVerse");
     session.setCallback(new MediaSession.Callback() {
-      @Override public void onPlay() { emit("play", -1); }
-      @Override public void onPause() { emit("pause", -1); }
+      @Override public void onPlay() { handleAction("play"); }
+      @Override public void onPause() { handleAction("pause"); }
       @Override public void onStop() { emit("stop", -1); }
-      @Override public void onSkipToNext() { emit("next", -1); }
-      @Override public void onSkipToPrevious() { emit("previous", -1); }
+      @Override public void onSkipToNext() { handleAction("next"); }
+      @Override public void onSkipToPrevious() { handleAction("previous"); }
       @Override public void onSeekTo(long pos) { emit("seek", pos); }
     });
     session.setActive(true);
@@ -996,10 +1093,10 @@ public class PlaybackService extends Service {
   public int onStartCommand(Intent intent, int flags, int startId) {
     if (intent != null && intent.getAction() != null) {
       switch (intent.getAction()) {
-        case ACTION_PLAY: emit("play", -1); break;
-        case ACTION_PAUSE: emit("pause", -1); break;
-        case ACTION_NEXT: emit("next", -1); break;
-        case ACTION_PREVIOUS: emit("previous", -1); break;
+        case ACTION_PLAY: handleAction("play"); break;
+        case ACTION_PAUSE: handleAction("pause"); break;
+        case ACTION_NEXT: handleAction("next"); break;
+        case ACTION_PREVIOUS: handleAction("previous"); break;
         case ACTION_DISMISS: shutdown(); return START_NOT_STICKY;
         default: break;
       }
@@ -1012,6 +1109,218 @@ public class PlaybackService extends Service {
     if (load != null) doLoad(load.url, load.startMs, load.cacheKey);
     // Audio ikut proses aplikasi (JS yang mengatur antrean); jika proses mati, service tidak ada gunanya sendirian.
     return START_NOT_STICKY;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Rantai lagu native + tombol notifikasi tanpa JS (WebView yang dibekukan di latar belakang).
+  // ---------------------------------------------------------------------------------------------
+
+  /** JS masih mengirim detak (WebView hidup). Saat memutar JS mengirim ~tiap 2 dtk. */
+  private boolean jsAlive() {
+    return SystemClock.elapsedRealtime() - lastJsUpdateAt <= JS_STALE_MS;
+  }
+
+  /**
+   * Native yang memegang kendali: JS tidak mengirim detak padahal sedang memutar, atau native sudah pindah lagu sendiri.
+   * Saat dijeda biasa JS memang diam, jadi diamnya JS saja bukan tanda beku.
+   */
+  private boolean nativeInCharge() {
+    return !jsAlive() && (current.playing || playingIndex != -1);
+  }
+
+  void setUpcoming(int currentIndex, List<UpcomingItem> items) {
+    if (stopped) return;
+    // Native sudah pindah sendiri dan JS belum menyamakan: daftar ini dibuat dari keadaan lama.
+    if (playingIndex != -1 && currentIndex != playingIndex) return;
+    knownIndex = currentIndex;
+    upcoming.clear();
+    if (items != null) upcoming.addAll(items);
+    // Pemutar cadangan milik rantai ini sudah tidak sesuai daftar baru: buang.
+    if (standbyItem != null && (upcoming.isEmpty() || upcoming.get(0) != standbyItem)) releaseStandby();
+    pushHasNext();
+    preloadChainStandby();
+  }
+
+  /** Pindah ke lagu berikutnya dari daftar native. `force` = tombol Berikutnya (lagu aktif belum selesai). */
+  private boolean chainAdvance(boolean force) {
+    if (stopped || player == null || upcoming.isEmpty()) return false;
+    if (!force && !player.getPlayWhenReady()) return false;
+    // JS masih hidup dan mengatur pergantian lagu sendiri (ulang lagu, sleep timer akhir lagu, dst. dikecualikan di sisinya
+    // dengan mengosongkan daftar ini); hanya saat 'ended' kita ambil alih, atau saat JS beku.
+    UpcomingItem item = upcoming.get(0);
+    // Pengaman loop: lagu yang akan "berikutnya" ternyata lagu yang sedang diputar = daftar usang. Buang, jangan putar ulang.
+    if (item.index == knownIndex || item.index == playingIndex) {
+      upcoming.clear();
+      releaseStandby();
+      pushHasNext();
+      return false;
+    }
+    boolean viaStandby = standby != null && standbyItem == item && standby.getPlayerError() == null && doCrossfade(150);
+    if (!viaStandby) loadMedia(item.url, 0, item.cacheKey);
+    player.setPlayWhenReady(true);
+    upcoming.remove(0);
+    playingIndex = item.index;
+    knownIndex = item.index;
+    standbyItem = null;
+    State s = snapshot();
+    s.title = item.title;
+    s.artist = item.artist;
+    s.album = item.album;
+    s.durationMs = item.durationMs;
+    s.positionMs = 0;
+    s.playing = true;
+    s.loading = true;
+    s.hasNext = !upcoming.isEmpty();
+    s.hasPrevious = true;
+    s.interrupted = false;
+    s.resetCover = true;
+    applyInternal(s, false);
+    fetchCover(item);
+    emitEngine("advanced", 0, "idx:" + item.index);
+    preloadChainStandby();
+    return true;
+  }
+
+  /** Saat JS beku, lagu berikutnya dimuat lebih awal di pemutar cadangan supaya pindahnya tanpa jeda. */
+  private void preloadChainStandby() {
+    if (stopped || player == null || !hasMedia || upcoming.isEmpty() || fading != null || jsAlive()) return;
+    UpcomingItem next = upcoming.get(0);
+    if (standbyItem == next) return;
+    if (standby != null && standbyItem == null) return; // pemutar cadangan milik JS: jangan ditimpa
+    doStandbyLoad(next.url, next.cacheKey);
+    if (standby != null) standbyItem = next;
+  }
+
+  private State snapshot() {
+    State s = new State();
+    s.title = current.title;
+    s.artist = current.artist;
+    s.album = current.album;
+    s.durationMs = current.durationMs;
+    s.positionMs = livePosition();
+    s.playing = current.playing;
+    s.loading = current.loading;
+    s.hasNext = current.hasNext;
+    s.hasPrevious = current.hasPrevious;
+    s.interrupted = current.interrupted;
+    return s;
+  }
+
+  private void pushHasNext() {
+    if (current.hasNext == !upcoming.isEmpty() || jsAlive()) return;
+    State s = snapshot();
+    s.hasNext = !upcoming.isEmpty();
+    applyInternal(s, false);
+  }
+
+  private void markNativePlaying(boolean playing) {
+    if (stopped || current.playing == playing) return;
+    State s = snapshot();
+    s.playing = playing;
+    applyInternal(s, false);
+  }
+
+  /** Sampul lagu hasil pindah native diambil di thread sendiri (tanpa JS); gagal = tetap sampul bawaan. */
+  private void fetchCover(UpcomingItem item) {
+    if (item.coverUrl.isEmpty() || !(item.coverUrl.startsWith("https://") || item.coverUrl.startsWith("http://"))) return;
+    final int token = ++coverToken;
+    new Thread(() -> {
+      HttpURLConnection c = null;
+      try {
+        c = (HttpURLConnection) new URL(item.coverUrl).openConnection();
+        c.setConnectTimeout(10_000);
+        c.setReadTimeout(10_000);
+        if (c.getResponseCode() != 200) return;
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        try (InputStream in = c.getInputStream()) {
+          byte[] chunk = new byte[16 * 1024];
+          int n;
+          while ((n = in.read(chunk)) > 0) {
+            buf.write(chunk, 0, n);
+            if (buf.size() > 4 * 1024 * 1024) return;
+          }
+        }
+        byte[] data = buf.toByteArray();
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+        int sample = 1;
+        while (bounds.outWidth / (sample * 2) >= 512 && bounds.outHeight / (sample * 2) >= 512) sample *= 2;
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = sample;
+        Bitmap bmp = BitmapFactory.decodeByteArray(data, 0, data.length, opts);
+        if (bmp == null) return;
+        handler.post(() -> {
+          if (stopped || token != coverToken) return; // sudah pindah lagu lagi
+          State s = snapshot();
+          s.cover = bmp;
+          applyInternal(s, false);
+        });
+      } catch (Exception e) {
+        // sampul hanya pemanis
+      } finally {
+        if (c != null) c.disconnect();
+      }
+    }, "mv-chain-cover").start();
+  }
+
+  /**
+   * Tombol notifikasi / sesi media. Normalnya diteruskan ke JS (yang memegang antrean). Bila JS beku (tanpa detak),
+   * native mengerjakannya sendiri, jadi tombol tetap berfungsi dan pemutaran tidak "mati" setelah beberapa lagu.
+   */
+  private void handleAction(String action) {
+    if (stopped) return;
+    if (!nativeInCharge()) {
+      emit(action, -1);
+      // Jaring pengaman untuk Putar/Jeda: bila JS beku sehingga tidak bereaksi, native mengerjakannya sendiri sebentar lagi.
+      if (action.equals("play") || action.equals("pause")) handler.postDelayed(() -> nativeFallback(action), 1_200L);
+      return;
+    }
+    switch (action) {
+      case "next":
+        if (chainAdvance(true)) return;
+        break;
+      case "previous":
+        if (player != null && hasMedia) {
+          player.seekTo(0);
+          player.play();
+          markNativePlaying(true);
+          return;
+        }
+        break;
+      case "play":
+        if (nativePlay()) return;
+        break;
+      case "pause":
+        if (nativePause()) return;
+        break;
+      default:
+        break;
+    }
+    emit(action, -1); // tidak bisa dikerjakan native: biarkan JS (bila hidup lagi) yang menangani
+  }
+
+  private void nativeFallback(String action) {
+    if (stopped || player == null || !hasMedia) return;
+    if (action.equals("play") && !player.getPlayWhenReady()) nativePlay();
+    else if (action.equals("pause") && player.getPlayWhenReady()) nativePause();
+  }
+
+  private boolean nativePlay() {
+    if (player == null) return false;
+    if (player.getPlaybackState() == Player.STATE_ENDED && chainAdvance(true)) return true;
+    if (!hasMedia) return chainAdvance(true);
+    doResume();
+    markNativePlaying(true);
+    return true;
+  }
+
+  private boolean nativePause() {
+    if (player == null) return false;
+    cancelFade();
+    player.pause();
+    markNativePlaying(false);
+    return true;
   }
 
   @Override
@@ -1046,8 +1355,13 @@ public class PlaybackService extends Service {
   }
 
   void apply(State next) {
+    applyInternal(next, true);
+  }
+
+  /** `fromJs` false = pembaruan native (rantai lagu / tombol notifikasi): tidak boleh dianggap detak JS. */
+  void applyInternal(State next, boolean fromJs) {
     if (stopped) return;
-    lastJsUpdateAt = SystemClock.elapsedRealtime();
+    if (fromJs) lastJsUpdateAt = SystemClock.elapsedRealtime();
     current.title = next.title;
     current.artist = next.artist;
     current.album = next.album;

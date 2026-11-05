@@ -7,6 +7,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import Action from '../player/SheetAction'
 import CoverArt from '../ui/CoverArt'
 import PlaylistTransferPanel from './PlaylistTransferPanel'
+import OverlayPortal from '../ui/OverlayPortal'
 
 interface PlaylistMenuSheetProps {
   playlist: MyPlaylist
@@ -39,7 +40,7 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
   }
 
   return (
-    <div className="fixed inset-0 z-[62]">
+    <OverlayPortal>
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
@@ -97,6 +98,6 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
           </ul>
         )}
       </div>
-    </div>
+    </OverlayPortal>
   )
 }

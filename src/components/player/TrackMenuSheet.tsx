@@ -19,6 +19,7 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import PlaylistTransferPanel from '../library/PlaylistTransferPanel'
 import AddToPlaylistPicker from './AddToPlaylistPicker'
 import Action from './SheetAction'
+import OverlayPortal from '../ui/OverlayPortal'
 
 const FOCUS = 'focus-ring'
 
@@ -153,7 +154,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   }
 
   return (
-    <div className="fixed inset-0 z-[62]">
+    <OverlayPortal>
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
@@ -318,6 +319,6 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
           </>
         )}
       </div>
-    </div>
+    </OverlayPortal>
   )
 }

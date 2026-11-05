@@ -3,6 +3,7 @@ import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import AddToPlaylistPicker from '../player/AddToPlaylistPicker'
 import CoverArt from '../ui/CoverArt'
+import OverlayPortal from '../ui/OverlayPortal'
 
 interface AddToPlaylistSheetProps {
   track: PlaylistTrack
@@ -29,7 +30,7 @@ export default function AddToPlaylistSheet({ track, onClose, onDone }: AddToPlay
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-[62]">
+    <OverlayPortal>
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
@@ -56,6 +57,6 @@ export default function AddToPlaylistSheet({ track, onClose, onDone }: AddToPlay
           }}
         />
       </div>
-    </div>
+    </OverlayPortal>
   )
 }
