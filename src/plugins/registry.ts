@@ -154,6 +154,13 @@ async function toPlayableUrl(stream: StreamSource): Promise<string> {
   return proxyRemoteUrl(stream.url, userAgent)
 }
 
+/** True bila judul hasil memuat instrumental/karaoke sedangkan lagu di playlist bukan versi itu. */
+function isUnwantedInstrumental(wanted: WantedTrack, gotTitle: string): boolean {
+  const want = versionMarkers(stripArtistPrefix(wanted.title, wanted.artists), wanted.artists)
+  const got = versionMarkers(gotTitle, wanted.artists)
+  return got.has('instrumental') && !want.has('instrumental')
+}
+
 /** Pemeriksaan ketat untuk unduhan: artis/versi cocok dan durasi file sangat dekat dengan lagu di playlist. null = lolos. */
 function strictProblem(wanted: WantedTrack, info: PlaybackInfo, actual: number | null, expected: number | null): string | null {
   const mismatch = metadataMismatch(wanted, info)
@@ -196,6 +203,7 @@ export async function resolveViaPluginsDetailed(
   const cachedSource = cached?.source ? `plugin:${cached.source.replace(/^plugin:/, '')}` : ''
   if (
     cached &&
+    !isUnwantedInstrumental(wanted, cached.title) &&
     !options.avoid?.includes(cachedSource) &&
     (!strict || strictProblem(wanted, cached, cached.probedDuration ?? null, expected) === null)
   ) {
@@ -213,6 +221,12 @@ export async function resolveViaPluginsDetailed(
   const query = [stripArtistPrefix(wanted.title, wanted.artists), wanted.artists.split(/\s*[,&;]\s*/)[0]]
     .filter(Boolean)
     .join(' ')
+  // Pencarian bertahap, berhenti di yang pertama menghasilkan lagu yang lolos. Judul tidak pernah ditambah kata apa pun
+  // (tanpa "lyrics" / "official" dst.): 1) judul + artis, 2) judul saja, 3) artis saja (judul beda aksara tetap bisa
+  // ditemukan lewat durasi; teks yang tidak cocok tetap ditolak oleh skor).
+  const cleanTitle = stripArtistPrefix(wanted.title, wanted.artists)
+  const firstArtist = wanted.artists.split(/\s*[,&;]\s*/)[0]?.trim() ?? ''
+  const queries = [...new Set([query, cleanTitle, firstArtist].map((q) => q.trim()).filter(Boolean))]
   const spotifyUrl = extractSpotifyTrackLink(wanted.url ?? '') ?? ''
   let hadFailure = false
   let sawCandidate = false
@@ -223,7 +237,11 @@ export async function resolveViaPluginsDetailed(
       if (disabled.includes(plugin.id) || options.avoid?.includes(`plugin:${plugin.id}`)) continue
       if (signal.aborted) return stopped()
       try {
-        const hits = await plugin.search(query, signal)
+        const seen = new Set<string>()
+        for (const q of queries) {
+        if (signal.aborted) return stopped()
+        const hits = (await plugin.search(q, signal)).filter((h) => !seen.has(h.id))
+        for (const h of hits) seen.add(h.id)
         const scored = hits
           .map((hit) => {
             const probe: PlaybackInfo = {
@@ -244,9 +262,11 @@ export async function resolveViaPluginsDetailed(
             const got = versionMarkers(hit.title, wanted.artists)
             const differs = [...want, ...got].some((m) => want.has(m) !== got.has(m))
             const exact = hit.title.trim().toLowerCase() === wantTitle.trim().toLowerCase()
-            return { hit, score, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
+            // Instrumental / karaoke TIDAK PERNAH dipilih bila lagu di playlist bukan versi itu (pengguna menginginkan yang berlirik).
+            const blocked = got.has('instrumental') && !want.has('instrumental')
+            return { hit, score, blocked, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
           })
-          .filter((c) => c.score >= ACCEPT_SCORE)
+          .filter((c) => c.score >= ACCEPT_SCORE && !c.blocked)
           .sort((a, b) => b.rank - a.rank)
           .slice(0, MAX_CANDIDATES)
 
@@ -289,6 +309,7 @@ export async function resolveViaPluginsDetailed(
             cachePut(key, info, stream)
             return { info, outcome: 'ok' }
           }
+        }
         }
       } catch (error) {
         if (signal.aborted) return stopped()

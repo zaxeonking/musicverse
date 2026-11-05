@@ -31,6 +31,20 @@ export function stripArtistPrefix(title: string, artists: string): string {
   const seps = [...trimmed.matchAll(/\s+[-\u2013\u2014|]\s+/g)]
   if (seps.length === 0) return trimmed
   const usable = (value: string) => plain(value).length >= 3
+  // Nama artis yang sendiri memuat pemisah (\"Ho - Kago Tea Time\"): gabungan beberapa segmen di awal/akhir yang PERSIS sama
+  // dengan nama artis dibuang, sisanya adalah judul. Contoh: \"Ho - Kago Tea Time - Pure Pure Heart\" -> \"Pure Pure Heart\".
+  for (let k = 0; k < seps.length; k += 1) {
+    const sep = seps[k]
+    const lead = trimmed.slice(0, sep.index)
+    const rest = trimmed.slice((sep.index ?? 0) + sep[0].length).trim()
+    if (usable(rest) && names.includes(plain(lead))) return rest
+  }
+  for (let k = seps.length - 1; k >= 0; k -= 1) {
+    const sep = seps[k]
+    const head = trimmed.slice(0, sep.index).trim()
+    const tail = trimmed.slice((sep.index ?? 0) + sep[0].length)
+    if (usable(head) && names.includes(plain(tail))) return head
+  }
   const first = seps[0]
   const lead = trimmed.slice(0, first.index)
   const rest = trimmed.slice(first.index + first[0].length).trim()
