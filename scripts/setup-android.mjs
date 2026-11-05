@@ -8,10 +8,12 @@
 //  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity ke android/app/src/main/java/<appId>/
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
+//  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
 //  4. Menambah izin + <service> + usesCleartextTraffic ke AndroidManifest.xml
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { computeNativeHash } from './native-hash.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const nativeDir = join(root, 'native', 'android')
@@ -59,6 +61,14 @@ if (existsSync(gradlePath)) {
       : gradle
   writeFileSync(gradlePath, withDeps)
 }
+
+// 3b. Sidik jari native (lihat scripts/native-hash.mjs). Dibaca plugin native lewat `nativeHash`.
+const nativeHash = computeNativeHash(root)
+mkdirSync(join(androidMain, 'res', 'values'), { recursive: true })
+writeFileSync(
+  join(androidMain, 'res', 'values', 'mv_native.xml'),
+  `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="mv_native_hash" translatable="false">${nativeHash}</string>\n</resources>\n`,
+)
 
 // 4. Manifest
 const manifestPath = join(androidMain, 'AndroidManifest.xml')

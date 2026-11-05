@@ -1,8 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
+
+/** Waktu build: ditanam ke JS (__BUILD_TIME__) dan ditulis ke dist/mv-build.json untuk paket OTA (scripts/make-ota.mjs). */
+const buildTime = Date.now()
+const buildInfo: Plugin = {
+  name: 'mv-build-info',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'mv-build.json', source: JSON.stringify({ builtAt: buildTime }) })
+  },
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), buildInfo],
+  define: { __BUILD_TIME__: JSON.stringify(buildTime) },
   server: {
     host: true,
     port: 5173,

@@ -428,3 +428,18 @@ Riwayat "Baru diputar" tidak terpengaruh (itu riwayat, bukan Koleksi).
 (artis di bawahnya) dengan **ikon app** sebagai sampul (`public/icons/icon-192.png` dan `icon-512.png`, dirender dari `favicon.svg`; sampul lagu sengaja tidak dipakai).
 Tombol play/jeda, sebelumnya, berikutnya, dan bilah posisi di notifikasi mengendalikan pemutar. Catatan: ini bekerja di Chrome/PWA. Di APK Capacitor,
 Android WebView tidak memunculkan notifikasi media sistem; itu butuh plugin foreground service terpisah.
+
+
+## Pembaruan tampilan otomatis (OTA, tanpa APK baru)
+
+Tiap **push ke `main`/`master`** workflow `Publish OTA` (`.github/workflows/ota.yml`) membangun paket web dan mengunggahnya ke
+Release `ota` (pre-release bergulir) di repo rilis (`RELEASE_REPO`, sama dengan rilis APK). Aplikasi mengecek di latar belakang
+(8 dtk setelah dibuka, lalu paling sering tiap 30 menit saat dibuka kembali), mengunduh paket yang lebih baru, dan memakainya
+**saat aplikasi dibuka ulang** (tutup dari recent apps lalu buka). Tidak memuat ulang di tengah lagu.
+
+- Hanya untuk perubahan **web** (tampilan, logika JS). Perubahan di Java, izin, plugin, dependensi, atau `capacitor.config.ts`
+  mengubah "sidik jari native" (`scripts/native-hash.mjs`); aplikasi lalu melewati paket OTA itu dan APK baru (tag `v*`) tetap diperlukan.
+- Aman: paket yang lebih lama tidak pernah dipasang (`__BUILD_TIME__`), data (library, unduhan) tetap karena origin WebView sama, dan
+  bila paket baru macet sebelum UI tampil plugin otomatis mundur ke paket sebelumnya (`notifyAppReady`, batas 15 dtk).
+- Syarat: repo rilis harus **public** (sama dengan cek pembaruan APK). Untuk repo rilis lain, pakai secret `RELEASES_TOKEN` seperti `apk.yml`.
+- APK yang dibuat sebelum 0.4.34 belum punya pluginnya: pasang APK 0.4.34+ sekali, sesudah itu tampilan ikut otomatis.

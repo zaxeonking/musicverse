@@ -4,6 +4,7 @@ import App from './App'
 import './index.css'
 import { installNativeBackButton } from './native/backButton'
 import { initDownloads } from './native/downloads'
+import { startLiveUpdate } from './native/liveUpdate'
 import { initOffline } from './native/offline'
 import { initNativeStorage } from './native/nativeStorage'
 import { startLyricsBackfill } from './native/offlineLyrics'
@@ -25,6 +26,8 @@ async function bootstrap() {
       <App />
     </StrictMode>,
   )
+  // Pembaruan tampilan tanpa APK baru (hanya APK): cek paket OTA di latar belakang setelah UI tampil.
+  startLiveUpdate()
 }
 
 void bootstrap()

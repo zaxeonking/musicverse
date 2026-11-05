@@ -267,6 +267,8 @@ export interface MusicVerseNativePlugin {
   getPowerState(): Promise<{ known: boolean; charging: boolean }>
   /** Apakah aplikasi lain sedang memutar audio / ada panggilan (dipakai putar-ulang otomatis setelah gangguan). */
   isOtherAudioActive(): Promise<{ busy: boolean }>
+  /** Sidik jari kode native APK ini (pembaruan tampilan OTA). Kosong bila tidak ada. */
+  nativeHash(): Promise<{ hash: string }>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */
   downloadUpdate(options: { url: string; version: string }): Promise<void>
   /** Membuka installer untuk APK yang sudah diunduh. Menolak dengan code NEED_PERMISSION jika izin pasang belum ada. */

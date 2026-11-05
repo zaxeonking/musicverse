@@ -1,4 +1,4 @@
-import { LayoutGrid, Library, List, Plus } from 'lucide-react'
+import { Heart, LayoutGrid, Library, List, Pin, Plus } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
@@ -10,6 +10,7 @@ import { isNativeApp } from '../../native/platform'
 import type { LibrarySort, LibraryView, MyPlaylist, SavedPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { toPlaylistDetail } from '../../utils/libraryStorage'
+import { isLikedId } from '../../utils/myPlaylistStorage'
 import Chip from '../ui/Chip'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
@@ -37,7 +38,13 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
   const press = useLongPress(() => onMenu(playlist))
   const fallback = useMemo(() => fallbackCover(playlist.name), [playlist.name])
   const count = playlist.tracks.length
-  const subtitle = `Buatanmu · ${count === 0 ? 'kosong' : `${count} lagu`}`
+  const liked = isLikedId(playlist.id)
+  const subtitle = `${liked ? 'Bawaan' : 'Buatanmu'} · ${count === 0 ? 'kosong' : `${count} lagu`}`
+  const badge = liked ? (
+    <Heart className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" fill="currentColor" aria-label="Bawaan" />
+  ) : playlist.pinned ? (
+    <Pin className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" fill="currentColor" aria-label="Disematkan" />
+  ) : null
 
   if (layout === 'list') {
     return (
@@ -51,6 +58,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
           </span>
           <span className="min-w-0 flex-1">
             <span title={playlist.name} className="block truncate font-medium text-ink">
+              {badge}
               {playlist.name}
             </span>
             <span className="block truncate text-sm text-ink-muted">{subtitle}</span>
@@ -70,6 +78,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
           <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
         </span>
         <span title={playlist.name} className="line-clamp-2 break-words font-display text-base font-bold leading-snug text-ink">
+          {badge}
           {playlist.name}
         </span>
         <span className="mt-1 text-sm text-ink-muted">{subtitle}</span>
@@ -104,8 +113,13 @@ export default function PlaylistsSection() {
         .filter((playlist) => !converted.has(playlist.id))
         .map((playlist): Entry => ({ kind: 'saved', id: playlist.id, title: playlist.title, at: playlist.savedAt, playlist })),
     ]
-    if (prefs.sort === 'name') return all.sort((a, b) => a.title.localeCompare(b.title, 'id', { sensitivity: 'base' }))
-    return all.sort((a, b) => b.at - a.at)
+    // Urutan tetap: "Lagu Disukai" (bawaan) -> yang disematkan -> sisanya menurut pilihan urutan.
+    const rank = (entry: Entry) => (entry.kind === 'mine' ? (isLikedId(entry.id) ? 0 : entry.playlist.pinned ? 1 : 2) : 2)
+    const within =
+      prefs.sort === 'name'
+        ? (a: Entry, b: Entry) => a.title.localeCompare(b.title, 'id', { sensitivity: 'base' })
+        : (a: Entry, b: Entry) => b.at - a.at
+    return all.sort((a, b) => rank(a) - rank(b) || within(a, b))
   }, [mine, saved, prefs.sort])
 
   /** Membuka playlist tersimpan di Beranda. Playlist yang sudah aktif dan playback-nya tidak disentuh. */

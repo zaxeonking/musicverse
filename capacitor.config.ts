@@ -29,6 +29,14 @@ const config: CapacitorConfig = {
     CapacitorHttp: {
       enabled: true,
     },
+    // Pembaruan tampilan tanpa APK baru (OTA), mode manual: src/native/liveUpdate.ts yang memeriksa + mengunduh dari
+    // GitHub Release `ota`. Tidak memakai cloud Capgo: statsUrl dikosongkan supaya tidak ada laporan ke luar.
+    // appReadyTimeout: bila paket baru tidak memanggil notifyAppReady dalam waktu ini, plugin kembali ke paket sebelumnya.
+    CapacitorUpdater: {
+      autoUpdate: false,
+      statsUrl: '',
+      appReadyTimeout: 15000,
+    },
   },
 }
 

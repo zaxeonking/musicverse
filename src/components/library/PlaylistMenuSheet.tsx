@@ -1,9 +1,11 @@
-import { ArrowRightLeft, Copy, ListMusic } from 'lucide-react'
+import { ArrowRightLeft, Copy, ListMusic, Pin, PinOff } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import type { MyPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { isLikedId } from '../../utils/myPlaylistStorage'
 import Action from '../player/SheetAction'
 import CoverArt from '../ui/CoverArt'
 import PlaylistTransferPanel from './PlaylistTransferPanel'
@@ -19,6 +21,7 @@ interface PlaylistMenuSheetProps {
 export default function PlaylistMenuSheet({ playlist, onClose, onToast }: PlaylistMenuSheetProps) {
   useOverlayHistory(true, onClose)
   const navigate = useNavigate()
+  const { setPinned } = useMyPlaylists()
   const sheetRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<'copy' | 'move' | null>(null)
   const fallback = useMemo(() => fallbackCover(playlist.name), [playlist.name])
@@ -81,6 +84,18 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
                 navigate(`/my/${playlist.id}`)
               }}
             />
+            {!isLikedId(playlist.id) && (
+              <Action
+                icon={playlist.pinned ? PinOff : Pin}
+                label={playlist.pinned ? 'Lepas sematan' : 'Sematkan di atas'}
+                hint="Disematkan tampil tepat di bawah Lagu Disukai"
+                onClick={() => {
+                  const result = setPinned(playlist.id, !playlist.pinned)
+                  onToast(result.ok ? (result.value.pinned ? 'Playlist disematkan di atas' : 'Sematan dilepas') : myPlaylistErrorText(result.reason))
+                  onClose()
+                }}
+              />
+            )}
             <Action
               icon={Copy}
               label="Salin semua lagu ke playlist lain"

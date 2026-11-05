@@ -12,3 +12,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Waktu (ms epoch) paket web ini dibuild. Dipakai pembaruan tampilan OTA untuk tidak pernah memasang paket yang lebih lama. */
+declare const __BUILD_TIME__: number

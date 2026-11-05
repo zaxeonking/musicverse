@@ -691,6 +691,15 @@ public class MusicVerseNativePlugin extends Plugin {
   }
 
   /** Jenis koneksi aktif: dipakai pilihan "Unduh hanya lewat Wi-Fi". Tanpa izin / gagal baca = "unknown" (tidak dianggap seluler). */
+  /** Sidik jari kode native APK ini (ditanam setup-android.mjs). Dipakai pembaruan tampilan OTA untuk mengecek kecocokan. */
+  @PluginMethod
+  public void nativeHash(PluginCall call) {
+    int id = getContext().getResources().getIdentifier("mv_native_hash", "string", getContext().getPackageName());
+    JSObject out = new JSObject();
+    out.put("hash", id == 0 ? "" : getContext().getString(id));
+    call.resolve(out);
+  }
+
   @PluginMethod
   public void getNetworkType(PluginCall call) {
     String type = "unknown";

@@ -1,0 +1,54 @@
+name: Publish OTA
+
+# Pembaruan TAMPILAN otomatis tanpa APK baru: tiap push ke branch utama, paket web (dist) dibuat dan diunggah ke Release
+# `ota` (pre-release bergulir, tidak mengganggu pengecekan "rilis terbaru" APK). Aplikasi mengunduhnya sendiri di latar
+# belakang dan memakainya saat dibuka ulang. Berubah di bagian native (Java, izin, plugin, capacitor.config.ts) = tetap
+# butuh APK baru lewat tag v* (apk.yml); aplikasi otomatis melewati paket OTA yang tidak cocok dengan APK-nya.
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ota
+  cancel-in-progress: true
+
+jobs:
+  ota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Sama dengan apk.yml: repo tempat rilis (public). Kosong = repo ini sendiri.
+      RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+      VITE_GITHUB_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+
+      - run: npm run build
+
+      - name: Buat paket OTA
+        run: node scripts/make-ota.mjs
+
+      - name: Unggah ke Release ota
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view ota --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            gh release create ota --repo "$RELEASE_REPO" \
+              --title "OTA (otomatis, jangan dihapus)" \
+              --notes "Paket tampilan otomatis untuk aplikasi. Dibuat oleh workflow Publish OTA; bukan rilis APK." \
+              --prerelease --latest=false
+          fi
+          gh release upload ota ota-out/bundle.zip ota-out/ota.json --repo "$RELEASE_REPO" --clobber

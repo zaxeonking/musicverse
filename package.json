@@ -1,7 +1,7 @@
 {
   "name": "musicverse",
   "private": true,
-  "version": "0.4.32",
+  "version": "0.4.34",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,12 +13,14 @@
     "android:open": "npx cap open android",
     "android:run": "npm run build && npx cap sync android && npx cap run android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "android:setup": "node scripts/setup-android.mjs"
+    "android:setup": "node scripts/setup-android.mjs",
+    "ota:build": "npm run build && node scripts/make-ota.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/filesystem": "^8.0.0",
+    "@capgo/capacitor-updater": "^8.0.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
