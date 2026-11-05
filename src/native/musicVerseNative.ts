@@ -322,6 +322,10 @@ export interface MusicVerseNativePlugin {
   isIgnoringBatteryOptimizations(): Promise<{ ignoring: boolean }>
   /** Membuka layar pengaturan optimasi baterai sistem. */
   openBatterySettings(): Promise<void>
+  /** Android 11+: true bila "Jeda aktivitas aplikasi jika tidak digunakan" sudah dimatikan untuk app ini (atau tidak berlaku). Butuh APK baru. */
+  isUnusedAppRestrictionExempt(): Promise<{ exempt: boolean }>
+  /** Membuka layar izin aplikasi (saklar "Jeda aktivitas aplikasi jika tidak digunakan"). Butuh APK baru. */
+  openUnusedAppRestrictionSettings(): Promise<void>
   addListener(
     eventName: 'downloadAction',
     listener: (event: DownloadActionEvent) => void,

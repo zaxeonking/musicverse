@@ -1,11 +1,13 @@
-import { Loader2, Pause, Play } from 'lucide-react'
+import { ListMusic, Loader2, Pause, Play } from 'lucide-react'
 import { memo, useMemo } from 'react'
+import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { trackIdentity } from '../../utils/myPlaylistStorage'
 import CoverArt from '../ui/CoverArt'
 
 /**
@@ -36,6 +38,19 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const { openTrackMenu } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
+  const { playlists } = useMyPlaylists()
+  // Hasil cari lagu satuan: tandai kalau lagunya sudah ada di playlist buatanmu (dan di playlist mana).
+  const inPlaylists = useMemo(() => {
+    if (!fromSearch) return [] as string[]
+    const identity = trackIdentity(track)
+    return playlists.filter((item) => item.tracks.some((t) => trackIdentity(t) === identity)).map((item) => item.name)
+  }, [fromSearch, playlists, track])
+  const inPlaylistsText =
+    inPlaylists.length === 0
+      ? ''
+      : inPlaylists.length <= 2
+        ? inPlaylists.join(', ')
+        : `${inPlaylists.slice(0, 2).join(', ')} +${inPlaylists.length - 2}`
   const longPress = useLongPress(() => openTrackMenu(track, { fromSearch, place: fromSearch ? 'search' : 'playlist' }))
   const number = index + 1
   const isCurrent = activity !== 'none'
@@ -90,6 +105,12 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
           {track.duration && <span className="sm:hidden"> · {track.duration}</span>}
           {activity === 'error' && <span className="text-danger"> · Gagal diputar</span>}
         </p>
+        {inPlaylistsText && (
+          <p title={inPlaylists.join(', ')} className="mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-accent">
+            <ListMusic className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">Sudah ada di {inPlaylistsText}</span>
+          </p>
+        )}
       </button>
 
       <p className="hidden truncate text-sm text-ink-muted md:block">{track.album}</p>

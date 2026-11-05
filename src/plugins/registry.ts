@@ -2,7 +2,7 @@ import { MusicVerseNative } from '../native/musicVerseNative'
 import { isNativeApp } from '../native/platform'
 import type { PlaybackInfo } from '../types/spotify'
 import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
-import { metadataMismatch, scoreCandidate, type WantedTrack } from '../utils/matchTrack'
+import { metadataMismatch, scoreCandidate, versionMarkers, type WantedTrack } from '../utils/matchTrack'
 import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
@@ -236,10 +236,18 @@ export async function resolveViaPluginsDetailed(
               audioUrl: '',
             }
             // Durasi dari hasil pencarian: kecocokan durasi (bobot terbesar) langsung terhitung.
-            return { hit, score: scoreCandidate(wanted, probe, false, hit.durationSec) }
+            const score = scoreCandidate(wanted, probe, false, hit.durationSec)
+            // Peringkat (bukan penerimaan): versi live/remix/cover/dst. yang tidak ada di lagu aslinya turun di bawah versi yang
+            // sama dengan playlist, tetapi tetap diterima bila hanya itu yang ada. Judul yang persis sama sedikit dinaikkan.
+            const wantTitle = stripArtistPrefix(wanted.title, wanted.artists)
+            const want = versionMarkers(wantTitle, wanted.artists)
+            const got = versionMarkers(hit.title, wanted.artists)
+            const differs = [...want, ...got].some((m) => want.has(m) !== got.has(m))
+            const exact = hit.title.trim().toLowerCase() === wantTitle.trim().toLowerCase()
+            return { hit, score, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
           })
           .filter((c) => c.score >= ACCEPT_SCORE)
-          .sort((a, b) => b.score - a.score)
+          .sort((a, b) => b.rank - a.rank)
           .slice(0, MAX_CANDIDATES)
 
         for (const { hit, score } of scored) {

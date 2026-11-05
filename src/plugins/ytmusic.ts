@@ -4,7 +4,7 @@ import type { PluginTrackHit, ResolverPlugin, StreamSource } from './types'
 /**
  * Plugin YouTube Music (port ringkas dari plugin `ytmusic` Bloomee):
  *  - search : API WEB_REMIX filter "Songs".
- *  - streams: klien VISIONOS (tanpa PO token), lalu ANDROID tanpa androidSdkVersion, lalu IOS; semuanya mengembalikan URL
+ *  - streams: klien VISIONOS (tanpa PO token), lalu ANDROID_VR, ANDROID tanpa androidSdkVersion, lalu IOS; semuanya mengembalikan URL
  *    langsung tanpa cipher. (TVHTML5 + dekode cipher belum dibawa; jika semuanya gagal, aplikasi mencoba plugin `ytvideo`.)
  */
 
@@ -51,8 +51,20 @@ const IOS = {
   ua: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
   context: { deviceMake: 'Apple', deviceModel: 'iPhone16,2', osName: 'iOS', osVersion: '18.3.2.22D82' },
 }
-type PlayerClient = typeof VISIONOS | typeof ANDROID_SDKLESS | typeof IOS
-const CLIENTS: readonly PlayerClient[] = [VISIONOS, ANDROID_SDKLESS, IOS]
+/**
+ * ANDROID_VR (Oculus Quest 3): klien yang juga dipakai Metrolist dan yt-dlp; URL-nya langsung tanpa cipher.
+ * Ditaruh setelah VISIONOS dan sebelum ANDROID/IOS sebagai cadangan tambahan. Bila URL-nya ditolak server video,
+ * `markClientRejected` melewatinya 10 menit seperti klien lain.
+ */
+const ANDROID_VR = {
+  name: 'ANDROID_VR',
+  id: '28',
+  version: '1.65.10',
+  ua: 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
+  context: { deviceMake: 'Oculus', deviceModel: 'Quest 3', androidSdkVersion: 32, osName: 'Android', osVersion: '12L' },
+}
+type PlayerClient = typeof VISIONOS | typeof ANDROID_SDKLESS | typeof IOS | typeof ANDROID_VR
+const CLIENTS: readonly PlayerClient[] = [VISIONOS, ANDROID_VR, ANDROID_SDKLESS, IOS]
 
 /** User-Agent klien -> sampai kapan klien itu dilewati (stream-nya baru ditolak server video). */
 const rejectedUntil = new Map<string, number>()

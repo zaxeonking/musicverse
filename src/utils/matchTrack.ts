@@ -27,6 +27,23 @@ function artistNames(value: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Beda aksara: judul/artis di playlist (Spotify) berhuruf Latin/romaji, sedangkan di YouTube Music berhuruf asli
+ * (Jepang, Korea, Mandarin, Cyrillic, dst.), atau sebaliknya. Kata-katanya tidak mungkin saling cocok, jadi skor judul/artis
+ * 0 di sini bukan bukti salah lagu, melainkan "tidak bisa dibandingkan".
+ */
+const NON_LATIN =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Thai}\p{Script=Hebrew}\p{Script=Devanagari}\p{Script=Greek}]/u
+const LATIN = /\p{Script=Latin}/u
+
+export function scriptGap(a: string, b: string): boolean {
+  const aNon = NON_LATIN.test(a)
+  const bNon = NON_LATIN.test(b)
+  if (aNon === bNon) return false
+  // Sisi yang non-Latin vs sisi yang HANYA Latin.
+  return aNon ? LATIN.test(b) : LATIN.test(a)
+}
+
 /** 0..1, atau null jika hasil tidak membawa data judul. */
 function titleScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   const got = tokens(info.title)
@@ -91,10 +108,23 @@ export function scoreCandidate(
   actualDuration: number | null = null,
   ignoreTitle = false,
 ): number {
+  let title = ignoreTitle ? null : titleScore(wanted, info)
+  let artist = artistScore(wanted, info)
+  // Aksara berbeda (mis. judul Spotify \"Kimi no Na wa\" vs YouTube \"君の名は\"): skor kata rendah bukan tanda salah lagu.
+  // Dianggap tidak bisa dibandingkan; yang menentukan tinggal durasi file (lihat `unverifiable` di bawah).
+  let unverifiable = false
+  if (title !== null && title < 0.5 && scriptGap(stripArtistPrefix(wanted.title, wanted.artists), info.title)) {
+    title = null
+    unverifiable = true
+  }
+  if (artist !== null && artist < 0.5 && scriptGap(wanted.artists, info.artist || info.title)) {
+    artist = null
+    unverifiable = true
+  }
   const parts: Array<[number | null, number]> = [
     // Unduhan: judul tidak dihitung (judul dari server sering beda tulisan dari judul playlist).
-    [ignoreTitle ? null : titleScore(wanted, info), 0.3],
-    [artistScore(wanted, info), 0.2],
+    [title, 0.3],
+    [artist, 0.2],
     [durationScore(wanted, info, actualDuration), actualDuration !== null ? 0.5 : 0.35],
   ]
   let weight = 0
@@ -105,6 +135,8 @@ export function scoreCandidate(
     sum += value * w
   }
   let score = weight > 0 ? sum / weight : 0.5
+  // Tanpa kecocokan teks, kecocokan durasi saja harus nyaris sempurna: durasi pas (>= 0,9) tetap lolos, selisih sedang tidak.
+  if (unverifiable) score *= 0.92
   if (viaLink) score += 0.15
   else {
     const wantedId = extractTrackId(wanted.url ?? '')

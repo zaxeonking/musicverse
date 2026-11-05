@@ -1065,4 +1065,46 @@ public class MusicVerseNativePlugin extends Plugin {
       call.reject("Tidak bisa membuka pengaturan baterai.");
     }
   }
+
+  /** Android 11+: "Jeda aktivitas aplikasi jika tidak digunakan" (auto-revoke / hibernasi). true = aplikasi sudah dikecualikan atau tidak berlaku. */
+  @PluginMethod
+  public void isUnusedAppRestrictionExempt(PluginCall call) {
+    boolean exempt = true;
+    if (Build.VERSION.SDK_INT >= 30) {
+      try {
+        exempt = getContext().getPackageManager().isAutoRevokeWhitelisted();
+      } catch (RuntimeException ignored) {
+        exempt = true; // tidak bisa dicek: jangan mengganggu pengguna
+      }
+    }
+    JSObject result = new JSObject();
+    result.put("exempt", exempt);
+    call.resolve(result);
+  }
+
+  /** Membuka layar izin aplikasi tempat saklar "Jeda aktivitas aplikasi jika tidak digunakan" berada. */
+  @PluginMethod
+  public void openUnusedAppRestrictionSettings(PluginCall call) {
+    String pkg = getContext().getPackageName();
+    Uri uri = Uri.parse("package:" + pkg);
+    if (Build.VERSION.SDK_INT >= 30) {
+      try {
+        Intent direct = new Intent(Intent.ACTION_AUTO_REVOKE_PERMISSIONS, uri);
+        direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(direct);
+        call.resolve();
+        return;
+      } catch (RuntimeException ignored) {
+        // jatuh ke halaman info aplikasi
+      }
+    }
+    try {
+      Intent details = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri);
+      details.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      getContext().startActivity(details);
+      call.resolve();
+    } catch (RuntimeException e) {
+      call.reject("Tidak bisa membuka pengaturan aplikasi.");
+    }
+  }
 }

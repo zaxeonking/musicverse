@@ -50,7 +50,6 @@ export default function PlaylistHeader({
   title,
   cover,
   trackCount,
-  fromCache = false,
   onPlayAll,
   onReload,
   addedAsPlaylist = false,
@@ -76,11 +75,6 @@ export default function PlaylistHeader({
           <p className="mt-3 text-sm text-ink">
             {trackCount} lagu
           </p>
-          {fromCache && (
-            <p className="mt-1 text-xs text-ink-muted">
-              Dari penyimpanan di perangkat ini, mungkin belum yang terbaru. Tekan Muat ulang untuk memperbarui.
-            </p>
-          )}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
             <button
               type="button"

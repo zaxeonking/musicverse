@@ -22,6 +22,7 @@ import LibraryPage from './pages/LibraryPage'
 import MyPlaylistPage from './pages/MyPlaylistPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
+import { installBackgroundGuard } from './native/backgroundGuard'
 import { installBackGuard, prepareHistory } from './utils/backGuard'
 
 prepareHistory()
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
 ])
 
 installBackGuard(router)
+installBackgroundGuard()
 
 export default function App() {
   return (

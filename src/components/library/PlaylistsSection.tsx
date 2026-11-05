@@ -6,7 +6,6 @@ import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsCo
 import { usePlaylist } from '../../context/PlaylistContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
-import { isNativeApp } from '../../native/platform'
 import type { LibrarySort, LibraryView, MyPlaylist, SavedPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { toPlaylistDetail } from '../../utils/libraryStorage'
@@ -241,17 +240,6 @@ export default function PlaylistsSection() {
             )}
           </ul>
 
-          {entries.some((entry) => entry.kind === 'mine') && (
-            <p className="text-xs text-ink-faint">Tahan lama playlist buatanmu untuk menyalin atau memindahkan semua lagunya.</p>
-          )}
-
-          {saved.length > 0 && (
-            <p className="text-xs text-ink-faint">
-              {isNativeApp()
-                ? 'Disimpan di penyimpanan aplikasi (Android/data). Lagu hanya bisa diputar offline jika sudah diunduh.'
-                : 'Disimpan hanya di browser ini dan bisa hilang jika data browser dihapus. Memutar lagu tetap membutuhkan koneksi internet.'}
-            </p>
-          )}
         </div>
       )}
       {menuPlaylist && <PlaylistMenuSheet playlist={menuPlaylist} onClose={() => setMenuId(null)} onToast={showToast} />}

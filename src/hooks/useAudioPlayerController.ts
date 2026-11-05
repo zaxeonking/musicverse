@@ -82,7 +82,7 @@ interface Preload {
 }
 
 /** Berapa lagu di depan yang URL-nya di-resolve lebih awal dan diserahkan ke native (pindah lagu tanpa JS saat WebView beku). */
-const NATIVE_UPCOMING_DEPTH = 5
+const NATIVE_UPCOMING_DEPTH = 12
 /** URL hasil resolve yang lebih tua dari ini tidak diserahkan lagi ke native (link YouTube kedaluwarsa setelah beberapa jam). */
 const UPCOMING_MAX_AGE_MS = 90 * 60_000
 

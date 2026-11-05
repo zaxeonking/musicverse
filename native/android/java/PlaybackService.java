@@ -374,6 +374,7 @@ public class PlaybackService extends Service {
           emitEngine("durationchange", 0, null);
           emitEngine("loadedmetadata", 0, null);
         }
+        releaseChainLoading();
       } else if (state == Player.STATE_ENDED) {
         // Saat JS beku, native selalu memakai antrean upcoming sebagai sumber kebenaran.
         // Standby bisa disiapkan oleh JS (autoAdvance) atau oleh rantai native; keduanya harus
@@ -392,15 +393,8 @@ public class PlaybackService extends Service {
     @Override public void onIsPlayingChanged(boolean isPlaying) {
       if (isPlaying) {
         emitEngine("playing", 0, null);
-        // Lagu hasil pindah native (JS beku): lepas indikator memuat dan isi durasi dari pemutar.
-        if (nativeInCharge() && current.loading && player != null) {
-          State s = snapshot();
-          s.loading = false;
-          s.playing = true;
-          long dur = player.getDuration();
-          if (dur != C.TIME_UNSET && dur > 0) s.durationMs = dur;
-          applyInternal(s, false);
-        }
+        // Lagu hasil pindah native: lepas indikator memuat, isi durasi dan posisi dari pemutar.
+        releaseChainLoading();
       }
     }
 
@@ -428,6 +422,8 @@ public class PlaybackService extends Service {
 
     @Override public void onPlayerError(PlaybackException error) {
       if (fallbackActive()) return; // gagal langsung (4xx / jaringan): ulang lewat proxy dari posisi yang sama
+      // JS beku dan tidak bisa mengambil link baru: lompati lagu yang rusak daripada diam selamanya.
+      if (!jsAlive() && chainAdvance(true)) return;
       emitEngine("error", mapError(error.errorCode), null);
     }
 
@@ -974,6 +970,9 @@ public class PlaybackService extends Service {
   private MediaSession session;
   private PowerManager.WakeLock wakeLock;
   private final State current = new State();
+  /** True sejak native pindah lagu sendiri (rantai) sampai audio benar-benar berbunyi; JS yang beku tidak bisa melepas indikator memuat. */
+  private boolean chainLoading = false;
+  private long chainLoadingSince = 0;
   private Bitmap defaultCover;
   /** Metadata yang terakhir dipasang ke sesi. Dipasang ulang hanya jika berubah: set ulang terus-menerus membuat kartu media sistem memuat ulang dan bilahnya kembali ke awal. */
   private String metaKey = "";
@@ -1023,6 +1022,7 @@ public class PlaybackService extends Service {
   private final Runnable ticker = new Runnable() {
     @Override public void run() {
       if (stopped || !current.playing || session == null) return;
+      releaseChainLoading();
       pushPlaybackState();
       // ROM yang menggambar bilah dari notifikasi (bukan dari sesi) hanya bergerak jika notifikasinya ikut diperbarui.
       NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -1173,6 +1173,8 @@ public class PlaybackService extends Service {
     s.hasPrevious = true;
     s.interrupted = false;
     s.resetCover = true;
+    chainLoading = true;
+    chainLoadingSince = SystemClock.elapsedRealtime();
     applyInternal(s, false);
     fetchCover(item);
     emitEngine("advanced", 0, "idx:" + item.index);
@@ -1188,6 +1190,29 @@ public class PlaybackService extends Service {
     if (standby != null && standbyItem == null) return; // pemutar cadangan milik JS: jangan ditimpa
     doStandbyLoad(next.url, next.cacheKey);
     if (standby != null) standbyItem = next;
+  }
+
+
+  /**
+   * Lepas indikator "memuat" setelah native pindah lagu sendiri. Dulu hanya dilepas oleh onIsPlayingChanged dan hanya bila
+   * JS dianggap beku; kalau peristiwa itu terlewat (JS terbangun sebentar, crossfade dari pemutar cadangan, dsb.) bilah progres
+   * notifikasi terus berputar dan tombol Sebelumnya/Berikutnya terkunci. Sekarang juga dicek tiap detik dari keadaan pemutar.
+   */
+  private void releaseChainLoading() {
+    if (!chainLoading) return;
+    ExoPlayer p = player;
+    if (stopped || p == null) return;
+    boolean sounding = p.isPlaying() || (p.getPlaybackState() == Player.STATE_READY && p.getPlayWhenReady());
+    boolean timedOut = SystemClock.elapsedRealtime() - chainLoadingSince > 12_000L && p.getPlaybackState() == Player.STATE_READY;
+    if (!sounding && !timedOut) return;
+    chainLoading = false;
+    State s = snapshot();
+    s.loading = false;
+    s.playing = p.getPlayWhenReady();
+    s.positionMs = Math.max(0, p.getCurrentPosition());
+    long dur = p.getDuration();
+    if (dur != C.TIME_UNSET && dur > 0) s.durationMs = dur;
+    applyInternal(s, false);
   }
 
   private State snapshot() {
@@ -1273,6 +1298,21 @@ public class PlaybackService extends Service {
       emit(action, -1);
       // Jaring pengaman untuk Putar/Jeda: bila JS beku sehingga tidak bereaksi, native mengerjakannya sendiri sebentar lagi.
       if (action.equals("play") || action.equals("pause")) handler.postDelayed(() -> nativeFallback(action), 1_200L);
+      // Next/Previous: bila JS setengah beku (belum lewat batas detak) dan sama sekali tidak bereaksi, native mengerjakannya sendiri.
+      // "Tidak bereaksi" = tidak ada kabar dari JS sejak tombol ditekan dan lagu belum berganti.
+      if (action.equals("next") || action.equals("previous")) {
+        final long pressedAt = SystemClock.elapsedRealtime();
+        final String before = current.title + "\u0001" + playingIndex;
+        handler.postDelayed(() -> {
+          if (stopped || lastJsUpdateAt > pressedAt) return;
+          if (!before.equals(current.title + "\u0001" + playingIndex)) return;
+          if (action.equals("next")) chainAdvance(true);
+          else if (player != null && hasMedia) {
+            player.seekTo(0);
+            player.play();
+          }
+        }, 4_000L);
+      }
       return;
     }
     switch (action) {
@@ -1360,7 +1400,10 @@ public class PlaybackService extends Service {
   /** `fromJs` false = pembaruan native (rantai lagu / tombol notifikasi): tidak boleh dianggap detak JS. */
   void applyInternal(State next, boolean fromJs) {
     if (stopped) return;
-    if (fromJs) lastJsUpdateAt = SystemClock.elapsedRealtime();
+    if (fromJs) {
+      lastJsUpdateAt = SystemClock.elapsedRealtime();
+      chainLoading = false; // JS hidup lagi dan memegang keadaan
+    }
     current.title = next.title;
     current.artist = next.artist;
     current.album = next.album;

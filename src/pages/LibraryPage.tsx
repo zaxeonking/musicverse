@@ -76,7 +76,6 @@ export default function LibraryPage() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Playlist</h1>
-          <p className="mt-1 text-ink-muted">Playlist buatanmu, yang pernah kamu muat, dan lagu yang baru kamu putar.</p>
         </div>
         {saved.length > 0 && (
           <Link to="/" className={primaryButton}>
@@ -140,7 +139,6 @@ export default function LibraryPage() {
       <section aria-label="Baru diputar">
         <SectionHeader
           title="Baru diputar"
-          subtitle={recent.length > 0 ? 'Lagu yang terakhir benar-benar terdengar' : undefined}
           action={
             recent.length > 0 ? (
               <button
