@@ -45,22 +45,22 @@ export default function BottomNav() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent"
           />
-          {/* Kapsul kaca tab aktif (gaya iOS 26): lebih tinggi & lebar dari selnya sehingga sedikit keluar dari bar, tepinya
-              berkilau dan diwarnai aksen tema. Meluncur antar tab; hilang bila tak ada tab aktif (mis. Pengaturan). */}
+          {/* Penanda tab aktif: kotak kaca melengkung yang ringkas, hanya selebar ikon + label dan tetap di dalam bar,
+              diwarnai aksen tema. Meluncur antar tab; hilang bila tak ada tab aktif (mis. Pengaturan). */}
           <span
             aria-hidden="true"
             style={{
-              width: `calc((100% - 0.5rem) / ${Math.max(items.length, 1)} + 0.5rem)`,
-              left: `calc(0rem + (100% - 0.5rem) * ${Math.max(active, 0)} / ${Math.max(items.length, 1)})`,
+              width: '4.5rem',
+              left: `calc(0.25rem + (100% - 0.5rem) * (${Math.max(active, 0)} + 0.5) / ${Math.max(items.length, 1)} - 2.25rem)`,
               opacity: active >= 0 ? 1 : 0,
               backgroundImage:
                 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
             }}
-            className="pointer-events-none absolute -inset-y-[0.3rem] overflow-hidden rounded-full border border-white/25 bg-accent/[0.10] shadow-[0_6px_18px_rgba(0,0,0,0.5),inset_0_1.5px_0_rgba(255,255,255,0.3),inset_0_-1px_0_rgba(255,255,255,0.08)] transition-[left,opacity] duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)] motion-reduce:transition-none"
+            className="pointer-events-none absolute inset-y-1 overflow-hidden rounded-2xl border border-white/20 bg-accent/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(255,255,255,0.06)] transition-[left,opacity] duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)] motion-reduce:transition-none"
           >
             {/* Cahaya hijau (warna aksen tema) di belakang ikon tab aktif. */}
-            <span className="absolute left-1/2 top-[38%] h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/70 blur-xl" />
-            <span className="absolute left-1/2 top-[38%] h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-soft/60 blur-md" />
+            <span className="absolute left-1/2 top-[38%] h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/50 blur-lg" />
+            <span className="absolute left-1/2 top-[38%] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent-soft/40 blur-md" />
           </span>
           <ul className="relative flex">
             {items.map(({ to, label, icon: Icon }) => (
@@ -70,7 +70,7 @@ export default function BottomNav() {
                   end={to === '/'}
                   tabIndex={keyboardOpen ? -1 : undefined}
                   className={({ isActive }) =>
-                    `group flex h-14 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] leading-none transition-[color,transform] duration-200 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+                    `group flex h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] leading-none transition-[color,transform] duration-200 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
                       isActive ? 'font-semibold text-accent-soft' : 'font-medium text-ink/85 hover:text-ink'
                     }`
                   }

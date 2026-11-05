@@ -16,6 +16,7 @@ import { PlayerError, RepeatButton, ShuffleButton, SpotifyLink, TransportControl
 import LyricsPanel from './LyricsPanel'
 import SeekBar from './SeekBar'
 import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
+import { isNativeApp } from '../../native/platform'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -338,10 +339,10 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
             trailing={<ShuffleButton size="lg" className="flex" />}
           />
 
-          {/* Baris 2: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <RepeatButton size="lg" className="flex" />
+          {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
+              putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
+          {(() => {
+            const lyricsBtn = (
               <button
                 type="button"
                 onClick={() => setShowLyrics((value) => !value)}
@@ -352,12 +353,30 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               >
                 <Mic2 className="h-6 w-6" aria-hidden="true" />
               </button>
-            </div>
-            <div className="flex items-center gap-4">
-              <CrossfadeButton variant="icon" onClick={() => setCrossfadeOpen(true)} />
-              <SpotifyLink url={now.spotifyUrl} variant="icon" className="!h-12 !w-12 !text-ink" />
-            </div>
-          </div>
+            )
+            return isNativeApp() ? (
+              <div className="grid grid-cols-3 items-center">
+                <div className="flex justify-start">
+                  <RepeatButton size="lg" className="flex" />
+                </div>
+                <div className="flex justify-center">{lyricsBtn}</div>
+                <div className="flex justify-end">
+                  <CrossfadeButton variant="icon" onClick={() => setCrossfadeOpen(true)} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <RepeatButton size="lg" className="flex" />
+                  {lyricsBtn}
+                </div>
+                <div className="flex items-center gap-4">
+                  <CrossfadeButton variant="icon" onClick={() => setCrossfadeOpen(true)} />
+                  <SpotifyLink url={now.spotifyUrl} variant="icon" className="!h-12 !w-12 !text-ink" />
+                </div>
+              </div>
+            )
+          })()}
           {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
           {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
 
