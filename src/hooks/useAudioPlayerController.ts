@@ -375,7 +375,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       // Memuat ulang di sini membuat lagu yang sama diputar lagi dari awal terus-menerus.
       if ((code === 'network' || code === 'timeout') && current.currentIndex !== null) {
         const { currentTime, duration } = timeRef.current
-        if (duration > 0 && currentTime >= duration - 5) {
+        if (duration !== null && duration > 0 && currentTime >= duration - 5) {
           console.warn(`[MusicVerse] Galat ${code} di ujung lagu (${currentTime.toFixed(1)}/${duration.toFixed(1)}): dianggap selesai, lanjut.`)
           const following = getNextIndex(current.queue, current.currentIndex, current.shuffleOrder)
           if (following !== null) playAtRef.current(following)
