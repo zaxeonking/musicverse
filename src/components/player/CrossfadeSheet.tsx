@@ -1,4 +1,4 @@
-import { Check, VolumeX, Waves } from 'lucide-react'
+import { Check, SlidersHorizontal, VolumeX, Waves } from 'lucide-react'
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { CROSSFADE_OPTIONS_S } from '../../hooks/useAudioPlayerController'
@@ -9,10 +9,31 @@ import Action from './SheetAction'
 const optionLabel = (seconds: number) => (seconds === 0 ? 'Mati' : `${seconds} detik`)
 
 /** Tombol pil di pemutar penuh; menampilkan lama crossfade saat menyala. Tersembunyi jika perangkat tidak mendukung. */
-export function CrossfadeButton({ onClick }: { onClick: () => void }) {
+export function CrossfadeButton({ onClick, variant = 'pill' }: { onClick: () => void; variant?: 'pill' | 'icon' }) {
   const { crossfadeSeconds, crossfadeSupported } = useAudioPlayer()
   if (!crossfadeSupported) return null
   const active = crossfadeSeconds > 0
+  if (variant === 'icon') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-haspopup="dialog"
+        aria-label={active ? `Crossfade ${crossfadeSeconds} detik` : 'Atur crossfade'}
+        title={active ? `Crossfade ${crossfadeSeconds}s` : 'Crossfade'}
+        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-white/10 focus-ring ${
+          active ? 'text-accent' : 'text-ink hover:text-accent'
+        }`}
+      >
+        <SlidersHorizontal className="h-6 w-6" aria-hidden="true" />
+        {active && (
+          <span aria-hidden="true" className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-semibold leading-none tabular-nums">
+            {crossfadeSeconds}s
+          </span>
+        )}
+      </button>
+    )
+  }
   return (
     <button
       type="button"

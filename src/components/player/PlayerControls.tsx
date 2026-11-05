@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { isNativeApp } from '../../native/platform'
 import {
   AlertCircle,
@@ -45,9 +46,12 @@ export function describeMainButton(status: PlaybackStatus): { kind: ButtonKind; 
 const FOCUS = 'focus-ring'
 
 interface TransportControlsProps {
-  /** `lg` dipakai di FullPlayer. */
-  size?: 'md' | 'lg'
+  /** `lg` dipakai di FullPlayer lama; `xl` = tombol putar besar bercahaya. */
+  size?: 'md' | 'lg' | 'xl'
   className?: string
+  /** Bila diisi (leading/trailing), menggantikan tombol acak/ulang bawaan di kiri/kanan. */
+  leading?: ReactNode
+  trailing?: ReactNode
 }
 
 /** Teks tombol ulang, dipakai aria-label dan tooltip. Menjelaskan mode sekarang dan hasil ketukan berikutnya. */
@@ -119,16 +123,17 @@ export function RepeatButton({ size = 'md', className = '' }: { size?: 'md' | 'l
 }
 
 /** Previous · Play/Pause · Next, semuanya memanggil aksi dari audio engine yang sama. */
-export function TransportControls({ size = 'md', className = '' }: TransportControlsProps) {
+export function TransportControls({ size = 'md', className = '', leading, trailing }: TransportControlsProps) {
   const { status, hasPrevious, hasNext, togglePlayPause, playNext, playPrevious } = useAudioPlayer()
   const { seekable } = usePlaybackTime()
   const main = describeMainButton(status)
-  const big = size === 'lg'
+  const big = size !== 'md'
+  const xl = size === 'xl'
   // Mobile: target sentuh ≥44px. Desktop (pointer presisi) boleh lebih ringkas.
   const side = big ? 'h-12 w-12' : 'h-11 w-11 lg:h-9 lg:w-9'
-  const middle = big ? 'h-16 w-16' : 'h-12 w-12 lg:h-10 lg:w-10'
-  const icon = big ? 'h-7 w-7' : 'h-5 w-5'
-  const sideIcon = big ? 'h-7 w-7' : 'h-5 w-5'
+  const middle = xl ? 'h-20 w-20' : big ? 'h-16 w-16' : 'h-12 w-12 lg:h-10 lg:w-10'
+  const icon = xl ? 'h-9 w-9' : big ? 'h-7 w-7' : 'h-5 w-5'
+  const sideIcon = xl ? 'h-8 w-8' : big ? 'h-7 w-7' : 'h-5 w-5'
   const MainIcon = main.kind === 'pause' ? Pause : main.kind === 'busy' ? Loader2 : main.kind === 'retry' ? RotateCw : Play
 
   // Previous tetap berguna di lagu pertama bila bisa mengulang dari 0:00.
@@ -137,7 +142,7 @@ export function TransportControls({ size = 'md', className = '' }: TransportCont
   return (
     <div className={`flex items-center justify-center ${big ? 'gap-2 sm:gap-4' : 'gap-1'} ${className}`}>
       {/* Mini player sempit: acak & ulang ada di full player; di layar lebar ikut tampil di sini. */}
-      <ShuffleButton size={size} className={big ? 'flex' : 'hidden sm:flex'} />
+      {leading ?? <ShuffleButton size={xl ? 'lg' : size} className={big ? 'flex' : 'hidden sm:flex'} />}
       <button
         type="button"
         onClick={playPrevious}
@@ -155,7 +160,7 @@ export function TransportControls({ size = 'md', className = '' }: TransportCont
         aria-label={main.label}
         aria-busy={main.kind === 'busy'}
         data-player-status={status}
-        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
+        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black ${xl ? 'shadow-[0_0_36px_rgba(255,255,255,0.35)]' : ''} transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
       >
         <MainIcon
           className={`${icon} ${main.kind === 'busy' ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -173,7 +178,7 @@ export function TransportControls({ size = 'md', className = '' }: TransportCont
       >
         <SkipForward className={sideIcon} fill="currentColor" aria-hidden="true" />
       </button>
-      <RepeatButton size={size} className={big ? 'flex' : 'hidden sm:flex'} />
+      {trailing ?? <RepeatButton size={xl ? 'lg' : size} className={big ? 'flex' : 'hidden sm:flex'} />}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { Moon, Music2, TimerOff } from 'lucide-react'
+import { AlarmClock, Moon, Music2, TimerOff } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useSleepTimer } from '../../context/SleepTimerContext'
@@ -25,10 +25,31 @@ export function useRemainingSeconds(endsAt: number | null): number | null {
 }
 
 /** Tombol pil di pemutar penuh; menampilkan sisa waktu saat timer menyala. */
-export function SleepTimerButton({ onClick }: { onClick: () => void }) {
+export function SleepTimerButton({ onClick, variant = 'pill' }: { onClick: () => void; variant?: 'pill' | 'icon' }) {
   const { endsAt, atTrackEnd, active } = useSleepTimer()
   const remaining = useRemainingSeconds(endsAt)
   const label = remaining !== null ? formatTime(remaining) : atTrackEnd ? 'Akhir lagu' : 'Timer'
+  if (variant === 'icon') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-haspopup="dialog"
+        aria-label={active ? `Sleep timer aktif: ${label}` : 'Atur sleep timer'}
+        title={active ? label : 'Sleep timer'}
+        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-white/10 focus-ring ${
+          active ? 'text-accent' : 'text-ink hover:text-accent'
+        }`}
+      >
+        <AlarmClock className="h-7 w-7" aria-hidden="true" />
+        {active && (
+          <span aria-hidden="true" className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] font-semibold leading-none tabular-nums">
+            {label}
+          </span>
+        )}
+      </button>
+    )
+  }
   return (
     <button
       type="button"

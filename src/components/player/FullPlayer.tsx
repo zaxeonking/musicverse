@@ -1,5 +1,5 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
-import { AlertCircle, ChevronDown, FolderPlus, Mic2 } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
@@ -11,7 +11,7 @@ import { noticeMessage } from '../../utils/libraryNotice'
 import { looksLikeSameTrack, STATUS_TEXT } from '../../utils/playerStatus'
 import CoverArt from '../ui/CoverArt'
 import MarqueeText from '../ui/MarqueeText'
-import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
+import { PlayerError, RepeatButton, ShuffleButton, SpotifyLink, TransportControls } from './PlayerControls'
 import LyricsPanel from './LyricsPanel'
 import SeekBar from './SeekBar'
 import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
@@ -232,6 +232,8 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   if (!now || !currentTrack) return null
   const isError = status === 'error'
   const mismatch = playbackInfo !== null && !looksLikeSameTrack(currentTrack, playbackInfo)
+  const iconBtn =
+    'flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-white/10 focus-ring'
 
   return (
     <div
@@ -241,26 +243,37 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
       className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-y-auto bg-bg"
-      style={{ backgroundImage: `linear-gradient(180deg, ${now.cover.from}66 0%, #121212 70%)` }}
+      style={{ backgroundImage: `linear-gradient(180deg, ${now.cover.from}55 0%, #0b080c 62%, #0b080c 100%)` }}
     >
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <header className="flex items-center justify-between">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col pb-4 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <header className="grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
             type="button"
             onClick={animateClose}
             aria-label="Tutup pemutar penuh"
-            className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-white/10 focus-ring"
+            className={`-ml-2 text-ink hover:bg-white/10 ${iconBtn}`}
           >
-            <ChevronDown className="h-7 w-7" aria-hidden="true" />
+            <ChevronDown className="h-8 w-8" aria-hidden="true" />
           </button>
-          <p className="truncate px-2 text-sm font-medium text-ink-muted">Sedang diputar</p>
-          <QueueButton onClick={onOpenQueue} size="lg" className="-mr-2 flex" />
+          <div className="min-w-0 px-2 text-center leading-tight">
+            <p className="truncate text-sm font-semibold text-ink">Sedang diputar</p>
+            <p className="truncate text-sm text-ink-muted">{now.album || now.artists}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
+            aria-haspopup="dialog"
+            aria-label="Menu lagu"
+            className={`-mr-2 justify-self-end text-ink hover:bg-white/10 ${iconBtn}`}
+          >
+            <MoreVertical className="h-6 w-6" aria-hidden="true" />
+          </button>
         </header>
 
         {/* Slot tengah: sampul, atau (saat lirik dibuka) lirik tanpa latar, lebih lebar dan tinggi. */}
@@ -270,61 +283,73 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} />
             </div>
           ) : (
-            <div {...press} className="w-[min(100%,38dvh,26rem)] select-none shadow-2xl shadow-black/50 [-webkit-touch-callout:none]">
+            <div
+              {...press}
+              className="w-[min(100%,40dvh,26rem)] select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
+            >
               <CoverArt cover={now.cover} src={now.coverSrc} />
             </div>
           )}
         </div>
 
-        <div className="space-y-4 sm:space-y-5">
-          <div {...press} className="min-w-0 select-none [-webkit-touch-callout:none]">
-            <h2 title={now.title} className="line-clamp-2 break-words font-display text-2xl font-bold leading-tight text-ink">
-              {now.title}
-            </h2>
-            <MarqueeText text={now.artists} className="mt-1 text-base text-ink-muted" />
-            {now.album && <MarqueeText text={now.album} className="mt-0.5 text-sm text-ink-faint" />}
+        <div className="space-y-3">
+          <div className="flex items-start gap-3">
+            <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
+              <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
+                {now.title}
+              </h2>
+              <MarqueeText text={now.artists} className="mt-1 text-base font-medium uppercase tracking-wide text-ink-muted" />
+            </div>
+            <button
+              type="button"
+              onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
+              aria-haspopup="dialog"
+              aria-label="Simpan ke playlist"
+              title="Simpan ke playlist"
+              className={`-mr-1 mt-0.5 text-ink hover:text-accent ${iconBtn}`}
+            >
+              <Heart className="h-7 w-7" aria-hidden="true" />
+            </button>
           </div>
 
           {isError ? (
             <PlayerError />
           ) : (
             <>
-              <SeekBar />
+              <SeekBar stacked />
               <p role="status" className="min-h-4 text-center text-xs text-ink-muted" aria-live="polite">
                 {status === 'playing' ? '' : STATUS_TEXT[status]}
               </p>
             </>
           )}
 
-          <TransportControls size="lg" />
+          {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
+          <TransportControls
+            size="xl"
+            className="!justify-between"
+            leading={<SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />}
+            trailing={<ShuffleButton size="lg" className="flex" />}
+          />
 
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
-              aria-haspopup="dialog"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/20 px-5 text-sm font-semibold text-ink transition-colors hover:border-accent active:bg-white/10 focus-ring"
-            >
-              <FolderPlus className="h-4 w-4" aria-hidden="true" />
-              Simpan
-            </button>
-            <SpotifyLink url={now.spotifyUrl} variant="button" />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowLyrics((value) => !value)}
-              aria-pressed={showLyrics}
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-5 text-sm font-semibold transition-colors active:bg-white/10 focus-ring ${
-                showLyrics ? 'border-accent text-accent' : 'border-white/20 text-ink hover:border-accent'
-              }`}
-            >
-              <Mic2 className="h-4 w-4" aria-hidden="true" />
-              Lirik
-            </button>
-            <CrossfadeButton onClick={() => setCrossfadeOpen(true)} />
-            <SleepTimerButton onClick={() => setTimerOpen(true)} />
+          {/* Baris 2: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <RepeatButton size="lg" className="flex" />
+              <button
+                type="button"
+                onClick={() => setShowLyrics((value) => !value)}
+                aria-pressed={showLyrics}
+                aria-label={showLyrics ? 'Sembunyikan lirik' : 'Tampilkan lirik'}
+                title="Lirik"
+                className={`${iconBtn} ${showLyrics ? 'text-accent' : 'text-ink hover:text-accent'}`}
+              >
+                <Mic2 className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="flex items-center gap-4">
+              <CrossfadeButton variant="icon" onClick={() => setCrossfadeOpen(true)} />
+              <SpotifyLink url={now.spotifyUrl} variant="icon" className="!h-12 !w-12 !text-ink" />
+            </div>
           </div>
           {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
           {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
@@ -347,6 +372,18 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
           )}
         </div>
       </div>
+
+      {/* Bar "Berikutnya": membuka antrean (seperti handle sheet di pemutar referensi). */}
+      <button
+        type="button"
+        onClick={onOpenQueue}
+        aria-label="Buka antrean"
+        className="sticky bottom-0 mt-2 flex w-full items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
+      >
+        <ListMusic className="h-5 w-5" aria-hidden="true" />
+        Berikutnya
+        <ChevronUp className="h-5 w-5" aria-hidden="true" />
+      </button>
     </div>
   )
 }

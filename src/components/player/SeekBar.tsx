@@ -5,6 +5,8 @@ import { formatTime, parseDuration } from '../../utils/formatTime'
 interface SeekBarProps {
   /** Ukuran jejak progres: mini lebih tipis. */
   size?: 'sm' | 'md'
+  /** Waktu di atas bar (kiri/kanan) alih-alih mengapit bar. */
+  stacked?: boolean
   className?: string
 }
 
@@ -16,7 +18,7 @@ interface SeekBarProps {
  * Bisa digeser HANYA bila audio melaporkan `seekable` dan statusnya playing/buffering/paused.
  * Selain itu yang tampil hanya bar progres biasa (role=progressbar), tanpa kontrol.
  */
-export default function SeekBar({ size = 'md', className = '' }: SeekBarProps) {
+export default function SeekBar({ size = 'md', stacked = false, className = '' }: SeekBarProps) {
   const { currentTime, duration: engineDuration, seekable } = usePlaybackTime()
   const { status, currentTrack, playbackInfo, seekTo } = useAudioPlayer()
   // Stream tanpa Content-Length membuat elemen audio melaporkan durasi tak terhingga (null di sini).
@@ -82,11 +84,18 @@ export default function SeekBar({ size = 'md', className = '' }: SeekBarProps) {
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 text-xs tabular-nums text-ink-muted ${className}`}>
-      <span className="w-10 shrink-0 text-right" aria-hidden="true">
-        {formatTime(duration ? Math.min(shown, duration) : shown)}
-      </span>
+      {stacked ? (
+        <div className="flex basis-full justify-between text-sm" aria-hidden="true">
+          <span>{formatTime(duration ? Math.min(shown, duration) : shown)}</span>
+          <span>{duration ? formatTime(duration) : '--:--'}</span>
+        </div>
+      ) : (
+        <span className="w-10 shrink-0 text-right" aria-hidden="true">
+          {formatTime(duration ? Math.min(shown, duration) : shown)}
+        </span>
+      )}
 
-      <div className={`group relative flex flex-1 items-center ${size === 'sm' ? '-my-1.5 h-8' : 'h-10'}`}>
+      <div className={`group relative flex items-center ${stacked ? 'basis-full' : 'flex-1'} ${size === 'sm' ? '-my-1.5 h-8' : 'h-10'}`}>
         <div
           className={`${trackHeight} w-full overflow-hidden rounded-full bg-raised group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-accent`}
         >
@@ -142,9 +151,11 @@ export default function SeekBar({ size = 'md', className = '' }: SeekBarProps) {
         )}
       </div>
 
-      <span className="w-10 shrink-0" aria-hidden="true">
-        {duration ? formatTime(duration) : '--:--'}
-      </span>
+      {!stacked && (
+        <span className="w-10 shrink-0" aria-hidden="true">
+          {duration ? formatTime(duration) : '--:--'}
+        </span>
+      )}
 
       {seekBlocked && size === 'md' && (
         <p role="status" className="basis-full text-center text-[11px] text-ink-faint">
