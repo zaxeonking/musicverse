@@ -61,3 +61,22 @@ export function strictDurationProblem(actual: number | null, expected: number | 
   if (diff <= tolerance) return null
   return `Durasi audio (${Math.round(actual)} dtk) berbeda ${Math.round(diff)} dtk dari lagu di playlist (${Math.round(expected)} dtk).`
 }
+
+/**
+ * Pemeriksa klip untuk SATU lagu yang dimuat: hanya durasi PERTAMA yang terbaca untuk lagu itu yang diperiksa, sekali.
+ * Event durasi sesudahnya BUKAN file lagu ini lagi, mis. mesin native pindah ke lagu berikutnya (crossfade / gapless) dan
+ * melapor durasi lagu LAIN (posisi 0). Dulu pemeriksa tetap aktif sepanjang lagu, jadi durasi lagu berikutnya
+ * dibandingkan dengan durasi lagu ini, dianggap "klip", lalu lagu ini dimuat ulang dari awal (lagu seperti berulang).
+ */
+export function createClipGuard(
+  expected: number | null,
+  isStale: () => boolean,
+  onClip: (duration: number) => void,
+): (duration: number) => void {
+  let done = false
+  return (duration) => {
+    if (done || isStale()) return
+    done = true
+    if (isLikelyClip(duration, expected)) onClip(duration)
+  }
+}

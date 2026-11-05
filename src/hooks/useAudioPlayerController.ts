@@ -18,7 +18,7 @@ import type { ApiSourceName, PlayAllHandler, PlaybackInfo, PlaylistTrack, PlayTr
 import { clearPlayerSession, loadPlayerSession, savePlayerPosition, savePlayerQueue } from '../utils/playerSession'
 import { prefetchLyrics } from './useLyrics'
 import { warmResolve } from '../plugins/registry'
-import { isLikelyClip } from '../utils/clipDetect'
+import { createClipGuard, isLikelyClip } from '../utils/clipDetect'
 import { getNetworkTier, PRELOAD_LEAD_BY_TIER_S, startNetworkMonitor } from '../utils/networkQuality'
 import { plog } from '../utils/playbackLog'
 import { readJson, writeJson } from '../utils/safeStorage'
@@ -865,8 +865,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
         // Durasi file audio yang sebenarnya baru diketahui setelah metadata dimuat. Jika hanya klip
         // (≤35 dtk untuk lagu yang jauh lebih panjang), buang dan coba API lain.
-        clipGuardRef.current = (duration) => {
-          if (isStale() || !isLikelyClip(duration, expectedDuration)) return
+        // Diperiksa SEKALI (durasi pertama lagu ini); durasi dari event berikutnya bisa milik lagu lain (lihat createClipGuard).
+        clipGuardRef.current = createClipGuard(expectedDuration, isStale, (duration) => {
           clipGuardRef.current = null
           if (info.source === 'offline') {
             // Berkas unduhan ternyata cuplikan (terunduh sebelum ada verifikasi): buang, lalu ambil lagi dari internet.
@@ -893,7 +893,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           commit({ status: 'resolving', playbackInfo: null, error: null })
           audioEngine.stop()
           void attempt()
-        }
+        })
 
         // URL sudah ada, tetapi BELUM tentu bisa diputar: tetap "loading" sampai event `playing`.
         commit({ status: 'loading', playbackInfo: info })
