@@ -63,7 +63,10 @@ function createInitialState(): PlaylistState {
 export const PlaylistContext = createContext<PlaylistContextValue | null>(null)
 
 function toMessage(error: unknown): string {
-  if (error instanceof SpotifyApiError) return error.message
+  if (error instanceof SpotifyApiError) {
+    if (['network', 'http', 'api', 'invalid_response'].includes(error.code)) return 'Server sedang bermasalah. Coba lagi.'
+    return error.message
+  }
   return 'Terjadi kesalahan yang tidak terduga. Coba lagi.'
 }
 

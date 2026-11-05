@@ -82,8 +82,7 @@ export class SpotifyApiError extends Error {
   }
 }
 
-function httpErrorMessage(status: number, serverMessage?: string): string {
-  if (serverMessage) return serverMessage
+function httpErrorMessage(status: number, _serverMessage?: string): string {
   if (status === 400) return 'Permintaan ditolak server. Pastikan tautan playlist benar.'
   if (status === 403) return 'Akses ke playlist ditolak. Pastikan playlist bersifat publik.'
   if (status === 404) return 'Playlist tidak ditemukan. Pastikan tautan benar dan playlist bersifat publik.'

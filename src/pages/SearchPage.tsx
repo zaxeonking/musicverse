@@ -36,13 +36,11 @@ export default function SearchPage() {
       <EmptyState
         icon={Music2}
         title="Memuat lagu…"
-        description="Playlist sedang dimuat. Daftar lagu muncul setelah selesai."
       />
     ) : (
       <EmptyState
         icon={Music2}
         title="Belum ada lagu"
-        description="Muat lagu atau playlist Spotify di Beranda, atau simpan ke Koleksi. Semua lagumu akan muncul di sini."
         action={
           <Link to="/" className="btn-primary">
             Ke Beranda

@@ -159,7 +159,6 @@ export default function LibraryPage() {
             compact
             icon={History}
             title="Belum ada lagu yang diputar"
-            description="Lagu yang kamu putar akan muncul di sini, lengkap dengan waktu putarnya."
           />
         ) : (
           <RecentlyPlayedList

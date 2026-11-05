@@ -29,7 +29,7 @@ export async function pluginFetch(url: string, init: PluginFetchInit = {}): Prom
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(url, { method, headers, body, signal: controller.signal })
-    if (!response.ok) throw new Error(`HTTP ${response.status} dari ${new URL(url).host}`)
+    if (!response.ok) throw new Error(`Server error (HTTP ${response.status}).`)
     return response
   } finally {
     clearTimeout(timer)

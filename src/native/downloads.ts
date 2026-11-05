@@ -297,12 +297,8 @@ function installProgressListener(): void {
 }
 
 function errorText(error: unknown): string {
-  if (error instanceof SpotifyApiError) return error.message
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
-    return (error as { message: string }).message
-  }
-  return 'Unduhan gagal.'
+  if (error instanceof SpotifyApiError && error.code === 'aborted') return 'Unduhan dibatalkan.'
+  return 'Server sedang bermasalah. Unduhan gagal.'
 }
 
 async function safeDelete(path: string): Promise<void> {

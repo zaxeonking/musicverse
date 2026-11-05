@@ -33,7 +33,7 @@ export default function EqualizerPage() {
         onChange={() => setEqEnabled(!eq.enabled)}
         icon={SlidersHorizontal}
         label="Aktifkan equalizer"
-        hint="Mulai berlaku di lagu berikutnya. Lagu yang sedang berjalan tidak berubah."
+        hint="Berlaku mulai lagu berikutnya."
       />
 
       <div className={eq.enabled ? '' : 'pointer-events-none opacity-50'} aria-disabled={!eq.enabled}>

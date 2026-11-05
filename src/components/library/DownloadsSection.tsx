@@ -435,7 +435,6 @@ export default function DownloadsSection() {
           compact
           icon={Download}
           title="Belum ada unduhan"
-          description="Tombol “Unduh semua” di playlist menyimpan lagunya langsung ke playlist itu. Unduh satu lagu (tahan lama, lalu “Unduh untuk offline”) jadi lagu satuan, dan bisa dipindah ke playlist mana pun. Berkas disimpan di Android/data/<nama aplikasi>/files/download."
         />
       ) : (
         <div className="space-y-5">

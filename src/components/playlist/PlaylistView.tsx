@@ -34,20 +34,9 @@ function RetryButton() {
   )
 }
 
-/** Detail teknis error; teks bisa dipilih/disalin untuk dikirim saat melapor masalah. */
-function ErrorDetail({ detail }: { detail?: string | null }) {
-  if (!detail) return null
-  return (
-    <details className="w-full max-w-md text-left text-xs text-ink-muted" open>
-      <summary className="cursor-pointer select-none">Detail teknis</summary>
-      <pre className="mt-2 select-text whitespace-pre-wrap break-all rounded-md bg-bg p-3 font-mono">{detail}</pre>
-    </details>
-  )
-}
-
 /** Menampilkan playlist dari API: kosong, memuat, gagal, atau daftar lagu. */
 export default function PlaylistView() {
-  const { status, playlist, error, errorDetail, fromCache, canRetry, loadPlaylist, requestedUrl } = usePlaylist()
+  const { status, playlist, error, fromCache, canRetry, loadPlaylist, requestedUrl } = usePlaylist()
   const wasSearch = requestedUrl !== null && ['search', 'track'].includes(classifyImportInput(requestedUrl).kind)
   const player = useAudioPlayer()
   const { notice, dismissNotice } = useLibrary()
@@ -87,13 +76,7 @@ export default function PlaylistView() {
           icon={AlertCircle}
           tone="error"
           title={wasSearch ? 'Lagu tidak ditemukan' : 'Playlist gagal dimuat'}
-          description={error ?? 'Terjadi kesalahan. Coba lagi.'}
-          action={
-            <div className="flex flex-col items-center gap-4">
-              {canRetry && <RetryButton />}
-              <ErrorDetail detail={errorDetail} />
-            </div>
-          }
+          action={canRetry ? <RetryButton /> : undefined}
         />
       )
     }
@@ -101,7 +84,6 @@ export default function PlaylistView() {
       <EmptyState
         icon={ListMusic}
         title="Belum ada lagu atau playlist"
-        description="Ketik judul lagu, tempel tautan lagu, atau tempel tautan playlist Spotify (playlist harus publik)."
       />
     )
   }
@@ -164,7 +146,6 @@ export default function PlaylistView() {
             </span>
           </p>
           {canRetry && <RetryButton />}
-          <ErrorDetail detail={errorDetail} />
         </div>
       )}
 

@@ -182,7 +182,6 @@ export default function PlaylistsSection() {
           <EmptyState
             icon={Library}
             title="Belum ada playlist"
-            description="Buat playlist sendiri, atau muat playlist Spotify. Keduanya muncul di sini."
             action={
               <Link to="/" className="btn-primary">
                 Muat playlist

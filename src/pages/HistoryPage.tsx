@@ -82,7 +82,6 @@ export default function HistoryPage() {
           compact
           icon={History}
           title="Belum ada riwayat"
-          description="Setiap lagu yang kamu putar dicatat di sini (maksimal 500 putaran terakhir)."
         />
       ) : (
         <>

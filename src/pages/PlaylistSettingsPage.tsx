@@ -21,14 +21,14 @@ export default function PlaylistSettingsPage() {
           onChange={() => setPrefs({ autoAddOpened: !prefs.autoAddOpened })}
           icon={ListPlus}
           label="Tambah otomatis saat playlist dibuka"
-          hint="Mati (bawaan): playlist Spotify yang kamu buka hanya tampil di Beranda, dan baru masuk tab Playlist setelah kamu menekan “Tambah ke playlist”. Nyala: langsung dibuat sebagai playlist begitu berhasil dimuat."
+          hint="Aktif: playlist otomatis ditambahkan saat berhasil dimuat."
         />
         <SettingSwitch
           checked={prefs.confirmMove}
           onChange={() => setPrefs({ confirmMove: !prefs.confirmMove })}
           icon={ArrowRightLeft}
           label="Tanya dulu sebelum memindahkan lagu"
-          hint="Memindahkan lagu (atau semua lagu) ke playlist lain menghapusnya dari playlist asal. Matikan untuk memindahkan langsung tanpa konfirmasi. Menyalin tidak pernah menghapus apa pun."
+          hint="Memindahkan lagu akan menghapusnya dari playlist asal. Menyalin tidak."
         />
       </div>
     </section>

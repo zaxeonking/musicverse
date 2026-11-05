@@ -10,7 +10,7 @@ import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useLongPress } from '../hooks/useLongPress'
 import { bulkDownloadText, downloadTracks } from '../native/downloads'
 import { trackKey } from '../native/offline'
-import { describeApiError, fetchPlaylist } from '../services/spotifyApi'
+import { fetchPlaylist } from '../services/spotifyApi'
 import { isNativeApp } from '../native/platform'
 import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
@@ -99,7 +99,7 @@ export default function MyPlaylistPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Koleksi
         </Link>
-        <EmptyState icon={ListMusic} title="Playlist tidak ditemukan" description="Playlist ini mungkin sudah dihapus." />
+        <EmptyState icon={ListMusic} title="Playlist tidak ditemukan"  />
       </div>
     )
   }
@@ -129,8 +129,8 @@ export default function MyPlaylistPage() {
           ? 'Tidak ada lagu baru. Semua sudah diunduh.'
           : `${fresh.length} lagu baru di Spotify. Mengunduh ${result.queued} lagu.`,
       )
-    } catch (error) {
-      showToast(describeApiError(error))
+    } catch {
+      showToast('Server sedang bermasalah. Coba lagi.')
     } finally {
       setSyncing(false)
     }
@@ -277,7 +277,6 @@ export default function MyPlaylistPage() {
           compact
           icon={ListMusic}
           title="Playlist ini masih kosong"
-          description={builtIn ? 'Ketuk ikon hati di pemutar untuk menyukai lagu; semuanya terkumpul di sini.' : 'Tahan lama pada lagu mana pun (Beranda, Cari, atau pemutar) lalu pilih “Simpan ke playlist saya”.'}
         />
       ) : (
         <ul>

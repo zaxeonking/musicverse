@@ -165,7 +165,6 @@ export default function BrowsePage() {
               compact
               icon={tab === 'artist' ? UserRound : Disc3}
               title="Belum ada data"
-              description="Muat atau putar playlist dulu; artis dan album diambil dari lagu yang ada di perangkat ini."
             />
           ) : (
             <ul className="space-y-1">

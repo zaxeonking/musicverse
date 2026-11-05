@@ -75,7 +75,6 @@ export default function TrackList({
       <EmptyState
         icon={ListMusic}
         title="Playlist ini belum punya lagu"
-        description="Tambahkan lagu di Spotify, lalu klik Muat ulang."
       />
     )
   }
@@ -125,7 +124,6 @@ export default function TrackList({
         <EmptyState
           icon={SearchX}
           title={`Tidak ada hasil untuk “${query.trim()}”`}
-          description="Periksa ejaan, atau coba judul, artis, atau album lain."
           action={
             <button
               type="button"

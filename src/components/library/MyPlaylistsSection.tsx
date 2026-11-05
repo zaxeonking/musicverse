@@ -76,7 +76,6 @@ export default function MyPlaylistsSection() {
           compact
           icon={ListMusic}
           title="Belum ada playlist buatanmu"
-          description="Buat playlist, lalu tambahkan lagu lewat menu lagu (tahan lama pada lagu). Ketuk ikon hati di pemutar untuk mengumpulkan lagu ke Lagu Disukai."
         />
       )}
     </section>

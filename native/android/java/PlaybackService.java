@@ -375,18 +375,12 @@ public class PlaybackService extends Service {
           emitEngine("loadedmetadata", 0, null);
         }
       } else if (state == Player.STATE_ENDED) {
-        // Lagu cadangan sudah siap dan JS mengizinkan: pindah sendiri tanpa menunggu WebView (bisa ditahan di latar belakang).
-        // Hanya saat JS beku (!jsAlive): bila JS hidup, JS yang memproses `ended` dan memindah lagu sendiri. Dua pengendali
-        // sekaligus membuat lagu berikutnya diputar dua kali (native pindah ke cadangan, lalu JS memuatnya lagi).
-        if (autoAdvance && !jsAlive() && standby != null && player != null && player.getPlayWhenReady() && doCrossfade(150)) {
-          autoAdvance = false;
-          // Daftar rantai dibuat untuk lagu yang BARU SAJA selesai: isinya (lagu cadangan ini) sudah diputar. Tanpa dibuang,
-          // saat lagu cadangan selesai rantai memutarnya LAGI (lagu berulang walau mode ulang mati).
-          upcoming.clear();
-          standbyItem = null;
-          knownIndex = -1;
-          emitEngine("advanced", 0, null);
-        } else if (!jsAlive() && chainAdvance(false)) {
+        // Saat JS beku, native selalu memakai antrean upcoming sebagai sumber kebenaran.
+        // Standby bisa disiapkan oleh JS (autoAdvance) atau oleh rantai native; keduanya harus
+        // melewati chainAdvance agar metadata notifikasi, indeks, sampul, dan sisa antrean ikut diperbarui.
+        // Jalur lama melakukan crossfade langsung lalu mengosongkan seluruh antrean, sehingga
+        // notifikasi tertinggal di lagu sebelumnya dan pemutaran berhenti setelah standby habis.
+        if (!jsAlive() && chainAdvance(false)) {
           // Pindah ke lagu berikutnya dari daftar native (JS tidak diperlukan).
         } else {
           if (nativeInCharge()) markNativePlaying(false); // rantai habis saat JS beku: tombol notifikasi harus jadi "putar"
@@ -1155,7 +1149,12 @@ public class PlaybackService extends Service {
       pushHasNext();
       return false;
     }
-    boolean viaStandby = standby != null && standbyItem == item && standby.getPlayerError() == null && doCrossfade(150);
+    // Standby dapat dimuat oleh JS sebelum WebView membeku (standbyItem == null),
+    // atau oleh preloadChainStandby. Cocokkan URL agar kedua jalur memakai audio siap tanpa memuat ulang.
+    boolean viaStandby = standby != null
+        && (standbyItem == item || item.url.equals(standbyUrl))
+        && standby.getPlayerError() == null
+        && doCrossfade(150);
     if (!viaStandby) loadMedia(item.url, 0, item.cacheKey);
     player.setPlayWhenReady(true);
     upcoming.remove(0);

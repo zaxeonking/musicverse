@@ -32,7 +32,7 @@ export default function DownloadSettingsPage() {
           <span className="min-w-0 flex-1">
             <span className="block">Kualitas unduhan</span>
             <span className="block text-xs text-ink-muted">
-              Berlaku untuk unduhan baru dari sumber plugin. Lagu yang sudah diunduh tidak berubah.
+              Berlaku untuk unduhan baru.
             </span>
           </span>
         </div>
@@ -86,33 +86,32 @@ export default function DownloadSettingsPage() {
           onChange={() => setWifiOnlyEnabled(!wifiOnly)}
           icon={wifiOnly ? Wifi : WifiOff}
           label="Unduh hanya lewat Wi-Fi"
-          hint="Antrean berhenti saat memakai data seluler dan lanjut sendiri saat Wi-Fi tersambung."
+          hint="Unduhan berjalan saat Wi-Fi tersambung."
         />
         <SettingSwitch
           checked={chargingOnly}
           onChange={() => setChargingOnlyEnabled(!chargingOnly)}
           icon={chargingOnly ? BatteryCharging : Battery}
           label="Unduh hanya saat dicas"
-          hint="Antrean berhenti saat HP tidak dicas dan lanjut sendiri saat dicolok."
+          hint="Unduhan berjalan saat HP dicas."
         />
         <SettingSwitch
           checked={exportMusic}
           onChange={() => setExportMusicEnabled(!exportMusic)}
           icon={Music}
           label="Salin ke folder Musik"
-          hint="Lagu juga disalin ke Musik/MusicVerse agar muncul di pemutar musik dan pengelola berkas lain (Android 10+). Memakai ruang dua kali."
+          hint="Salin lagu ke folder Musik. Memakai ruang tambahan."
         />
         <SettingSwitch
           checked={thirdPartyFallback}
           onChange={() => setThirdPartyFallbackEnabled(!thirdPartyFallback)}
           icon={ShieldAlert}
-          label="Cadangan pihak ketiga"
-          hint="Cadangan TERAKHIR bila YouTube Music dan YouTube tidak menemukan yang cocok. Hanya untuk lagu bertautan Spotify, tetap diperiksa judul, artis, durasi, dan isinya. Lagu yang tidak ada di YouTube belum tentu ada di sini. Mati secara bawaan."
+          label="Cadangan server"
+          hint="Gunakan server cadangan jika lagu tidak ditemukan. Mati secara bawaan."
         />
       </div>
       <p className="mt-4 text-xs text-ink-muted">
-        Lagu yang kamu pilih dengan tombol putar di antrean tetap diunduh sekarang walau syarat di atas belum terpenuhi. Unduhan baru
-        disimpan dengan ekstensi sesuai isinya dan membawa judul, artis, album, serta sampul di dalam berkasnya. Sumber audio YouTube Music lalu YouTube (seperti StreamBeats); pihak ketiga hanya dipakai bila “Cadangan pihak ketiga” dinyalakan. Unduhan yang gagal punya tombol “Cari manual” untuk memilih sendiri hasilnya.
+        Unduhan yang dipilih lewat tombol putar tetap berjalan. Unduhan gagal bisa dicari ulang lewat tombol “Cari manual”.
       </p>
     </section>
   )

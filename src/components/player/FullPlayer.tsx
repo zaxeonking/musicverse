@@ -39,10 +39,29 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const closeRef = useRef<HTMLButtonElement>(null)
   // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
   const [showLyrics, setShowLyrics] = useState(false)
+  // Ukuran sampul diukur dari ruang yang tersisa di slot tengah supaya seluruh pemutar muat satu layar tanpa scroll.
+  const slotRef = useRef<HTMLDivElement>(null)
+  const hasTrack = Boolean(now && currentTrack)
+  const [coverSize, setCoverSize] = useState(0)
   const [timerOpen, setTimerOpen] = useState(false)
   const [crossfadeOpen, setCrossfadeOpen] = useState(false)
   // Geser di area sampul/lirik: sampul digeser ke atas atau samping -> lirik; di lirik, geser samping -> kembali ke sampul.
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const el = slotRef.current
+    if (!el) return
+    const measure = () => {
+      const cs = getComputedStyle(el)
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
+      setCoverSize(Math.max(0, Math.floor(Math.min(w, h, 416))))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [hasTrack])
   const onSwipeStart = (event: TouchEvent) => {
     const t = event.touches[0]
     swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null
@@ -246,7 +265,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
       aria-modal="true"
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
-      className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-y-auto bg-bg"
+      className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-hidden bg-bg"
       style={{ backgroundImage: `linear-gradient(180deg, ${now.cover.from}55 0%, #0b080c 62%, #0b080c 100%)` }}
     >
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
@@ -254,7 +273,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col pb-4 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pb-2 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
         <header className="grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
@@ -281,15 +300,16 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         </header>
 
         {/* Slot tengah: sampul, atau (saat lirik dibuka) lirik tanpa latar, lebih lebar dan tinggi. */}
-        <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="flex flex-1 items-center justify-center py-4">
+        <div ref={slotRef} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="flex min-h-0 flex-1 items-center justify-center py-2">
           {showLyrics ? (
-            <div className="h-[min(46dvh,30rem)] min-h-[16rem] w-full animate-lyrics-up">
+            <div className="h-full min-h-0 w-full animate-lyrics-up">
               <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} />
             </div>
           ) : (
             <div
               {...press}
-              className="w-[min(100%,40dvh,26rem)] select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
+              style={{ width: coverSize, height: coverSize }}
+              className="shrink-0 select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
             >
               <CoverArt cover={now.cover} src={now.coverSrc} />
             </div>
@@ -404,7 +424,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         type="button"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        className="sticky bottom-0 mt-2 flex w-full items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
+        className="mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya
