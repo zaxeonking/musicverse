@@ -1,4 +1,4 @@
-import { ChevronRight, Download, HardDriveDownload, ListMusic, Play, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, Download, HardDriveDownload, ListMusic, Play, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { isNativeApp } from '../native/platform'
 
@@ -16,6 +16,7 @@ const CATEGORIES: readonly Category[] = [
   { to: '/settings/playlist', label: 'Playlist', hint: 'Tambah otomatis, konfirmasi pindah lagu', icon: ListMusic },
   { to: '/settings/equalizer', label: 'Equalizer', hint: '10-band dengan preset', icon: SlidersHorizontal },
   { to: '/settings/backup', label: 'Cadangan', hint: 'Simpan dan pulihkan Koleksi, playlist, riwayat', icon: HardDriveDownload },
+  { to: '/settings/update', label: 'Pembaruan', hint: 'Cek apakah ada versi aplikasi yang baru', icon: RefreshCw },
 ]
 
 /** Pusat pengaturan (APK): daftar kategori, tiap kategori punya halaman sendiri. */

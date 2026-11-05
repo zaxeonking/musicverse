@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useCoverGlow } from '../../hooks/useCoverGlow'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useLongPress } from '../../hooks/useLongPress'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
@@ -29,6 +30,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const { status, currentTrack } = useAudioPlayer()
   const { openTrackMenu } = useTrackMenu()
   const now = useNowPlaying()
+  const glowColor = useCoverGlow(now?.coverSrc, now?.cover.from)
   const { collapsed, side, setCollapsed, setSide } = useMiniPlayerMode()
   const keyboardOpen = useKeyboardOpen()
   // Gelembung SEMENTARA karena keyboard terbuka. Tidak disimpan: pilihan pengguna (collapsed) tetap seperti semula,
@@ -272,8 +274,22 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} />
     ) : (
     <div className={`flex origin-bottom flex-col ${cardAnimation}`}>
+    {/* Grup yang ikut bergerak saat diseret: glow (di belakang) + kartu. */}
+    <div ref={cardRef} className="pointer-events-none relative origin-bottom">
+    {/* Glow warna sampul: hanya di belakang kartu mini player (bukan overlay layar), condong ke atas dan samping
+        supaya tidak menyentuh navbar. Berdenyut sekali tiap ganti lagu, lalu redup menetap; lebih redup saat jeda. */}
+    <span
+      key={currentTrack?.id ?? 'none'}
+      aria-hidden="true"
+      style={{
+        boxShadow: `0 -10px 32px -6px rgba(${glowColor},0.6), 0 -2px 16px -2px rgba(${glowColor},0.4)`,
+        transition: 'box-shadow 600ms ease, opacity 400ms ease',
+      }}
+      className={`pointer-events-none absolute inset-0 rounded-3xl animate-glow-pulse motion-reduce:animate-none ${
+        status === 'paused' ? 'opacity-30' : 'opacity-60'
+      }`}
+    />
     <div
-      ref={cardRef}
       role="region"
       aria-label="Pemutar musik"
       onPointerDown={onPointerDown}
@@ -287,7 +303,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className="pointer-events-auto relative origin-bottom touch-none overflow-hidden rounded-3xl border border-white/10 bg-[#242424]/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
+      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-white/10 bg-[#242424]/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
     >
       {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
       <button
@@ -345,6 +361,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       <p className="sr-only" aria-live="polite">
         {statusText}
       </p>
+    </div>
     </div>
     </div>
     )}
