@@ -309,7 +309,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
             <div
               {...press}
               style={{ width: coverSize, height: coverSize }}
-              className="shrink-0 select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
+              className="shrink-0 select-none overflow-hidden rounded-xl [-webkit-touch-callout:none]"
             >
               <CoverArt cover={now.cover} src={now.coverSrc} />
             </div>
@@ -322,7 +322,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
                 {now.title}
               </h2>
-              <MarqueeText text={now.artists} className="mt-1 text-base font-medium uppercase tracking-wide text-ink-muted" />
+              <MarqueeText text={now.artists} className="mt-1 text-base font-medium text-ink-muted" />
             </div>
             <button
               type="button"
@@ -424,7 +424,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         type="button"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        className="mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
+        className="mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-white/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya

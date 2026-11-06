@@ -175,7 +175,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange }:
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
           transition: drag ? 'none' : 'transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
-        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-[#242424]/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl focus-ring"
+        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full border border-line bg-raised shadow-lg shadow-black/40 focus-ring"
       >
         {/* Piringan: berputar saat playing, berhenti di posisi terakhir saat jeda. */}
         <span
@@ -184,7 +184,6 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange }:
           style={{ animationPlayState: playing && !loading ? 'running' : 'paused', opacity: loading ? 0.55 : 1 }}
         >
           <CoverArt cover={now.cover} src={now.coverSrc} round />
-          <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgba(255,255,255,0.14),transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%,rgba(255,255,255,0.14))]" />
         </span>
         <ProgressRing error={error} loading={loading} />
         {/* Lubang tengah piringan; berubah jadi ikon play saat jeda. */}

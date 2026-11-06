@@ -161,10 +161,10 @@ export default function MyPlaylistPage() {
 
       <header className="flex flex-wrap items-end gap-4">
         <div className="w-28 shrink-0 sm:w-36">
-          <CoverArt cover={fallbackCover(playlist.name)} src={tracks[0]?.cover} className="shadow-xl shadow-black/50" />
+          <CoverArt cover={fallbackCover(playlist.name)} src={tracks[0]?.cover} />
         </div>
         <div className="min-w-0 flex-1 basis-56">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{builtIn ? 'Playlist bawaan' : 'Playlist saya'}</p>
+          <p className="text-sm font-medium text-ink-muted">{builtIn ? 'Playlist bawaan' : 'Playlist saya'}</p>
           {renaming ? (
             <form onSubmit={submitRename} className="mt-1 flex items-center gap-2">
               <label htmlFor="rename-playlist" className="sr-only">

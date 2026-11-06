@@ -63,7 +63,7 @@ export default function AppShell() {
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] outline-none lg:pr-0"
         >
           {/* key = pathname: transisi ringan hanya saat berpindah halaman. */}
-          <div key={pathname} className={`mx-auto w-full max-w-6xl animate-page-in px-4 pt-2 lg:px-8 lg:pt-8 ${
+          <div key={pathname} className={`mx-auto w-full max-w-6xl animate-page-in px-4 pt-2 sm:px-6 sm:pt-4 lg:px-8 lg:pt-8 ${
               playerActive
                 ? compactDock
                   ? 'pb-[calc(6rem+var(--dock-offset))] lg:pb-28'

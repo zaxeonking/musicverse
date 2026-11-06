@@ -37,7 +37,7 @@ export default function AddToPlaylistSheet({ track, onClose, onDone }: AddToPlay
         role="dialog"
         aria-modal="true"
         aria-label={`Tambah ${track.title} ke playlist`}
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:bottom-6 lg:rounded-2xl lg:border"
       >
         <div className="flex items-center gap-3 px-4 pb-3 pt-4">
           <span className="w-12 shrink-0">

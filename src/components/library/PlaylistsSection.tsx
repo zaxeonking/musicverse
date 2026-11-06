@@ -74,7 +74,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
         className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised focus-ring"
       >
         <span className="mb-3 block">
-          <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
+          <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} />
         </span>
         <span title={playlist.name} className="line-clamp-2 break-words font-display text-base font-bold leading-snug text-ink">
           {badge}
@@ -220,7 +220,7 @@ export default function PlaylistsSection() {
           <ul
             className={
               prefs.view === 'grid'
-                ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5'
+                ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5'
                 : '-mx-2'
             }
           >

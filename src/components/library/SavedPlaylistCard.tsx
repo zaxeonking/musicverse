@@ -109,7 +109,7 @@ export default function SavedPlaylistCard({ playlist, layout, active, onOpen, on
         onClick={() => onOpen(playlist)}
         className="mb-3 block w-full rounded-md transition-opacity active:opacity-80"
       >
-        <CoverArt cover={fallback} src={playlist.cover} className="shadow-lg shadow-black/40" />
+        <CoverArt cover={fallback} src={playlist.cover} />
       </button>
       <div className="min-w-0 flex-1">
         <h3 title={playlist.title} className="line-clamp-2 break-words font-display text-base font-bold leading-snug text-ink">
