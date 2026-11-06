@@ -126,6 +126,16 @@ function artistScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   return overlap / Math.max(1, wantTokens.length) >= 0.5 ? 0.5 : 0
 }
 
+/** Selisih durasi maksimum (detik) yang masih dianggap lagu yang sama bila judul beda aksara tetapi artisnya cocok. */
+export const GAP_DURATION_TOLERANCE_S = 6
+
+/** Durasi untuk kasus judul beda aksara + artis cocok: <= 1,5 dtk = 1, sampai toleransi = 0,75, lebih dari itu = 0. */
+export function gapDurationFit(actual: number, expected: number): number {
+  const diff = Math.abs(actual - expected)
+  if (diff <= 1.5) return 1
+  return diff <= GAP_DURATION_TOLERANCE_S ? 0.75 : 0
+}
+
 /** 0..1, atau null jika salah satu durasi tidak diketahui. */
 function durationScore(wanted: WantedTrack, info: PlaybackInfo, actualDuration: number | null): number | null {
   const a = parseDuration(wanted.duration)
@@ -170,11 +180,18 @@ export function scoreCandidate(
     unverifiable = true
     artistGap = true
   }
+  let duration = durationScore(wanted, info, actualDuration)
+  // Judul beda aksara tapi artis cocok: identitas lagu sudah terbukti lewat artis, durasi bukan satu-satunya penentu lagi.
+  // Master di Spotify dan YouTube Music sering beda beberapa detik, jadi toleransinya dilonggarkan (lihat gapDurationFit).
+  const wantSec = parseDuration(wanted.duration)
+  if (titleGap && !artistGap && artist === 1 && actualDuration !== null && wantSec !== null) {
+    duration = gapDurationFit(actualDuration, wantSec)
+  }
   const parts: Array<[number | null, number]> = [
     // Unduhan: judul tidak dihitung (judul dari server sering beda tulisan dari judul playlist).
     [title, 0.3],
     [artist, 0.2],
-    [durationScore(wanted, info, actualDuration), actualDuration !== null ? 0.5 : 0.35],
+    [duration, actualDuration !== null ? 0.5 : 0.35],
   ]
   let weight = 0
   let sum = 0

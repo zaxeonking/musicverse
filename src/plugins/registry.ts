@@ -3,7 +3,7 @@ import { isNativeApp } from '../native/platform'
 import type { PlaybackInfo } from '../types/spotify'
 import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { fetchTitleAliases, peekAliases, type TrackAlias } from '../services/titleAliases'
-import { artistVerified, bothScriptGap, metadataMismatch, scoreWithAliases, versionMarkers, type WantedTrack } from '../utils/matchTrack'
+import { artistVerified, bothScriptGap, GAP_DURATION_TOLERANCE_S, metadataMismatch, scoreWithAliases, scriptGap, versionMarkers, type WantedTrack } from '../utils/matchTrack'
 import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
@@ -229,7 +229,11 @@ export async function resolveViaPluginsDetailed(
   // ditemukan lewat durasi; teks yang tidak cocok tetap ditolak oleh skor).
   const cleanTitle = stripArtistPrefix(wanted.title, wanted.artists)
   const firstArtist = wanted.artists.split(/\s*[,&;]\s*/)[0]?.trim() ?? ''
-  const queries = [...new Set([query, cleanTitle, firstArtist].map((q) => q.trim()).filter(Boolean))]
+  // Nama artis Spotify sering berhuruf "Ho - Kago Tea Time" sedangkan YouTube menulis "Houkago Teatime"; tanda hubung di tengah
+  // nama merusak pencarian. Varian tanpa tanda hubung dicoba lebih dulu.
+  const plainArtist = firstArtist.replace(/\s+[-\u2013\u2014]\s+/g, '').trim()
+  const plainQuery = plainArtist && plainArtist !== firstArtist ? `${cleanTitle} ${plainArtist}` : ''
+  const queries = [...new Set([plainQuery, query, cleanTitle, firstArtist].map((q) => q.trim()).filter(Boolean))]
   const spotifyUrl = extractSpotifyTrackLink(wanted.url ?? '') ?? ''
   // Nama lain lagu ini (bahasa/aksara lain), dicari paralel dengan pencarian pertama; tidak menghambat bila lambat.
   const aliasPromise: Promise<TrackAlias[]> = fetchTitleAliases(wanted, signal).catch(() => [])
@@ -281,16 +285,21 @@ export async function resolveViaPluginsDetailed(
             const blocked = got.has('instrumental') && !want.has('instrumental')
             // Judul + artis sama-sama beda aksara: hanya durasi yang bisa dicocokkan, jadi hanya hasil teratas pencarian
             // (urutan relevansi YouTube, yang paham alih aksara) yang dipercaya. Lagu acak berdurasi mirip tidak dipilih.
-            const unrelated = bothScriptGap(wanted, probe) && found.indexOf(hit) > 2
+            const rankInResults = found.indexOf(hit)
+            const titleGap = scriptGap(wantTitle, hit.title)
+            // Judul beda aksara: hanya urutan relevansi YouTube + artis + durasi yang menentukan, jadi hanya 2 hasil teratas yang dipercaya.
+            const unrelated = bothScriptGap(wanted, probe) ? rankInResults > 2 : titleGap && rankInResults > 1
             // Artis yang sama (walau beda aksara/penulisan) diutamakan: lagu dari artis lain tidak menang atas yang artisnya sama.
             const sameArtist = artistVerified(wanted, probe, aliases)
-            return { hit, score, blocked: blocked || unrelated, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) + (sameArtist ? 0.2 : 0) }
+            // Judul beda aksara + artis terverifikasi: durasi file boleh meleset beberapa detik (master Spotify vs YouTube Music).
+            const tolerant = !strict && titleGap && sameArtist
+            return { hit, score, tolerant, blocked: blocked || unrelated, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) + (sameArtist ? 0.2 : 0) }
           })
           .filter((c) => c.score >= ACCEPT_SCORE && !c.blocked)
           .sort((a, b) => b.rank - a.rank)
           .slice(0, MAX_CANDIDATES)
 
-        for (const { hit, score } of scored) {
+        for (const { hit, score, tolerant } of scored) {
           sawCandidate = true
           const streams = orderStreamsForQuality(await plugin.getStreams(hit.id, signal), quality).slice(0, MAX_STREAMS_PER_CANDIDATE)
           for (const stream of streams) {
@@ -303,7 +312,8 @@ export async function resolveViaPluginsDetailed(
             }
             if (isLikelyClip(actual, expected)) continue
             const fit = durationFit(actual, expected)
-            if (fit !== null && fit < 0.7) continue
+            const withinTolerance = tolerant && expected !== null && Math.abs(actual - expected) <= GAP_DURATION_TOLERANCE_S
+            if (fit !== null && fit < 0.7 && !withinTolerance) continue
             const info: PlaybackInfo = {
               title: hit.title,
               artist: hit.artist,
