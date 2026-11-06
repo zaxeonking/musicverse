@@ -1,5 +1,7 @@
 # MusicVerse
 
+> **Sejak 0.5.14 tidak ada lagi versi web.** Di peramban, `/` hanya landing untuk memasang APK, ditambah `/privacy` dan `/terms`; alamat lain dialihkan ke `/`. Pemutar penuh hanya dimuat di APK (`src/main.tsx` memilih `App` atau `site/SiteApp`). Bagian README di bawah yang menyebut "web" menggambarkan perilaku sebelum 0.5.14. Isi Kebijakan Privasi dan Ketentuan Layanan ada di `src/legal/content.ts` (dipakai web dan Pengaturan APK).
+
 Web music player (tahap 1: layout, tahap 2: integrasi API playlist, tahap 3: daftar track, tahap 4: playback, tahap 5: MiniPlayer + FullPlayer, tahap 6: Queue + Play All, tahap 7: tampilan Queue + navigasi lagu, tahap 8: halaman Koleksi). React + Vite + TypeScript + Tailwind CSS + Lucide React.
 
 ## Menjalankan

@@ -2,6 +2,40 @@
   "regions": [
     "sin1"
   ],
+  "redirects": [
+    {
+      "source": "/search",
+      "destination": "/"
+    },
+    {
+      "source": "/library",
+      "destination": "/"
+    },
+    {
+      "source": "/downloads",
+      "destination": "/"
+    },
+    {
+      "source": "/settings",
+      "destination": "/"
+    },
+    {
+      "source": "/history",
+      "destination": "/"
+    },
+    {
+      "source": "/browse",
+      "destination": "/"
+    },
+    {
+      "source": "/settings/:path*",
+      "destination": "/"
+    },
+    {
+      "source": "/my/:id",
+      "destination": "/"
+    }
+  ],
   "rewrites": [
     {
       "source": "/nexa/:path*",

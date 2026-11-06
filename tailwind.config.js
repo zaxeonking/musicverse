@@ -21,11 +21,22 @@ export default {
           faint: '#8a8a8a',
         },
         danger: '#ff6b6b',
+        // Halaman web (landing, privasi, ketentuan). Terang, supaya aplikasi gelap di dalamnya jadi satu-satunya benda pekat.
+        site: {
+          fog: '#E8EDEE',
+          paper: '#F5F8F8',
+          ink: '#11181B',
+          slate: '#47565C',
+          green: '#0A6E31',
+          line: 'rgba(17,24,27,0.14)',
+        },
         line: 'rgba(255,255,255,0.08)',
       },
       fontFamily: {
         display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Teks bacaan di halaman web (dimuat hanya di situs, bukan di APK).
+        reading: ['Newsreader', 'Georgia', 'Cambria', 'serif'],
       },
       spacing: {
         sidebar: '17rem',
@@ -66,6 +77,7 @@ export default {
           '60%': { opacity: '1' },
           '100%': { transform: 'none', opacity: '1', borderRadius: '0px' },
         },
+        eq: { '0%, 100%': { transform: 'scaleY(0.4)' }, '50%': { transform: 'scaleY(1)' } },
         disc: { to: { transform: 'rotate(360deg)' } },
         'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'none' } },
         'lyrics-up': { from: { opacity: '0', transform: 'translateY(100%)' }, to: { opacity: '1', transform: 'none' } },
@@ -82,6 +94,7 @@ export default {
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',
         disc: 'disc 18s linear infinite',
+        eq: 'eq 1.1s ease-in-out infinite',
         'sheet-up': 'sheet-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'lyrics-up': 'lyrics-up 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'panel-in': 'panel-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both',

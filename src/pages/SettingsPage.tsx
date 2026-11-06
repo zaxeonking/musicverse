@@ -1,4 +1,4 @@
-import { ChevronRight, Download, HardDriveDownload, ListMusic, Play, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { isNativeApp } from '../native/platform'
 
@@ -19,26 +19,40 @@ const CATEGORIES: readonly Category[] = [
   { to: '/settings/update', label: 'Pembaruan', hint: 'Cek apakah ada versi aplikasi yang baru', icon: RefreshCw },
 ]
 
+/** Dokumen hukum: tampil sebagai kelompok terpisah di bawah pengaturan. */
+const LEGAL: readonly Category[] = [
+  { to: '/settings/privacy', label: 'Kebijakan Privasi', hint: 'Data apa yang disimpan dan dikirim', icon: ShieldCheck },
+  { to: '/settings/terms', label: 'Ketentuan Layanan', hint: 'Aturan pemakaian aplikasi', icon: FileText },
+]
+
 /** Pusat pengaturan (APK): daftar kategori, tiap kategori punya halaman sendiri. */
 export default function SettingsPage() {
   if (!isNativeApp()) return <Navigate to="/" replace />
   return (
     <section aria-label="Pengaturan" className="px-4 pb-8 pt-2">
       <h1 className="mb-4 text-3xl font-extrabold text-ink">Pengaturan</h1>
-      <ul className="space-y-2">
-        {CATEGORIES.map(({ to, label, hint, icon: Icon }) => (
-          <li key={to}>
-            <Link to={to} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-ink focus-ring">
-              <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">{label}</span>
-                <span className="block text-xs text-ink-muted">{hint}</span>
-              </span>
-              <ChevronRight className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <CategoryList items={CATEGORIES} />
+      <h2 className="mb-2 mt-8 text-sm font-semibold text-ink-muted">Tentang</h2>
+      <CategoryList items={LEGAL} />
     </section>
+  )
+}
+
+function CategoryList({ items }: { items: readonly Category[] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map(({ to, label, hint, icon: Icon }) => (
+        <li key={to}>
+          <Link to={to} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-ink focus-ring">
+            <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className="block text-xs text-ink-muted">{hint}</span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
+          </Link>
+        </li>
+      ))}
+    </ul>
   )
 }

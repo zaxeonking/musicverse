@@ -18,6 +18,7 @@ import HistoryPage from './pages/HistoryPage'
 import DownloadSettingsPage from './pages/DownloadSettingsPage'
 import DownloadsPage from './pages/DownloadsPage'
 import HomePage from './pages/HomePage'
+import LegalPage from './pages/LegalPage'
 import LibraryPage from './pages/LibraryPage'
 import MyPlaylistPage from './pages/MyPlaylistPage'
 import SearchPage from './pages/SearchPage'
@@ -47,6 +48,8 @@ const router = createBrowserRouter([
       { path: '/settings/equalizer', element: <EqualizerPage /> },
       { path: '/settings/backup', element: <BackupPage /> },
       { path: '/settings/update', element: <UpdateSettingsPage /> },
+      { path: '/settings/privacy', element: <LegalPage kind="privacy" /> },
+      { path: '/settings/terms', element: <LegalPage kind="terms" /> },
       { path: '/history', element: <HistoryPage /> },
       { path: '/browse', element: <BrowsePage /> },
       { path: '/my/:id', element: <MyPlaylistPage /> },
