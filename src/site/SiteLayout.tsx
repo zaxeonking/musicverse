@@ -73,6 +73,9 @@ export default function SiteLayout() {
           <a href={anchor('tanya')} className="hidden rounded-full px-3 py-2 text-site-slate hover:text-site-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green sm:block">
             Tanya jawab
           </a>
+          <a href={anchor('masukan')} className="hidden rounded-full px-3 py-2 text-site-slate hover:text-site-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green sm:block">
+            Masukan
+          </a>
           <a
             href={APK_RELEASE_URL}
             target="_blank"

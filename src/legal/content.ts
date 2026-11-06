@@ -107,7 +107,7 @@ export const PRIVACY: LegalDoc = {
       id: 'situs',
       title: '7. Situs web',
       body: [
-        'Situs web MusicVerse hanya halaman informasi dan tautan unduhan. Situs tidak memakai akun, cookie pelacak, atau analitik. Penyedia hosting dan CDN dapat mencatat log akses standar (misalnya alamat IP dan jenis peramban) untuk keamanan dan operasional. Tombol unduh membawamu ke GitHub, yang punya kebijakan privasinya sendiri.',
+        'Situs web MusicVerse hanya halaman informasi dan tautan unduhan. Situs tidak memakai akun, cookie pelacak, atau analitik. Penyedia hosting dan CDN dapat mencatat log akses standar (misalnya alamat IP dan jenis peramban) untuk keamanan dan operasional. Tombol unduh membawamu ke GitHub, yang punya kebijakan privasinya sendiri. Formulir saran dan ulasan tidak mengirim apa pun ke server kami: isinya hanya dipindahkan ke email atau halaman GitHub Issues yang kamu buka, dan baru terkirim setelah kamu menekan kirim di sana. Masukan lewat GitHub Issues tampil publik dan tunduk pada kebijakan GitHub.',
       ],
     },
     {

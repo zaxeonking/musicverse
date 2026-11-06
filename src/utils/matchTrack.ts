@@ -13,8 +13,16 @@ export interface WantedTrack {
   url?: string
 }
 
+/**
+ * Angka 2 sebagai tanda kata ulang (Indonesia/Melayu): \"Mati2an\" = \"Matimatian\", \"Cinta2\" = \"Cintacinta\".
+ * Hanya angka 2 yang diapit huruf (minimal dua huruf di depannya), jadi \"U2\", \"2Pac\", atau \"Blink 182\" tidak berubah.
+ */
+export function expandReduplication(value: string): string {
+  return value.replace(/(\p{L}{2,})2(\p{L}*)/gu, '$1$1$2')
+}
+
 function tokens(value: string): string[] {
-  return normalizeSearchText(value)
+  return expandReduplication(normalizeSearchText(value))
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter(Boolean)
@@ -22,7 +30,7 @@ function tokens(value: string): string[] {
 
 /** Ejaan Latin yang mirip: spasi/tanda baca dibuang, vokal panjang romaji disamakan (ou/oo->o, uu->u). */
 function compact(value: string): string {
-  return normalizeSearchText(value)
+  return expandReduplication(normalizeSearchText(value))
     .replace(/[^\p{L}\p{N}]+/gu, '')
     .replace(/ou|oo/g, 'o')
     .replace(/uu/g, 'u')

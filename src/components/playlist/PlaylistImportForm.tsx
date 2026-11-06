@@ -1,6 +1,7 @@
 import { ClipboardPaste, Link2, Loader2, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { usePlaylist } from '../../context/PlaylistContext'
+import { readClipboardText } from '../../native/clipboard'
 import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
 
@@ -70,18 +71,21 @@ export default function PlaylistImportForm() {
 
   /** Tempel teks dari clipboard; pencarian tetap manual (tekan tombol/Enter). */
   async function handlePaste() {
-    try {
-      const text = (await navigator.clipboard.readText()).trim()
-      if (!text) {
-        setValidationError('Clipboard kosong. Salin judul atau tautan lagu dulu.')
-        return
-      }
-      setValue(text)
-      setValidationError(null)
+    const raw = await readClipboardText()
+    if (raw === null) {
+      // Tidak bisa dibaca sama sekali: arahkan ke tempel manual (tekan lama di kolom, pilih Tempel).
       inputRef.current?.focus()
-    } catch {
-      setValidationError('Tidak bisa membaca clipboard. Izinkan akses tempel, atau tempel manual di kolom ini.')
+      setValidationError('Tidak bisa membaca clipboard. Tekan lama di kolom ini lalu pilih Tempel.')
+      return
     }
+    const text = raw.trim()
+    if (!text) {
+      setValidationError('Clipboard kosong. Salin judul atau tautan lagu dulu.')
+      return
+    }
+    setValue(text)
+    setValidationError(null)
+    inputRef.current?.focus()
   }
 
   return (

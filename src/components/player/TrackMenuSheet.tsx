@@ -1,4 +1,5 @@
 import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, History, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { writeClipboardText } from '../../native/clipboard'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import type { TrackMenuPlace } from '../../context/TrackMenuContext'
@@ -96,12 +97,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   }
 
   const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(track.url)
-      onToast('Tautan Spotify disalin')
-    } catch {
-      onToast('Tidak bisa menyalin tautan di perangkat ini')
-    }
+    const copied = await writeClipboardText(track.url)
+    onToast(copied ? 'Tautan Spotify disalin' : 'Tidak bisa menyalin tautan di perangkat ini')
     onClose()
   }
 

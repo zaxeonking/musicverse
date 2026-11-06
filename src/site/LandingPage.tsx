@@ -2,6 +2,7 @@ import { ChevronDown, Download } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { APK_RELEASE_URL } from '../config/apk'
+import FeedbackSection from './FeedbackSection'
 import PhoneMock from './PhoneMock'
 
 /** Fitur disusun menurut situasi pemakai, bukan daftar spesifikasi. Hanya fitur yang benar-benar ada di APK. */
@@ -208,6 +209,9 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
+
+      {/* Saran dan ulasan */}
+      <FeedbackSection />
     </>
   )
 }
