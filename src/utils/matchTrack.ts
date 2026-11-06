@@ -113,13 +113,17 @@ export function scoreCandidate(
   // Aksara berbeda (mis. judul Spotify \"Kimi no Na wa\" vs YouTube \"君の名は\"): skor kata rendah bukan tanda salah lagu.
   // Dianggap tidak bisa dibandingkan; yang menentukan tinggal durasi file (lihat `unverifiable` di bawah).
   let unverifiable = false
+  let titleGap = false
+  let artistGap = false
   if (title !== null && title < 0.5 && scriptGap(stripArtistPrefix(wanted.title, wanted.artists), info.title)) {
     title = null
     unverifiable = true
+    titleGap = true
   }
   if (artist !== null && artist < 0.5 && scriptGap(wanted.artists, info.artist || info.title)) {
     artist = null
     unverifiable = true
+    artistGap = true
   }
   const parts: Array<[number | null, number]> = [
     // Unduhan: judul tidak dihitung (judul dari server sering beda tulisan dari judul playlist).
@@ -137,6 +141,10 @@ export function scoreCandidate(
   let score = weight > 0 ? sum / weight : 0.5
   // Tanpa kecocokan teks, kecocokan durasi saja harus nyaris sempurna: durasi pas (>= 0,9) tetap lolos, selisih sedang tidak.
   if (unverifiable) score *= 0.92
+  // Judul DAN artis sama-sama beda aksara: tidak ada satu pun teks yang bisa dicocokkan, hanya durasi. Lagu lain dengan durasi
+  // mirip bisa lolos begitu saja ("asal ambil"), jadi skor diturunkan sampai hanya durasi yang nyaris sempurna yang lolos
+  // (dan pemanggil juga membatasi ke hasil teratas pencarian).
+  if (titleGap && artistGap) score *= 0.8
   if (viaLink) score += 0.15
   else {
     const wantedId = extractTrackId(wanted.url ?? '')
@@ -144,6 +152,13 @@ export function scoreCandidate(
     if (wantedId && gotId && wantedId === gotId) score += 0.25
   }
   return score
+}
+
+/** True bila judul DAN artis hasil beda aksara dari lagu di playlist (tidak ada teks yang bisa dicocokkan, hanya durasi). */
+export function bothScriptGap(wanted: WantedTrack, info: PlaybackInfo): boolean {
+  return (
+    scriptGap(stripArtistPrefix(wanted.title, wanted.artists), info.title) && scriptGap(wanted.artists, info.artist || info.title)
+  )
 }
 
 /** Penanda versi lain dari lagu yang sama (live, remix, dst.). Judul asli dan audio harus sama-sama punya atau sama-sama tidak. */

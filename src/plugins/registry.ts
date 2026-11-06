@@ -2,7 +2,7 @@ import { MusicVerseNative } from '../native/musicVerseNative'
 import { isNativeApp } from '../native/platform'
 import type { PlaybackInfo } from '../types/spotify'
 import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
-import { metadataMismatch, scoreCandidate, versionMarkers, type WantedTrack } from '../utils/matchTrack'
+import { bothScriptGap, metadataMismatch, scoreCandidate, versionMarkers, type WantedTrack } from '../utils/matchTrack'
 import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
@@ -240,7 +240,8 @@ export async function resolveViaPluginsDetailed(
         const seen = new Set<string>()
         for (const q of queries) {
         if (signal.aborted) return stopped()
-        const hits = (await plugin.search(q, signal)).filter((h) => !seen.has(h.id))
+        const found = await plugin.search(q, signal)
+        const hits = found.filter((h) => !seen.has(h.id))
         for (const h of hits) seen.add(h.id)
         const scored = hits
           .map((hit) => {
@@ -264,7 +265,10 @@ export async function resolveViaPluginsDetailed(
             const exact = hit.title.trim().toLowerCase() === wantTitle.trim().toLowerCase()
             // Instrumental / karaoke TIDAK PERNAH dipilih bila lagu di playlist bukan versi itu (pengguna menginginkan yang berlirik).
             const blocked = got.has('instrumental') && !want.has('instrumental')
-            return { hit, score, blocked, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
+            // Judul + artis sama-sama beda aksara: hanya durasi yang bisa dicocokkan, jadi hanya hasil teratas pencarian
+            // (urutan relevansi YouTube, yang paham alih aksara) yang dipercaya. Lagu acak berdurasi mirip tidak dipilih.
+            const unrelated = bothScriptGap(wanted, probe) && found.indexOf(hit) > 2
+            return { hit, score, blocked: blocked || unrelated, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
           })
           .filter((c) => c.score >= ACCEPT_SCORE && !c.blocked)
           .sort((a, b) => b.rank - a.rank)
