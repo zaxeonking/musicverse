@@ -32,6 +32,8 @@ interface TrackListProps {
    * playlist) antrean tidak dicampur dengan lagu dari luar.
    */
   searchable?: boolean
+  /** Lagu yang dikunci (tidak bisa diputar), mis. selama pengecekan audio playlist. */
+  isLocked?: (track: PlaylistTrack) => boolean
 }
 
 export default function TrackList({
@@ -44,6 +46,7 @@ export default function TrackList({
   includeAlbum = true,
   emptyState,
   searchable = false,
+  isLocked,
 }: TrackListProps) {
   const controlled = controlledQuery !== undefined
   const [innerQuery, setInnerQuery] = useState('')
@@ -158,6 +161,7 @@ export default function TrackList({
                 onSelect={setSelectedId}
                 onPlay={handlePlay}
                 fromSearch={searchable}
+                locked={isLocked?.(track) ?? false}
               />
             ))}
           </ul>

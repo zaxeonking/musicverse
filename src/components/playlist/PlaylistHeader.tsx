@@ -32,6 +32,8 @@ interface PlaylistHeaderProps {
   fromCache?: boolean
   /** Play All: memutar seluruh lagu playlist berurutan (lihat `playAll` di audio engine). */
   onPlayAll: () => void
+  /** Tombol Putar semua dikunci (mis. saat pengecekan audio playlist berjalan). */
+  playAllDisabled?: boolean
   /** Memuat ulang playlist dari API. */
   onReload?: () => void
   /** True bila playlist Spotify ini sudah dijadikan playlist (tab Playlist): tombolnya menjadi "Perbarui playlist". */
@@ -51,6 +53,7 @@ export default function PlaylistHeader({
   cover,
   trackCount,
   onPlayAll,
+  playAllDisabled = false,
   onReload,
   addedAsPlaylist = false,
   onAddAsPlaylist,
@@ -79,7 +82,7 @@ export default function PlaylistHeader({
             <button
               type="button"
               onClick={onPlayAll}
-              disabled={trackCount === 0}
+              disabled={trackCount === 0 || playAllDisabled}
               className="btn-primary px-6"
             >
               <Play className="h-4 w-4" fill="currentColor" aria-hidden="true" />

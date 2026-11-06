@@ -108,12 +108,20 @@ const MAX_STREAMS_PER_CANDIDATE = 2
  */
 const PLUGIN_BUDGET_BY_TIER = { good: 9_000, medium: 16_000, poor: 28_000 } as const
 const PLUGIN_BUDGET_STRICT_MS = 35_000
+/**
+ * Cek ketersediaan (`searchOnly`): batas waktu SATU lagu. Di dalamnya lagu benar-benar dicari, stream diambil, dan
+ * metadata audionya dibaca (sama seperti saat diputar), jadi lagu yang hanya "ada di hasil pencarian" tetapi tidak
+ * bisa diputar tidak lolos. Lewat batas = dianggap tidak ditemukan (pengguna bisa Cari manual atau Cek ulang).
+ */
+const CHECK_BUDGET_MS = 6_000
+const CHECK_PROBE_TIMEOUT_MS = 4_000
 
 function pluginBudgetMs(strict: boolean): number {
   return strict ? PLUGIN_BUDGET_STRICT_MS : PLUGIN_BUDGET_BY_TIER[getNetworkTier()]
 }
 
-function probeTimeoutMs(strict: boolean): number {
+function probeTimeoutMs(strict: boolean, check = false): number {
+  if (check) return CHECK_PROBE_TIMEOUT_MS
   return strict || getNetworkTier() !== 'good' ? 12_000 : 7_000
 }
 function formatClock(totalSec: number | null): string {
@@ -229,7 +237,7 @@ export async function resolveViaPluginsDetailed(
   const forward = () => inner.abort()
   if (options.signal?.aborted) return { info: null, outcome: 'aborted' }
   options.signal?.addEventListener('abort', forward, { once: true })
-  const budget = setTimeout(() => inner.abort(), pluginBudgetMs(strict))
+  const budget = setTimeout(() => inner.abort(), options.searchOnly ? CHECK_BUDGET_MS : pluginBudgetMs(strict))
   const signal = inner.signal
 
   const disabled = readDisabled()
@@ -311,14 +319,15 @@ export async function resolveViaPluginsDetailed(
           .sort((a, b) => b.rank - a.rank)
           .slice(0, MAX_CANDIDATES)
 
-        // Cek ketersediaan: ada kandidat yang lolos skor judul/artis/durasi berarti lagunya ada. Stream tidak diambil.
-        if (options.searchOnly && scored.length > 0) return { info: null, outcome: 'ok' }
+        // Cek ketersediaan (`searchOnly`) memakai jalur yang SAMA dengan pemutaran: stream diambil dan durasi file dibaca.
+        // Skor hasil pencarian saja tidak cukup (lagu bisa muncul di pencarian tetapi streamnya tidak terbaca).
         for (const { hit, score, tolerant } of scored) {
           sawCandidate = true
           const streams = orderStreamsForQuality(await plugin.getStreams(hit.id, signal), quality).slice(0, MAX_STREAMS_PER_CANDIDATE)
           for (const stream of streams) {
             const playable = await toPlayableUrl(stream)
-            const actual = await probeAudioDuration(playable, probeTimeoutMs(strict), signal)
+            const actual = await probeAudioDuration(playable, probeTimeoutMs(strict, options.searchOnly), signal)
+            if (signal.aborted) return stopped()
             // Tidak terbaca di WebView (mis. ditolak CDN) atau jelas bukan lagunya: coba berikutnya.
             if (actual === null) {
               hadFailure = true

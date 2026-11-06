@@ -53,8 +53,10 @@ export default function PlaylistView() {
 
   // Cek ketersediaan audio semua lagu playlist (bukan hasil cari lagu satuan). Hook ini harus sebelum return di bawah.
   const checkable = status === 'success' && playlist !== null && playlist.source !== 'search'
-  // Pengecekan ditahan selama lagu sedang dicari/dimuat supaya ketukan pada lagu tidak terasa macet.
-  const availability = useTrackAvailability(playlist?.tracks ?? NO_TRACKS, checkable, player.status === 'resolving' || player.status === 'loading')
+  const availability = useTrackAvailability(playlist?.tracks ?? NO_TRACKS, checkable)
+  // Selama pengecekan, lagu yang BELUM dicek dikunci (tidak bisa diputar); terbuka satu per satu begitu hasilnya keluar.
+  const checking = checkable && availability.running
+  const isLocked = (track: PlaylistTrack): boolean => checking && availability.results[track.id] === undefined
   useEffect(() => {
     if (toast === null) return
     const timer = setTimeout(() => setToast(null), 2500)
@@ -164,6 +166,7 @@ export default function PlaylistView() {
         trackCount={playlist.tracks.length}
         fromCache={fromCache}
         onPlayAll={() => player.playAll(playlist.tracks)}
+        playAllDisabled={checking}
         onReload={() => void loadPlaylist(playlist.url)}
         // Lagu satuan (hasil cari judul / tautan lagu) memakai "Tambah ke playlist" di bawah (satu lagu, pilih playlist).
         addedAsPlaylist={existing !== undefined}
@@ -210,6 +213,7 @@ export default function PlaylistView() {
         playbackActivity={getRowActivity(player.status)}
         // Lagu satuan dari pencarian boleh masuk antrean lewat menu lagu; playlist tetap tidak dicampur.
         searchable={isSingleSearch}
+        isLocked={checking ? isLocked : undefined}
       />
     </section>
   )

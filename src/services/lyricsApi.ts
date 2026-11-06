@@ -2,6 +2,7 @@ import type { PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
 import { parseLrc, type LyricLine } from '../utils/lrc'
 import { stripArtistPrefix } from '../utils/trackTitle'
+import { fetchYtMusicLyrics } from '../plugins/ytLyrics'
 
 /**
  * Lirik dari LRCLIB (https://lrclib.net): gratis, tanpa kunci API. Dipanggil langsung dari browser;
@@ -44,7 +45,7 @@ export interface LrclibRecord {
   plainLyrics: string | null
   syncedLyrics: string | null
   /** Asal data; LRCLIB diutamakan karena paling konsisten. */
-  source?: 'lrclib' | 'netease' | 'ovh'
+  source?: 'lrclib' | 'netease' | 'ovh' | 'ytmusic'
 }
 
 /** Artis utama: "A, B" / "A & B" / "A feat. B" -> "A". */
@@ -332,6 +333,34 @@ export async function fetchLyrics(track: PlaylistTrack, options: { signal: Abort
   const baseTitle = stripArtistPrefix(track.title, track.artists)
   const title = cleanTitle(baseTitle) || baseTitle
 
+  // 1. YouTube Music dulu (bertanda waktu bila ada, kalau tidak lirik biasa). Hanya bila tidak ada, sumber lain di bawah dipakai.
+  const yt = await fetchYtMusicLyrics(
+    track,
+    (hits) => {
+      const hit = hits.find(
+        (h) =>
+          matchesTrack({ trackName: h.title, artistName: h.artist }, title, artist) &&
+          (durationS === null || h.durationSec === null || Math.abs(h.durationSec - durationS) <= MAX_DURATION_DIFF_S),
+      )
+      return hit ?? null
+    },
+    signal,
+    [title, artist].filter(Boolean).join(' '),
+  )
+  if (signal.aborted) throw new LyricsError('aborted', 'Permintaan lirik dibatalkan.')
+  if (yt) {
+    return toResult({
+      trackName: yt.title,
+      artistName: yt.artist,
+      duration: yt.durationSec,
+      instrumental: false,
+      plainLyrics: yt.plain,
+      syncedLyrics: yt.synced,
+      source: 'ytmusic',
+    })
+  }
+
+  // 2. Sumber lain (LRCLIB, NetEase, lyrics.ovh) bersamaan.
   const jobs: Array<Promise<LrclibRecord[]>> = [
     lrclibRecords(track, baseTitle, title, artist, durationS, signal),
     neteaseRecords(title, artist, signal),

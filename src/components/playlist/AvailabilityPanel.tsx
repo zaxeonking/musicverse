@@ -33,6 +33,7 @@ export default function AvailabilityPanel({ availability, onManual }: Availabili
           <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           <span className="min-w-0 flex-1">Memeriksa audio lagu… {done}/{total}</span>
         </p>
+        <p className="mt-1 pl-7 text-xs text-ink-muted">Lagu bisa diputar setelah selesai dicek.</p>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-raised" aria-hidden="true">
           <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${percent}%` }} />
         </div>

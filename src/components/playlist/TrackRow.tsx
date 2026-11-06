@@ -32,9 +32,11 @@ interface TrackRowProps {
   onPlay: PlayTrackHandler
   /** Baris ini lagu satuan di halaman Cari: menu lagunya boleh memasukkan lagu ke antrean mana pun (bukan dari playlist). */
   fromSearch?: boolean
+  /** Lagu ini belum selesai dicek ketersediaan audionya: tidak bisa diketuk / diputar dulu. */
+  locked?: boolean
 }
 
-function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false }: TrackRowProps) {
+function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false, locked = false }: TrackRowProps) {
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const { openTrackMenu } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
@@ -71,15 +73,19 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
   return (
     <li
       aria-current={selected ? 'true' : undefined}
+      aria-disabled={locked || undefined}
       onClick={() => {
+        if (locked) return
         onSelect(track.id)
         // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh.
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay(track, index)
         openFullPlayer()
       }}
-      {...longPress}
-      className={`grid ${TRACK_GRID} select-none cursor-pointer rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] ${
-        selected ? 'bg-raised shadow-now' : 'hover:bg-card focus-within:bg-card active:bg-raised'
+      {...(locked ? {} : longPress)}
+      className={`grid ${TRACK_GRID} select-none rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] ${
+        locked
+          ? 'cursor-not-allowed opacity-50'
+          : `cursor-pointer ${selected ? 'bg-raised shadow-now' : 'hover:bg-card focus-within:bg-card active:bg-raised'}`
       }`}
     >
       <span
@@ -95,6 +101,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         type="button"
         aria-label={`Buka pemutar: ${track.title}${by}`}
         aria-haspopup="dialog"
+        disabled={locked}
         className="min-w-0 rounded-sm text-left focus-ring"
       >
         <p title={track.title} className={`truncate text-base font-medium ${highlighted ? 'text-accent' : 'text-ink'}`}>
@@ -120,8 +127,10 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         type="button"
         onClick={(event) => {
           event.stopPropagation()
+          if (locked) return
           onPlay(track, index)
         }}
+        disabled={locked}
         aria-label={playLabel}
         aria-busy={activity === 'loading'}
         className={`flex h-11 w-11 items-center justify-center justify-self-end rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
