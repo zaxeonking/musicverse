@@ -2,7 +2,8 @@ import { MusicVerseNative } from '../native/musicVerseNative'
 import { isNativeApp } from '../native/platform'
 import type { PlaybackInfo } from '../types/spotify'
 import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
-import { bothScriptGap, metadataMismatch, scoreCandidate, versionMarkers, type WantedTrack } from '../utils/matchTrack'
+import { fetchTitleAliases, peekAliases, type TrackAlias } from '../services/titleAliases'
+import { bothScriptGap, metadataMismatch, scoreWithAliases, versionMarkers, type WantedTrack } from '../utils/matchTrack'
 import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
@@ -204,6 +205,8 @@ export async function resolveViaPluginsDetailed(
   if (
     cached &&
     !isUnwantedInstrumental(wanted, cached.title) &&
+    // Hasil lama yang tersimpan sebelum perbaikan (mis. lagu lain berdurasi mirip) dinilai ulang dan dibuang bila tidak cocok.
+    scoreWithAliases(wanted, { ...cached, spotifyUrl: '' }, false, cached.probedDuration ?? null, peekAliases(wanted)) >= ACCEPT_SCORE &&
     !options.avoid?.includes(cachedSource) &&
     (!strict || strictProblem(wanted, cached, cached.probedDuration ?? null, expected) === null)
   ) {
@@ -228,6 +231,11 @@ export async function resolveViaPluginsDetailed(
   const firstArtist = wanted.artists.split(/\s*[,&;]\s*/)[0]?.trim() ?? ''
   const queries = [...new Set([query, cleanTitle, firstArtist].map((q) => q.trim()).filter(Boolean))]
   const spotifyUrl = extractSpotifyTrackLink(wanted.url ?? '') ?? ''
+  // Nama lain lagu ini (bahasa/aksara lain), dicari paralel dengan pencarian pertama; tidak menghambat bila lambat.
+  const aliasPromise: Promise<TrackAlias[]> = fetchTitleAliases(wanted, signal).catch(() => [])
+  const aliasesWithin = (ms: number): Promise<TrackAlias[]> =>
+    Promise.race([aliasPromise, new Promise<TrackAlias[]>((resolve) => setTimeout(() => resolve([]), ms))])
+  let aliases: TrackAlias[] = []
   let hadFailure = false
   let sawCandidate = false
   const stopped = (): PluginResolveResult => ({ info: null, outcome: options.signal?.aborted ? 'aborted' : 'timeout' })
@@ -238,9 +246,13 @@ export async function resolveViaPluginsDetailed(
       if (signal.aborted) return stopped()
       try {
         const seen = new Set<string>()
-        for (const q of queries) {
+        const queue = [...queries]
+        let aliasesQueued = false
+        for (let qi = 0; qi < queue.length; qi++) {
+        const q = queue[qi]
         if (signal.aborted) return stopped()
         const found = await plugin.search(q, signal)
+        aliases = await aliasesWithin(qi === 0 ? 1500 : 0)
         const hits = found.filter((h) => !seen.has(h.id))
         for (const h of hits) seen.add(h.id)
         const scored = hits
@@ -251,11 +263,13 @@ export async function resolveViaPluginsDetailed(
               album: hit.album,
               duration: formatClock(hit.durationSec),
               cover: hit.cover,
-              spotifyUrl,
+              // SENGAJA kosong: hasil pencarian YouTube bukan hasil dari tautan Spotify. Kalau diisi tautan lagu yang diminta,
+              // scoreCandidate memberi bonus "ID Spotify sama" (+0,25) ke SEMUA kandidat sehingga lagu lain berdurasi mirip lolos.
+              spotifyUrl: '',
               audioUrl: '',
             }
             // Durasi dari hasil pencarian: kecocokan durasi (bobot terbesar) langsung terhitung.
-            const score = scoreCandidate(wanted, probe, false, hit.durationSec)
+            const score = scoreWithAliases(wanted, probe, false, hit.durationSec, aliases)
             // Peringkat (bukan penerimaan): versi live/remix/cover/dst. yang tidak ada di lagu aslinya turun di bawah versi yang
             // sama dengan playlist, tetapi tetap diterima bila hanya itu yang ada. Judul yang persis sama sedikit dinaikkan.
             const wantTitle = stripArtistPrefix(wanted.title, wanted.artists)
@@ -312,6 +326,15 @@ export async function resolveViaPluginsDetailed(
             console.info(`[MusicVerse] Plugin ${plugin.id}: "${hit.title}" skor ${score.toFixed(2)}, ${actual.toFixed(1)} dtk`)
             cachePut(key, info, stream)
             return { info, outcome: 'ok' }
+          }
+        }
+        // Belum ada yang lolos setelah kata kunci terakhir: coba nama lain lagu ini (bahasa/aksara lain), mis. judul Jepangnya.
+        if (qi === queue.length - 1 && !aliasesQueued) {
+          aliasesQueued = true
+          aliases = await aliasesWithin(2500)
+          for (const alias of aliases) {
+            const extra = [`${alias.title} ${alias.artist}`.trim(), alias.title].map((x) => x.trim()).filter(Boolean)
+            for (const x of extra) if (!queue.includes(x)) queue.push(x)
           }
         }
         }

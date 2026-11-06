@@ -20,6 +20,36 @@ function tokens(value: string): string[] {
     .filter(Boolean)
 }
 
+/** Ejaan Latin yang mirip: spasi/tanda baca dibuang, vokal panjang romaji disamakan (ou/oo->o, uu->u). */
+function compact(value: string): string {
+  return normalizeSearchText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/ou|oo/g, 'o')
+    .replace(/uu/g, 'u')
+}
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]
+    row[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j]
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+      prev = tmp
+    }
+  }
+  return row[b.length]
+}
+
+/** Dua teks Latin dianggap sama bila setelah dipadatkan hampir identik ("Ho - Kago Tea Time" ~ "Houkago Teatime"). */
+export function sameSpelling(a: string, b: string): boolean {
+  const x = compact(a)
+  const y = compact(b)
+  if (x.length < 4 || y.length < 4) return false
+  return 1 - editDistance(x, y) / Math.max(x.length, y.length) >= 0.85
+}
+
 function artistNames(value: string): string[] {
   return normalizeSearchText(value)
     .split(/\s*(?:,|&|;| feat\.? | ft\.? | and | x )\s*/)
@@ -51,6 +81,7 @@ function titleScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   // "Artis - Judul" -> "Judul": nama artis di judul playlist tidak boleh dihitung sebagai bagian judul.
   const want = tokens(stripArtistPrefix(wanted.title, wanted.artists))
   if (want.length === 0) return null
+  if (sameSpelling(stripArtistPrefix(wanted.title, wanted.artists), info.title)) return 1
   const wantSet = new Set(want)
   const artistTokens = new Set(tokens(wanted.artists))
   // Judul API cadangan berformat "Judul - Artis": token artis tidak dihitung sebagai kelebihan.
@@ -73,6 +104,7 @@ function artistScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   }
   haystack = haystack.replace(/\s+/g, ' ')
   if (wantNames.some((name) => haystack.includes(name))) return 1
+  if (sameSpelling(wanted.artists, info.artist || haystack)) return 1
   const gotTokens = new Set(haystack.split(' ').filter(Boolean))
   // Urutan nama beda (\"Kamiya Hiroshi\" vs \"Hiroshi Kamiya\"): semua kata satu nama artis ada di data server = cocok.
   if (wantNames.some((name) => name.split(' ').filter(Boolean).every((t) => gotTokens.has(t)))) return 1
@@ -145,6 +177,9 @@ export function scoreCandidate(
   // mirip bisa lolos begitu saja ("asal ambil"), jadi skor diturunkan sampai hanya durasi yang nyaris sempurna yang lolos
   // (dan pemanggil juga membatasi ke hasil teratas pencarian).
   if (titleGap && artistGap) score *= 0.8
+  // GERBANG JUDUL: judul dinilai sendiri, terpisah dari artis. Artis dan durasi yang cocok tidak boleh menutupi judul yang
+  // jelas beda (lagu lain dari artis yang sama dengan durasi mirip). Judul beda aksara (title === null) tidak kena gerbang.
+  if (title !== null && title < 0.4) score = Math.min(score, 0.45)
   if (viaLink) score += 0.15
   else {
     const wantedId = extractTrackId(wanted.url ?? '')
@@ -152,6 +187,25 @@ export function scoreCandidate(
     if (wantedId && gotId && wantedId === gotId) score += 0.25
   }
   return score
+}
+
+/**
+ * Skor terbaik dari judul asli DAN nama-nama lain lagu yang sama dalam bahasa lain (lihat services/titleAliases):
+ * judul hasil cukup cocok dengan salah satunya. Artis ikut diganti sesuai nama lain itu.
+ */
+export function scoreWithAliases(
+  wanted: WantedTrack,
+  info: PlaybackInfo,
+  viaLink: boolean,
+  actualDuration: number | null,
+  aliases: ReadonlyArray<{ title: string; artist: string }>,
+): number {
+  let best = scoreCandidate(wanted, info, viaLink, actualDuration)
+  for (const alias of aliases) {
+    const score = scoreCandidate({ ...wanted, title: alias.title, artists: alias.artist || wanted.artists }, info, viaLink, actualDuration)
+    if (score > best) best = score
+  }
+  return best
 }
 
 /** True bila judul DAN artis hasil beda aksara dari lagu di playlist (tidak ada teks yang bisa dicocokkan, hanya durasi). */
