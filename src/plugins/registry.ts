@@ -203,9 +203,9 @@ export async function resolveViaPluginsDetailed(
   if (pin) {
     // Hanya cek ketersediaan: lagu yang sudah dipilih manual dianggap ada, tanpa jaringan.
     if (options.searchOnly) return { info: null, outcome: 'ok' }
-    const pinned = await resolveManualPick(pin, { signal: options.signal, quality: options.quality })
-    if (pinned.info || pinned.outcome === 'aborted') return pinned
-    console.warn(`[MusicVerse] Pilihan manual tersimpan untuk \"${wanted.title}\" tidak bisa dipakai (${pinned.outcome}); mencari otomatis.`)
+    // Pilihan manual itu mutlak: hanya yang dipilih pengguna yang diputar/diunduh. Bila gagal diambil (sinyal lemah,
+    // video dihapus) hasilnya dikembalikan apa adanya supaya pemanggil mengulang; TIDAK jatuh ke pencarian otomatis.
+    return resolveManualPick(pin, { signal: options.signal, quality: options.quality })
   }
   // Kualitas hanya berlaku untuk unduhan (strict). Selain "tinggi" hasilnya disimpan di kunci sendiri supaya tidak
   // menimpa stream yang dipakai pemutaran (yang selalu memakai kualitas terbaik).
@@ -472,8 +472,10 @@ export async function searchManualCandidates(track: { title: string; artists?: s
 }
 
 /**
- * Mengambil stream untuk hasil yang DIPILIH pengguna. Judul/artis tidak dicocokkan dengan playlist (pengguna yang
- * menentukan), tetapi audionya tetap diperiksa: terbaca, bukan klip, dan durasinya sesuai dengan hasil yang dipilih.
+ * Mengambil stream untuk hasil yang DIPILIH pengguna. Pengguna yang menentukan, jadi TIDAK ada pemeriksaan judul, artis,
+ * maupun durasi (baik terhadap playlist maupun terhadap hasil pencarian): audionya dipakai apa adanya. Satu-satunya
+ * syarat: ada stream yang bisa diambil. Stream yang metadatanya terbaca didahulukan; bila tidak ada yang terbaca di
+ * WebView (mis. ditolak CDN untuk <audio> tetapi bisa diunduh native), stream pertama tetap dipakai.
  */
 export async function resolveManualPick(
   pick: ManualPick,
@@ -487,42 +489,38 @@ export async function resolveManualPick(
   options.signal?.addEventListener('abort', forward, { once: true })
   const budget = setTimeout(() => inner.abort(), PLUGIN_BUDGET_STRICT_MS)
   const signal = inner.signal
-  const expected = pick.durationSec
   try {
     const streams = orderStreamsForQuality(await plugin.getStreams(pick.id, signal), options.quality ?? DEFAULT_DOWNLOAD_QUALITY).slice(
       0,
       MAX_STREAMS_PER_CANDIDATE,
     )
-    let hadFailure = false
-    let rejected = false
+    // Tidak ada stream sama sekali: gangguan sesaat (diulang pemanggil), bukan "lagu tidak ada".
+    if (streams.length === 0) return { info: null, outcome: 'failed' }
+    let fallback: PlaybackInfo | null = null
     for (const stream of streams) {
       const playable = await toPlayableUrl(stream)
       const actual = await probeAudioDuration(playable, probeTimeoutMs(true), signal)
-      if (actual === null) {
-        hadFailure = true
-        continue
-      }
-      if (isLikelyClip(actual, expected) || strictDurationProblem(actual, expected) !== null) {
-        rejected = true
-        continue
-      }
+      if (signal.aborted) return { info: null, outcome: options.signal?.aborted ? 'aborted' : 'timeout' }
       const info: PlaybackInfo = {
         title: pick.title,
         artist: pick.artist,
         album: pick.album,
-        duration: formatClock(actual),
+        duration: formatClock(actual ?? pick.durationSec),
         cover: pick.cover,
         spotifyUrl: '',
         audioUrl: playable,
         source: `plugin:${plugin.id}`,
         apiSource: 'plugin',
-        probedDuration: actual,
+        probedDuration: actual ?? undefined,
         directUrl: stream.url,
         directUserAgent: stream.headers?.['User-Agent'],
+        manualPick: true,
       }
-      return { info, outcome: 'ok' }
+      // Durasi tidak dibandingkan dengan apa pun: terbaca = langsung dipakai.
+      if (actual !== null) return { info, outcome: 'ok' }
+      fallback ??= info
     }
-    return { info: null, outcome: hadFailure ? 'failed' : rejected ? 'rejected' : 'nomatch' }
+    return { info: fallback, outcome: 'ok' }
   } catch (error) {
     if (signal.aborted) return { info: null, outcome: options.signal?.aborted ? 'aborted' : 'timeout' }
     console.warn(`[MusicVerse] Pilihan manual gagal (${plugin.id}):`, error)

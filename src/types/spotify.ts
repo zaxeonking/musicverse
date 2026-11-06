@@ -110,4 +110,9 @@ export interface PlaybackInfo {
   directUserAgent?: string
   /** Durasi (detik) yang terbaca dari metadata audio sebelum diunduh/diputar; dipakai mencocokkan ulang dengan berkas hasil unduhan. */
   probedDuration?: number
+  /**
+   * Audio ini DIPILIH pengguna sendiri (Cari manual). Bebas dari pemeriksaan judul/artis/durasi terhadap playlist:
+   * diputar dan diunduh apa adanya, tanpa dianggap klip / lagu lain.
+   */
+  manualPick?: boolean
 }

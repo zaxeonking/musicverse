@@ -118,7 +118,8 @@ SavedPlaylistCard.tsx| Kartu playlist yang sudah disimpan.
 PlaylistMenuSheet.tsx| Panel menu tindakan playlist.
 ManualSearchSheet.tsx| Panel pencarian manual.
 MoveDownloadSheet.tsx| Panel untuk memindahkan unduhan.
-DownloadsSection.tsx| Menampilkan bagian daftar unduhan.
+DownloadsSection.tsx| Menampilkan bagian daftar unduhan. Folder Lokal (LocalFolder) selalu tampil paling atas.
+LocalFolder.tsx| Folder "Lokal" di tab Unduhan: semua audio di HP kecuali unduhan MusicVerse; tidak bisa dihapus (hanya pindai ulang), tanpa aksi hapus/unduh per lagu.
 PlaylistTransferPanel.tsx| Panel pemindahan atau transfer playlist.
 RecentlyPlayedList.tsx| Menampilkan daftar musik yang baru diputar.
 MyPlaylistsSection.tsx| Menampilkan playlist milik pengguna.
@@ -242,6 +243,7 @@ Berisi penghubung antara aplikasi React dan fitur native Android.
 
 File| Fungsi
 offline.ts| Mengelola fitur dan status offline.
+localMusic.ts| Daftar audio lokal di HP (folder Lokal): izin, pemindaian MediaStore via native, sampul, dan pemutaran lagu lokal.
 appUpdate.ts| Mengelola pembaruan aplikasi native.
 musicVerseNative.ts| Penghubung aplikasi dengan fitur MusicVerse native.
 platform.ts| Mendeteksi platform yang sedang digunakan.
@@ -290,6 +292,7 @@ clipDetect.ts| Mendeteksi klip atau bagian audio.
 playerQueue.ts| Mengelola antrean pemutaran.
 safeStorage.ts| Mengelola penyimpanan data secara aman.
 lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
+localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
 
 ---
 
@@ -361,6 +364,7 @@ NativeDownloader.java| Menangani proses pengunduhan native.
 MediaExporter.java| Mengelola ekspor file media.
 InterruptionResumer.java| Mengelola pemulihan pemutaran setelah gangguan.
 AudioFinalizer.java| Menangani proses akhir audio.
+LocalAudioScanner.java| Memindai audio di HP lewat MediaStore (tanpa milik MusicVerse) dan menyiapkan sampulnya untuk folder Lokal.
 UpdateFileProvider.java| Menyediakan akses file untuk proses pembaruan.
 DownloadService.java| Layanan unduhan Android.
 StreamProxy.java| Mengelola proxy streaming audio.

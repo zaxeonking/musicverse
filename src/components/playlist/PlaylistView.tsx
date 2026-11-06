@@ -53,7 +53,8 @@ export default function PlaylistView() {
 
   // Cek ketersediaan audio semua lagu playlist (bukan hasil cari lagu satuan). Hook ini harus sebelum return di bawah.
   const checkable = status === 'success' && playlist !== null && playlist.source !== 'search'
-  const availability = useTrackAvailability(playlist?.tracks ?? NO_TRACKS, checkable)
+  // Pengecekan ditahan selama lagu sedang dicari/dimuat supaya ketukan pada lagu tidak terasa macet.
+  const availability = useTrackAvailability(playlist?.tracks ?? NO_TRACKS, checkable, player.status === 'resolving' || player.status === 'loading')
   useEffect(() => {
     if (toast === null) return
     const timer = setTimeout(() => setToast(null), 2500)

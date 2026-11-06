@@ -20,18 +20,15 @@ import {
   type Transfer,
 } from '../../native/offline'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { formatBytes } from '../../utils/formatTime'
 import { getRowActivity } from '../../utils/playerStatus'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
 import EmptyState from '../ui/EmptyState'
+import LocalFolder from './LocalFolder'
 import ManualSearchSheet from './ManualSearchSheet'
 import MoveDownloadSheet from './MoveDownloadSheet'
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 function transferLabel(transfer: Transfer, paused: boolean, heldText: string | null): string {
   if (transfer.held && transfer.status === 'queued') return 'Ditahan'
@@ -430,6 +427,9 @@ export default function DownloadsSection() {
         </ul>
       )}
 
+      <div className="space-y-5">
+        {/* Folder "Lokal": selalu paling atas, tidak bisa dihapus. Isinya audio di HP di luar unduhan MusicVerse. */}
+        <LocalFolder />
       {items.length === 0 ? (
         <EmptyState
           compact
@@ -505,6 +505,7 @@ export default function DownloadsSection() {
           )}
         </div>
       )}
+      </div>
 
       {manualFor && (
         <ManualSearchSheet transferKey={manualFor.key} title={manualFor.title} onClose={() => setManualFor(null)} onToast={showToast} />

@@ -73,8 +73,10 @@ export default {
           to: { opacity: '1', transform: 'none' },
         },
         // Disc yang muncul setelah keyboard selesai naik: naik pelan dari bawah sambil membesar.
+        // Jarak awal (`--rise-from`) = posisi kartu di belakang keyboard; disc naik dari sana ke atas keyboard.
         'bubble-rise': {
-          from: { opacity: '0', transform: 'translate3d(0, 28px, 0) scale(0.6)' },
+          from: { opacity: '0', transform: 'translate3d(0, var(--rise-from, 28px), 0) scale(0.6)' },
+          '30%': { opacity: '1' },
           to: { opacity: '1', transform: 'none' },
         },
         'sheet-expand': {
@@ -97,7 +99,7 @@ export default {
         'grow-right': 'grow-right 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'grow-left': 'grow-left 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
-        'bubble-rise': 'bubble-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'bubble-rise': 'bubble-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',
         disc: 'disc 18s linear infinite',
         eq: 'eq 1.1s ease-in-out infinite',

@@ -866,7 +866,9 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         // Durasi file audio yang sebenarnya baru diketahui setelah metadata dimuat. Jika hanya klip
         // (≤35 dtk untuk lagu yang jauh lebih panjang), buang dan coba API lain.
         // Diperiksa SEKALI (durasi pertama lagu ini); durasi dari event berikutnya bisa milik lagu lain (lihat createClipGuard).
-        clipGuardRef.current = createClipGuard(expectedDuration, isStale, (duration) => {
+        // Lagu lokal: durasinya dari MediaStore dan berkasnya milik pengguna; tidak ada sumber lain untuk dicoba.
+        // Audio pilihan manual pengguna: bebas, tidak dibandingkan dengan durasi playlist (tidak pernah dianggap klip).
+        clipGuardRef.current = info.source === 'local' || info.manualPick ? null : createClipGuard(expectedDuration, isStale, (duration) => {
           clipGuardRef.current = null
           if (info.source === 'offline') {
             // Berkas unduhan ternyata cuplikan (terunduh sebelum ada verifikasi): buang, lalu ambil lagi dari internet.
@@ -1264,7 +1266,9 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       if (preload.status === 'ready' && preload.info) {
         const expected = parseDurationText(nextTrack.duration)
         const loaded = audioEngine.preloadDuration(preload.info.audioUrl)
-        audioEngine.setAutoAdvance(!(expected !== null && loaded === null) && !isLikelyClip(loaded, expected))
+        // Pilihan manual pengguna: bebas dari pemeriksaan durasi terhadap playlist.
+        const free = preload.info.manualPick === true
+        audioEngine.setAutoAdvance(free || (!(expected !== null && loaded === null) && !isLikelyClip(loaded, expected)))
       }
       if (preload.status !== 'ready' || !preload.info || remaining > switchAt) return
       // Saat waktunya tiba, mulai crossfade walau lagu cadangan belum ter-buffer penuh: browser mobile sering
@@ -1277,8 +1281,9 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       // tidak diketahui, lagu berikutnya dimulai lewat startPlayback yang punya pengaman klip.
       const expectedNext = parseDurationText(nextTrack.duration)
       const loadedNext = audioEngine.preloadDuration(preload.info.audioUrl)
-      if (expectedNext !== null && loadedNext === null) return
-      if (isLikelyClip(loadedNext, expectedNext)) {
+      const freeNext = preload.info.manualPick === true
+      if (!freeNext && expectedNext !== null && loadedNext === null) return
+      if (!freeNext && isLikelyClip(loadedNext, expectedNext)) {
         preload.status = 'resolving'
         preload.info = null
         audioEngine.clearPreload()

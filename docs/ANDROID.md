@@ -119,6 +119,7 @@ lalu dikirim ke native; selama belum siap atau gagal dimuat dipakai sampul bawaa
   proses tetap hidup dan menampilkan kontrol. Tombol notifikasi/layar kunci/headset diteruskan ke pemutar JS.
 - Tombol Back di halaman awal **meminimalkan** app (tidak menutupnya).
 - Izin yang ditambahkan ke manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`.
+- Folder "Lokal" (tab Unduhan, v0.5.20): `READ_MEDIA_AUDIO` (Android 13+) dan `READ_EXTERNAL_STORAGE` (`maxSdkVersion="32"`). Hanya membaca MediaStore (`LocalAudioScanner`); unduhan MusicVerse dikecualikan (`Android/data/<paket>`, `Music/MusicVerse/`, pemilik = paket ini). Izin diminta lewat `requestLocalAudioPermission()`; bila ditolak permanen, `openAppSettings()` membuka info aplikasi.
 - `MusicVerseNative.requestNotificationPermission()` (Android 13+) dan `openBatterySettings()` tersedia di
   `src/native/musicVerseNative.ts`, **belum dipanggil dari UI**. Sebagian pabrikan (Xiaomi, Oppo, Vivo, Samsung)
   tetap bisa mematikan app; pengguna mungkin perlu mengecualikan MusicVerse dari penghemat baterai.

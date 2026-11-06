@@ -1,5 +1,5 @@
 import { Loader2, Play } from 'lucide-react'
-import { useRef, useState, type PointerEvent } from 'react'
+import { useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { MiniSide } from '../../hooks/useMiniPlayerMode'
 import type { NowPlaying } from '../../hooks/useNowPlaying'
@@ -67,6 +67,8 @@ interface MiniBubbleProps {
   onSideChange: (side: MiniSide) => void
   /** Muncul dengan animasi naik (setelah keyboard selesai naik), bukan animasi membesar bawaan. */
   rise?: boolean
+  /** Hanya bersama `rise`: jarak (px) disc mulai di bawah posisi akhirnya, yaitu tempat kartu tadi di belakang keyboard. */
+  riseFrom?: number
 }
 
 /**
@@ -75,7 +77,7 @@ interface MiniBubbleProps {
  *  - seret ke kiri/kanan    = pindah sisi layar (menempel otomatis, ada getar kecil),
  *  - tahan                  = putar / jeda.
  */
-export default function MiniBubble({ now, side, width, onExpand, onSideChange, rise = false }: MiniBubbleProps) {
+export default function MiniBubble({ now, side, width, onExpand, onSideChange, rise = false, riseFrom = 0 }: MiniBubbleProps) {
   const { status, togglePlayPause } = useAudioPlayer()
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
   const gesture = useRef({ id: -1, x: 0, y: 0, moved: false, held: false, timer: 0 })
@@ -156,6 +158,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
 
   return (
     <div
+      style={rise && riseFrom > 0 ? ({ '--rise-from': `${Math.round(riseFrom)}px` } as CSSProperties) : undefined}
       className={`pointer-events-none relative h-14 ${rise ? 'animate-bubble-rise' : 'animate-bubble-in'} motion-reduce:animate-none ${
         side === 'right' ? 'origin-bottom-right' : 'origin-bottom-left'
       }`}

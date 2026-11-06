@@ -4,6 +4,7 @@ import { getManualPin, pinKey } from '../plugins/manualPins'
 import { resolveViaPluginsDetailed } from '../plugins/registry'
 import type { PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
+import { isLocalTrackUrl } from '../utils/localTrack'
 import { useOnlineStatus } from './useOnlineStatus'
 
 /** ok = ada sumber audio; missing = tidak ditemukan; unknown = belum bisa dicek (sinyal/server), akan dicoba lagi. */
@@ -47,7 +48,7 @@ function writeCache(map: Record<string, number>): void {
 
 async function checkOne(track: PlaylistTrack, signal: AbortSignal): Promise<TrackAvailability | 'aborted'> {
   // Sudah terunduh (APK) atau sudah dipilih manual: pasti bisa diputar, tanpa jaringan.
-  if (findDownloaded(track) || getManualPin(track)) return 'ok'
+  if (isLocalTrackUrl(track.url) || findDownloaded(track) || getManualPin(track)) return 'ok'
   const { outcome } = await resolveViaPluginsDetailed(
     { title: track.title, artists: track.artists ?? '', duration: track.duration ?? '', url: track.url },
     { signal, expected: parseDuration(track.duration ?? ''), searchOnly: true },
@@ -81,8 +82,12 @@ export interface TrackAvailabilityState {
  * pencocokan yang sama seperti saat diputar, tanpa mengambil stream. Hasilnya perkiraan: audio yang ditemukan tetap diperiksa
  * lagi (durasi file, bukan cuplikan) saat benar-benar diputar atau diunduh.
  */
-export function useTrackAvailability(tracks: readonly PlaylistTrack[], enabled: boolean): TrackAvailabilityState {
+export function useTrackAvailability(tracks: readonly PlaylistTrack[], enabled: boolean, hold = false): TrackAvailabilityState {
   const online = useOnlineStatus()
+  // `hold` = pengguna sedang memutar/memuat lagu: pengecekan latar belakang berhenti mengambil lagu baru sampai selesai,
+  // supaya jaringan dan proses aplikasi dipakai pemutaran dulu (lagu yang diketuk tidak ikut antre di belakang pengecekan).
+  const holdRef = useRef(hold)
+  holdRef.current = hold
   const [results, setResults] = useState<Record<string, TrackAvailability>>({})
   const [running, setRunning] = useState(false)
   const [run, setRun] = useState(0)
@@ -113,6 +118,8 @@ export function useTrackAvailability(tracks: readonly PlaylistTrack[], enabled: 
     let next = 0
     const worker = async (): Promise<void> => {
       while (!controller.signal.aborted) {
+        while (holdRef.current && !controller.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 400))
+        if (controller.signal.aborted) return
         const index = next
         next += 1
         if (index >= queue.length) return

@@ -5,6 +5,7 @@ import { DEFAULT_DOWNLOAD_QUALITY, type DownloadQuality } from '../plugins/quali
 import type { PlaybackInfo, PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
 import { readJson, writeJson } from '../utils/safeStorage'
+import { LOCAL_KEY_PREFIX, localIdOf } from '../utils/localTrack'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
 import { isNativeApp } from './platform'
 
@@ -133,6 +134,9 @@ export function useOffline(): OfflineState {
 
 /** Kunci stabil sebuah lagu: ID Spotify jika ada, jika tidak hash judul+artis. */
 export function trackKey(track: { title: string; artists?: string; url?: string }): string {
+  // Lagu lokal (folder "Lokal"): kunci dari ID MediaStore, supaya tidak pernah tertukar dengan unduhan yang judulnya sama.
+  const localId = localIdOf(track.url)
+  if (localId) return `${LOCAL_KEY_PREFIX}${localId}`
   const link = extractSpotifyTrackLink(track.url ?? '')
   if (link) return `sp-${link.slice(link.lastIndexOf('/') + 1)}`
   const text = `${track.title}|${track.artists ?? ''}`.toLowerCase().replace(/\s+/g, ' ').trim()

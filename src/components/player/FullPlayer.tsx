@@ -412,7 +412,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
 
           {mismatch && playbackInfo && (
             <p className="text-center text-xs text-ink-muted">
-              Audio yang ditemukan server berbeda dari lagu yang dipilih: {playbackInfo.title}
+              {playbackInfo.manualPick ? 'Memutar pilihan manualmu' : 'Audio yang ditemukan server berbeda dari lagu yang dipilih'}: {playbackInfo.title}
               {playbackInfo.artist ? ` — ${playbackInfo.artist}` : ''}.
             </p>
           )}

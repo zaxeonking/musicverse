@@ -45,7 +45,12 @@ import com.getcapacitor.annotation.PermissionCallback;
 /** Jembatan JavaScript -> PlaybackService (notifikasi media + foreground service). */
 @CapacitorPlugin(
     name = "MusicVerseNative",
-    permissions = {@Permission(strings = {Manifest.permission.POST_NOTIFICATIONS}, alias = "notifications")})
+    permissions = {
+      @Permission(strings = {Manifest.permission.POST_NOTIFICATIONS}, alias = "notifications"),
+      // Folder "Lokal" (tab Unduhan): Android 13+ izin audio khusus, di bawahnya izin penyimpanan. Hanya salah satu yang diminta.
+      @Permission(strings = {"android.permission.READ_MEDIA_AUDIO"}, alias = "audio33"),
+      @Permission(strings = {Manifest.permission.READ_EXTERNAL_STORAGE}, alias = "audioLegacy")
+    })
 public class MusicVerseNativePlugin extends Plugin {
   private static final String UPDATE_FILE = "musicverse-update.apk";
   private static final String UPDATE_DIR = "app-update";
@@ -1029,6 +1034,90 @@ public class MusicVerseNativePlugin extends Plugin {
     JSObject result = new JSObject();
     result.put("granted", getPermissionState("notifications") == PermissionState.GRANTED);
     call.resolve(result);
+  }
+
+  // ---- Folder "Lokal": audio di HP di luar unduhan MusicVerse (hanya membaca MediaStore) ----
+
+  private static String audioAlias() {
+    return Build.VERSION.SDK_INT >= 33 ? "audio33" : "audioLegacy";
+  }
+
+  private boolean hasAudioPermission() {
+    return getPermissionState(audioAlias()) == PermissionState.GRANTED;
+  }
+
+  @PluginMethod
+  public void localAudioPermission(PluginCall call) {
+    JSObject result = new JSObject();
+    result.put("granted", hasAudioPermission());
+    call.resolve(result);
+  }
+
+  @PluginMethod
+  public void requestLocalAudioPermission(PluginCall call) {
+    if (hasAudioPermission()) {
+      JSObject result = new JSObject();
+      result.put("granted", true);
+      call.resolve(result);
+      return;
+    }
+    requestPermissionForAlias(audioAlias(), call, "localAudioPermissionCallback");
+  }
+
+  @PermissionCallback
+  private void localAudioPermissionCallback(PluginCall call) {
+    JSObject result = new JSObject();
+    result.put("granted", hasAudioPermission());
+    call.resolve(result);
+  }
+
+  /** Semua audio di HP kecuali milik MusicVerse (lihat LocalAudioScanner). Gagal dengan code PERMISSION bila izin belum ada. */
+  @PluginMethod
+  public void scanLocalAudio(PluginCall call) {
+    if (!hasAudioPermission()) {
+      call.reject("Izin audio belum diberikan", "PERMISSION");
+      return;
+    }
+    downloadPool.execute(
+        () -> {
+          try {
+            JSObject out = new JSObject();
+            out.put("tracks", LocalAudioScanner.scan(getContext()));
+            call.resolve(out);
+          } catch (Exception e) {
+            call.reject("Gagal memindai audio: " + e.getMessage(), "IO");
+          }
+        });
+  }
+
+  /** Menyiapkan sampul lagu lokal di cache/localcovers/<id>.jpg; `has` false = lagu tidak punya sampul. */
+  @PluginMethod
+  public void localAudioCover(PluginCall call) {
+    final String raw = call.getString("id");
+    if (raw == null || !raw.matches("\\d{1,18}") || !hasAudioPermission()) {
+      call.reject("ID / izin tidak valid", "INVALID");
+      return;
+    }
+    final long id = Long.parseLong(raw);
+    downloadPool.execute(
+        () -> {
+          JSObject out = new JSObject();
+          out.put("has", LocalAudioScanner.cover(getContext(), id));
+          call.resolve(out);
+        });
+  }
+
+  /** Halaman info aplikasi: dipakai bila izin audio ditolak permanen (dialog izin tidak muncul lagi). */
+  @PluginMethod
+  public void openAppSettings(PluginCall call) {
+    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    try {
+      getContext().startActivity(intent);
+      call.resolve();
+    } catch (RuntimeException e) {
+      call.reject("Tidak bisa membuka pengaturan aplikasi.");
+    }
   }
 
   @PluginMethod

@@ -37,11 +37,17 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   // Gelembung SEMENTARA karena keyboard terbuka. Tidak disimpan: pilihan pengguna (collapsed) tetap seperti semula,
   // jadi saat keyboard hilang kartu kembali kalau memang itu pilihannya.
   const [kbBubble, setKbBubble] = useState(false)
-  // Keyboard sedang naik: kartu langsung disembunyikan (tanpa animasi), gelembung baru muncul setelah keyboard selesai naik.
-  const [kbHidden, setKbHidden] = useState(false)
+  // Keyboard sedang naik: kartu TIDAK ikut naik, ditahan di tempat semula (tertutup keyboard) sampai ukuran layar tenang;
+  // baru lalu berganti disc yang naik dari belakang keyboard ke atasnya.
   const cancelSettle = useRef<(() => void) | null>(null)
   // Gelembung muncul karena keyboard (animasi naik), bukan karena pilihan pengguna.
   const [bubbleRise, setBubbleRise] = useState(false)
+  // Jarak (px) disc mulai di bawah posisi akhirnya = tempat kartu tadi ditahan di belakang keyboard.
+  const [riseFrom, setRiseFrom] = useState(0)
+  // Posisi dock (tepi bawah di layar) sesaat sebelum keyboard naik, dan penahan kartu selama keyboard naik.
+  const restBottom = useRef({ width: 0, height: 0, bottom: 0 })
+  const pinOffset = useRef(0)
+  const pinStop = useRef<(() => void) | null>(null)
   const kbTimer = useRef(0)
   const prevKeyboard = useRef(false)
   // Pengguna mengetuk gelembung saat keyboard terbuka: keyboard ditutup dulu, kartu membesar sesudahnya.
@@ -78,9 +84,73 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       window.clearTimeout(resetTimer.current)
       window.clearTimeout(kbTimer.current)
       cancelSettle.current?.()
+      pinStop.current?.()
     },
     [],
   )
+
+  // Catat posisi dock saat layar masih penuh (tepat sebelum keyboard naik: fokus masuk lebih dulu daripada layar mengecil).
+  useLayoutEffect(() => {
+    const record = () => {
+      const el = dockRef.current
+      if (!el || pinStop.current) return
+      const { innerWidth: width, innerHeight: height } = window
+      const rest = restBottom.current
+      if (width !== rest.width || height >= rest.height - 1) {
+        restBottom.current = { width, height, bottom: el.getBoundingClientRect().bottom }
+      }
+    }
+    record()
+    document.addEventListener('focusin', record, true)
+    window.addEventListener('resize', record)
+    return () => {
+      document.removeEventListener('focusin', record, true)
+      window.removeEventListener('resize', record)
+    }
+  }, [])
+
+  /** Memasang transform pada dock supaya kartu tetap di posisi layar semula walau layar mengecil karena keyboard. */
+  const applyPin = () => {
+    const el = dockRef.current
+    if (!el) return
+    const natural = el.getBoundingClientRect().bottom - pinOffset.current
+    const offset = Math.max(0, restBottom.current.bottom - natural)
+    if (Math.abs(offset - pinOffset.current) < 0.5) return
+    pinOffset.current = offset
+    el.style.transform = `translate3d(0, ${offset}px, 0)`
+  }
+
+  const startPin = () => {
+    pinStop.current?.()
+    let raf = 0
+    const loop = () => {
+      applyPin()
+      raf = window.requestAnimationFrame(loop)
+    }
+    // Tepat saat ukuran berubah (sebelum digambar) supaya kartu tidak sempat meloncat naik; rAF menambal margin yang beranimasi.
+    window.addEventListener('resize', applyPin)
+    window.visualViewport?.addEventListener('resize', applyPin)
+    applyPin()
+    raf = window.requestAnimationFrame(loop)
+    pinStop.current = () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener('resize', applyPin)
+      window.visualViewport?.removeEventListener('resize', applyPin)
+      pinStop.current = null
+    }
+  }
+
+  /** Lepas penahan dan kembalikan dock ke posisi normalnya. */
+  const releasePin = () => {
+    pinStop.current?.()
+    pinOffset.current = 0
+    if (dockRef.current) dockRef.current.style.transform = ''
+  }
+
+  // Disc sudah terpasang: dock kembali ke posisi normal (di atas keyboard); disc naik dari `riseFrom` lewat animasinya.
+  useLayoutEffect(() => {
+    if (kbBubble && pinOffset.current > 0) releasePin()
+  })
 
   /** Posisikan kartu mengikuti jari: ke bawah = turun + mengecil + memudar; ke atas = naik + sedikit membesar. */
   const applyDrag = (dy: number, animate: boolean) => {
@@ -156,14 +226,18 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (keyboardOpen === was) return
     if (keyboardOpen) {
       if (!collapsed && !kbBubble) {
-        // Tanpa animasi perubahan: kartu hilang seketika, lalu gelembung naik setelah keyboard selesai naik.
-        setKbHidden(true)
+        // Kartu tidak ikut naik: ditahan di belakang keyboard. Setelah layar tenang, kartu berganti disc yang naik
+        // dari belakang keyboard ke atasnya (jarak awal = seberapa jauh kartu tadi ditahan ke bawah).
+        startPin()
         cancelSettle.current?.()
         cancelSettle.current = waitForViewportSettled(() => {
           cancelSettle.current = null
+          // Penahan dilepas (transform dibersihkan) di useLayoutEffect saat disc sudah terpasang, supaya kartu tidak sempat
+          // terlihat di atas keyboard sedetik sebelum diganti disc.
+          pinStop.current?.()
+          setRiseFrom(pinOffset.current)
           setBubbleRise(true)
           setKbBubble(true)
-          setKbHidden(false)
         })
       }
       return
@@ -174,16 +248,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       cancelSettle.current()
       cancelSettle.current = null
     }
-    if (kbHidden) setKbHidden(false)
-    if (!kbBubble) {
-      // Sempat mulai mengecil tetapi keyboard keburu menutup: kartu kembali ke tempatnya dengan animasi.
-      const el = cardRef.current
-      if (el) {
-        el.style.transition = 'transform 260ms cubic-bezier(0.22,1,0.36,1), opacity 200ms'
-        el.style.transform = ''
-        el.style.opacity = ''
-      }
-    }
+    // Keyboard menutup sebelum kartu berganti disc: lepas penahan, kartu kembali ke tempatnya bersama layar yang melebar.
+    if (pinStop.current) releasePin()
     if (pendingExpand.current) {
       pendingExpand.current = false
       if (collapsed) {
@@ -195,6 +261,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       setGrowFrom(side)
       setKbBubble(false)
       setBubbleRise(false)
+      setRiseFrom(0)
     }
   })
 
@@ -295,8 +362,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     <div className="pointer-events-none relative z-40 h-0 shrink-0">
     <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
     {showBubble ? (
-      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} />
-    ) : kbHidden ? null : (
+      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} riseFrom={riseFrom} />
+    ) : (
     <div className={`flex origin-bottom flex-col ${cardAnimation}`}>
     {/* Grup yang ikut bergerak saat diseret: glow (di belakang) + kartu. */}
     <div ref={cardRef} className="pointer-events-none relative origin-bottom">

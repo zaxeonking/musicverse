@@ -3,14 +3,12 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import PlaylistsSection from '../components/library/PlaylistsSection'
 import RecentlyPlayedList from '../components/library/RecentlyPlayedList'
-import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import SectionHeader from '../components/ui/SectionHeader'
 import { useLibrary } from '../context/LibraryContext'
 import { usePlaylist } from '../context/PlaylistContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import type { RecentPlay } from '../types/library'
-import { fallbackCover } from '../utils/fallbackCover'
 import { noticeMessage } from '../utils/libraryNotice'
 import { getRowActivity } from '../utils/playerStatus'
 
@@ -45,10 +43,9 @@ function NoticeBar({
 
 export default function LibraryPage() {
   const { playlist: active } = usePlaylist()
-  const { saved, recent, health, notice, savedIdFor, savePlaylist, clearRecent, dismissNotice } = useLibrary()
+  const { saved, recent, health, notice, clearRecent, dismissNotice } = useLibrary()
   const player = useAudioPlayer()
   const [recoveredDismissed, setRecoveredDismissed] = useState(false)
-  const activeUnsaved = active !== null && active.source !== 'search' && savedIdFor(active) === null
 
   const currentTrack = player.currentTrack
   const handlePlayRecent = useCallback(
@@ -110,28 +107,6 @@ export default function LibraryPage() {
             </NoticeBar>
           )}
         </div>
-      )}
-
-      {activeUnsaved && active && (
-        <section
-          aria-label="Playlist yang sedang dibuka belum tersimpan"
-          className="flex flex-col gap-3 rounded-lg bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="w-14 shrink-0">
-              <CoverArt cover={fallbackCover(active.title)} src={active.cover} />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate font-medium text-ink">{active.title}</p>
-              <p className="text-sm text-ink-muted">
-                {active.tracks.length} lagu · Sedang dibuka, belum ada di Koleksi
-              </p>
-            </div>
-          </div>
-          <button type="button" onClick={() => savePlaylist(active)} className={primaryButton}>
-            Simpan ke Koleksi
-          </button>
-        </section>
       )}
 
       <PlaylistsSection />

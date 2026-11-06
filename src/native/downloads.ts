@@ -1,7 +1,7 @@
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
-import { setManualPin } from '../plugins/manualPins'
+import { getManualPin, setManualPin } from '../plugins/manualPins'
 import { forgetResolved, isNativeUnimplemented, searchManualCandidates } from '../plugins/registry'
 import type { ManualCandidate, ManualPick } from '../plugins/types'
 import { markClientRejected } from '../plugins/ytmusic'
@@ -9,6 +9,7 @@ import type { ApiSourceName, PlaybackInfo, PlaylistTrack } from '../types/spotif
 import { isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { parseDuration } from '../utils/formatTime'
 import { probeAudioDuration } from '../utils/probeAudio'
+import { isLocalTrackUrl } from '../utils/localTrack'
 import { isSafeHttpUrl } from '../utils/spotifyUrl'
 import { MusicVerseNative, type NativeDownloadResult, type NativeQueueJob, type NativeQueueResult } from './musicVerseNative'
 import { fetchAndSaveLyrics } from './offlineLyrics'
@@ -355,6 +356,7 @@ async function checkDownloaded(
   expected: number | null,
   remoteDuration: number | undefined,
   declaredBytes: number,
+  free = false,
 ): Promise<DownloadProblem | null> {
   if (bytes < MIN_VALID_BYTES) return { reason: 'Berkas yang terunduh tidak valid (terlalu kecil).' }
   if (declaredBytes > 0 && bytes < declaredBytes * 0.99) {
@@ -370,9 +372,12 @@ async function checkDownloaded(
   }
 
   if (actual !== null) {
-    const problem = strictDurationProblem(actual, expected)
-    if (problem) return { reason: problem }
-    if (isLikelyClip(actual, expected)) return { reason: `Durasi audio (${Math.round(actual)} dtk) menunjukkan cuplikan.` }
+    // Pilihan manual: durasi tidak dibandingkan dengan playlist (pengguna yang menentukan); hanya integritas berkas yang dijaga.
+    if (!free) {
+      const problem = strictDurationProblem(actual, expected)
+      if (problem) return { reason: problem }
+      if (isLikelyClip(actual, expected)) return { reason: `Durasi audio (${Math.round(actual)} dtk) menunjukkan cuplikan.` }
+    }
     if (remoteDuration !== undefined && Math.abs(actual - remoteDuration) > REMOTE_LOCAL_DRIFT_S) {
       return {
         reason: `Durasi berkas (${Math.round(actual)} dtk) tidak sama dengan sumbernya (${Math.round(remoteDuration)} dtk), unduhan tidak utuh.`,
@@ -381,6 +386,11 @@ async function checkDownloaded(
     }
   }
 
+  // Pilihan manual: berkas sudah utuh (tidak terpotong, sama dengan sumbernya, isinya audio): diterima apa adanya.
+  if (free) {
+    if (actual === null) console.warn('[MusicVerse] Durasi berkas pilihan manual tidak terbaca; diterima karena dipilih pengguna.')
+    return null
+  }
   // Durasi dipakai juga untuk memeriksa laju bit; jika tak terbaca, durasi dari playlist yang jadi acuan.
   const reference = actual ?? expected
   if (reference === null || reference <= 0) {
@@ -459,7 +469,18 @@ function isTransientApiError(error: unknown): boolean {
  * dipilih pengguna, karena itulah yang dia anggap benar.
  */
 function expectedFor(job: Job): number | null {
-  return job.manual ? job.manual.durationSec : parseDuration(job.track.duration)
+  // Pilihan manual itu BEBAS: tidak ada durasi acuan sama sekali (null = tidak ada pemeriksaan durasi / klip).
+  if (isManualJob(job)) return null
+  return parseDuration(job.track.duration)
+}
+
+/**
+ * Unduhan ini memakai audio pilihan pengguna: dari tombol "Cari manual" di daftar gagal (`job.manual`) ATAU pilihan manual
+ * yang tersimpan untuk lagu ini (dipilih dari playlist, lalu lagunya diunduh biasa). Kedua kasus diperlakukan sama:
+ * hanya yang dipilih yang diunduh, tanpa pemeriksaan judul/artis/durasi terhadap playlist dan tanpa mencari sumber lain.
+ */
+function isManualJob(job: Job): boolean {
+  return Boolean(job.manual) || getManualPin(job.track) !== null
 }
 
 function buildQueueJob(job: Job, info: PlaybackInfo, sourceUrl: string, expected: number | null): NativeQueueJob {
@@ -482,6 +503,7 @@ function buildQueueJob(job: Job, info: PlaybackInfo, sourceUrl: string, expected
     exportToMusic: getOfflineState().exportMusic,
     exportName: exportDisplayName(track, 'tmp').slice(0, -'.tmp'.length),
     expectedSec: expected ?? -1,
+    free: isManualJob(job),
     remoteSec: info.probedDuration ?? -1,
     forced: job.forced === true,
     resolvedAt: Date.now(),
@@ -701,11 +723,11 @@ async function downloadOne(job: Job): Promise<void> {
     const api = avoidKeyOf(outcome.info)
     if (out.reason === 'notaudio' || out.reason === 'mismatch') {
       // Isi tidak cocok: singkirkan sumber itu, atau ulangi semua sumber dari awal bila sudah habis.
-      if (!job.manual && api && !avoid.includes(api)) {
+      if (!isManualJob(job) && api && !avoid.includes(api)) {
         avoid.push(api)
       } else {
         // Pilihan manual yang tidak cocok langsung gagal (tidak ada sumber lain untuk dicoba).
-        mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+        mismatchRounds += isManualJob(job) ? MISMATCH_ROUNDS_MAX + 1 : 1
         if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(out.message || 'Isi unduhan tidak cocok.')
         avoid.length = 0
         await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -770,7 +792,7 @@ async function downloadOne(job: Job): Promise<void> {
       } catch (error) {
         // Semua sumber ditolak karena tidak cocok dengan lagunya: putaran baru, sumber dicoba lagi dari awal.
         if (error instanceof SpotifyApiError && error.code === 'clip_only') {
-          mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+          mismatchRounds += isManualJob(job) ? MISMATCH_ROUNDS_MAX + 1 : 1
           console.warn(`[MusicVerse] Semua sumber tidak cocok (putaran ${mismatchRounds}/${MISMATCH_ROUNDS_MAX}):`, error)
           if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw error
           avoid.length = 0
@@ -904,10 +926,10 @@ async function downloadOne(job: Job): Promise<void> {
           await safeDeletePart(partPath)
           const api = avoidKeyOf(info)
           console.warn(`[MusicVerse] Isi unduhan dari ${api ?? 'sumber tak dikenal'} bukan audio; sumber dilewati.`)
-          if (!job.manual && api && !avoid.includes(api)) {
+          if (!isManualJob(job) && api && !avoid.includes(api)) {
             avoid.push(api)
           } else {
-            mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+            mismatchRounds += isManualJob(job) ? MISMATCH_ROUNDS_MAX + 1 : 1
             if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error('Isi unduhan bukan audio.')
             avoid.length = 0
             await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -919,7 +941,7 @@ async function downloadOne(job: Job): Promise<void> {
     }
 
     const stat = await Filesystem.stat({ path: partPath, directory: Directory.External })
-    const problem = await checkDownloaded(partPath, stat.size, expected, info.probedDuration, active.total)
+    const problem = await checkDownloaded(partPath, stat.size, expected, info.probedDuration, active.total, isManualJob(job))
     if (!problem) {
       size = stat.size
       break
@@ -936,10 +958,10 @@ async function downloadOne(job: Job): Promise<void> {
     }
     // Berkas tidak cocok: singkirkan sumber itu dan coba sumber lain. Bila semua sudah dicoba, ulangi dari awal
     // (maks. MISMATCH_ROUNDS_MAX putaran) sebelum menyerah.
-    if (!job.manual && api && !avoid.includes(api)) {
+    if (!isManualJob(job) && api && !avoid.includes(api)) {
       avoid.push(api)
     } else {
-      mismatchRounds += job.manual ? MISMATCH_ROUNDS_MAX + 1 : 1
+      mismatchRounds += isManualJob(job) ? MISMATCH_ROUNDS_MAX + 1 : 1
       if (mismatchRounds > MISMATCH_ROUNDS_MAX) throw new Error(problem.reason)
       avoid.length = 0
       await pausableSleep(MISMATCH_RETRY_DELAY_MS, job)
@@ -1096,6 +1118,8 @@ async function pump(): Promise<void> {
 export type EnqueueResult = 'queued' | 'already' | 'busy' | 'unsupported'
 
 function enqueue(track: PlaylistTrack, manual?: ManualPick): EnqueueResult {
+  // Lagu lokal sudah ada di HP: tidak ada yang perlu diunduh.
+  if (isLocalTrackUrl(track.url)) return 'already'
   const key = trackKey(track)
   const state = getOfflineState()
   if (state.items.some((item) => item.key === key)) return 'already'

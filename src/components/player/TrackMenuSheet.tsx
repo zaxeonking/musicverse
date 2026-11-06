@@ -13,6 +13,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import { getUpcomingTracks } from '../../utils/playerQueue'
 import { extractTrackId } from '../../utils/spotifyUrl'
 import { downloadTrack } from '../../native/downloads'
+import { isLocalTrackUrl } from '../../utils/localTrack'
 import { removeDownload, trackKey, useOffline } from '../../native/offline'
 import { isNativeApp } from '../../native/platform'
 import CoverArt from '../ui/CoverArt'
@@ -60,6 +61,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   const href = !native && extractTrackId(track.url) ? track.url : undefined
   const offline = useOffline()
   const dlKey = trackKey(track)
+  // Lagu dari folder "Lokal" sudah ada di HP: tidak bisa diunduh/dihapus dari sini (berkasnya bukan milik MusicVerse).
+  const isLocal = isLocalTrackUrl(track.url)
   const downloaded = offline.items.some((item) => item.key === dlKey)
   const transfer = offline.transfers.get(dlKey)
   const downloading = transfer !== undefined && transfer.status !== 'error'
@@ -280,6 +283,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                 <Action icon={History} label="Hapus dari riwayat" hint="Hanya entri putar ini" onClick={removeFromHistory} danger />
               )}
               {native &&
+                !isLocal &&
                 (downloaded ? (
                   <Action icon={Trash2} label="Hapus unduhan" hint="Lagu ini bisa diputar offline" onClick={deleteDownload} danger />
                 ) : (

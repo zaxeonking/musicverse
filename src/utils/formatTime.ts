@@ -15,3 +15,9 @@ export function parseDuration(text: string | null | undefined): number | null {
   const total = parts.reduce((sum, p) => sum * 60 + Number(p), 0)
   return total > 0 ? total : null
 }
+
+/** 1536 → "2 KB", 5_242_880 → "5.0 MB". Dipakai daftar Unduhan dan folder Lokal. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}

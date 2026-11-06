@@ -376,6 +376,9 @@ final class DownloadQueue {
     long bytes = part.length();
     double expected = job.optDouble("expectedSec", -1);
     double remote = job.optDouble("remoteSec", -1);
+    // Audio pilihan manual pengguna: bebas dari pemeriksaan durasi / laju bit terhadap playlist; hanya integritas berkas.
+    boolean free = job.optBoolean("free", false);
+    if (free) expected = -1;
     if (bytes < MIN_VALID_BYTES) {
       deletePart(part);
       return handback(key, "mismatch", "Berkas yang terunduh tidak valid (terlalu kecil).");
@@ -391,7 +394,17 @@ final class DownloadQueue {
     double actual = probeDuration(part);
     // Durasi yang tidak terbaca / tidak cocok di sini BELUM tentu salah (pembaca native dan WebView bisa beda tipis untuk
     // MP3 VBR / WebM): serahkan ke JS dengan pemeriksaan ketatnya. Berkas tetap ada.
-    if (actual <= 0 || strictProblem(actual, expected) || isClip(actual, expected) || (remote > 0 && Math.abs(actual - remote) > 3)) {
+    if (free) {
+      // Durasi tidak terbaca di native: JS yang memastikan (mode bebas juga). Terpotong dibanding sumbernya: JS yang menilai.
+      if (actual <= 0 || (remote > 0 && Math.abs(actual - remote) > 3)) {
+        JSONObject r = base("verify", key);
+        put(r, "ext", container.ext);
+        put(r, "mime", container.mime);
+        put(r, "bytes", bytes);
+        put(r, "total", dl.total);
+        return r;
+      }
+    } else if (actual <= 0 || strictProblem(actual, expected) || isClip(actual, expected) || (remote > 0 && Math.abs(actual - remote) > 3)) {
       JSONObject r = base("verify", key);
       put(r, "ext", container.ext);
       put(r, "mime", container.mime);
@@ -400,7 +413,7 @@ final class DownloadQueue {
       return r;
     }
     double rate = bytes / actual;
-    if (rate < MIN_BYTES_PER_SEC_STRICT || rate > MAX_BYTES_PER_SEC_STRICT) {
+    if (!free && (rate < MIN_BYTES_PER_SEC_STRICT || rate > MAX_BYTES_PER_SEC_STRICT)) {
       deletePart(part);
       return handback(key, "mismatch", "Ukuran berkas tidak wajar untuk durasinya, kemungkinan bukan lagu yang dimaksud.");
     }

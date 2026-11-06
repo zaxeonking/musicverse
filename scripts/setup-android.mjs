@@ -85,11 +85,21 @@ const permissions = [
   'android.permission.REQUEST_INSTALL_PACKAGES',
   // Dialog sistem "izinkan selalu berjalan di latar belakang" untuk unduhan / pemutaran saat layar mati.
   'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+  // Folder "Lokal" di tab Unduhan: membaca semua audio di HP (Android 13+). Di bawahnya: READ_EXTERNAL_STORAGE (lihat bawah).
+  'android.permission.READ_MEDIA_AUDIO',
 ]
 const missing = permissions.filter((name) => !manifest.includes(`android:name="${name}"`))
 if (missing.length > 0) {
   const lines = missing.map((name) => `    <uses-permission android:name="${name}" />`).join('\n')
   manifest = manifest.replace(/\n(\s*)<application/, `\n${lines}\n\n$1<application`)
+}
+
+// Android 12 ke bawah: izin penyimpanan baca (tidak dibutuhkan dan tidak diminta di Android 13+).
+if (!manifest.includes('android.permission.READ_EXTERNAL_STORAGE')) {
+  manifest = manifest.replace(
+    /\n(\s*)<application/,
+    '\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n\n$1<application',
+  )
 }
 
 if (!manifest.includes('.PlaybackService')) {

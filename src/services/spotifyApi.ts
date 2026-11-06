@@ -1,4 +1,6 @@
+import { resolveLocalPlayback } from '../native/localMusic'
 import { resolveOfflinePlayback } from '../native/offline'
+import { isLocalTrackUrl } from '../utils/localTrack'
 import type { DownloadQuality } from '../plugins/quality'
 import { resolveManualPick, resolveViaPluginsDetailed, type PluginOutcome } from '../plugins/registry'
 import type { ManualPick } from '../plugins/types'
@@ -682,6 +684,13 @@ async function resolvePlaybackInfo(
   track: { title: string; url?: string; artists?: string; duration?: string },
   options: FetchPlaylistOptions = {},
 ): Promise<PlaybackInfo> {
+  // Folder "Lokal": audio yang sudah ada di HP diputar langsung dari berkasnya; tidak pernah dicari di YouTube.
+  if (isLocalTrackUrl(track.url)) {
+    const local = await resolveLocalPlayback(track)
+    if (local) return local
+    throw new SpotifyApiError('no_audio', 'Berkas lagu ini sudah tidak ada di HP, atau izin audio dicabut.')
+  }
+
   // APK: lagu yang sudah diunduh diputar dari berkas lokal (Android/data/<paket>/files/download), tanpa internet.
   const offline = options.strict ? null : await resolveOfflinePlayback(track)
   if (offline) return offline

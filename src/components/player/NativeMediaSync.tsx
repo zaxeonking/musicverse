@@ -52,7 +52,7 @@ export default function NativeMediaSync() {
   const title = currentTrack?.title ?? ''
   const album = currentTrack?.album ?? ''
   // Lagu yang diputar dari unduhan memakai sampul lokal (tetap tampil tanpa internet).
-  const coverUrl = (playbackInfo?.source === 'offline' ? playbackInfo.cover : currentTrack?.cover) || undefined
+  const coverUrl = (playbackInfo?.source === 'offline' || playbackInfo?.source === 'local' ? playbackInfo.cover : currentTrack?.cover) || undefined
   const playing = status === 'playing' || status === 'buffering' || status === 'loading' || status === 'resolving'
   // Jeda antar lagu (mencari/memuat audio) atau buffering: notifikasi menampilkan indikator memuat, bukan sekadar gambar diam.
   const loading = status === 'buffering' || status === 'loading' || status === 'resolving'

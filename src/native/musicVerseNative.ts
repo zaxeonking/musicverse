@@ -126,6 +126,8 @@ export interface NativeQueueJob {
   exportName: string
   /** Durasi lagu di playlist (detik); -1 = tidak diketahui. */
   expectedSec: number
+  /** Audio pilihan manual pengguna: native tidak membandingkan durasi/laju bit dengan playlist, hanya integritas berkas. */
+  free?: boolean
   /** Durasi sumber yang dibaca sebelum diunduh (detik); -1 = tidak diketahui. */
   remoteSec: number
   /** Dipilih manual: abaikan syarat Wi-Fi/cas. */
@@ -211,6 +213,18 @@ export interface NativeFinalizeResult {
   exportError?: string
 }
 
+/** Satu audio dari MediaStore (hasil `scanLocalAudio`). `id` = _ID MediaStore sebagai teks. */
+export interface NativeLocalAudio {
+  id: string
+  title: string
+  artist: string
+  album: string
+  durationMs: number
+  size: number
+  /** Epoch ms saat berkas ditambahkan ke MediaStore. */
+  addedAt: number
+}
+
 export interface MusicVerseNativePlugin {
   /**
    * Mengenali jenis audio dari ISI berkas. Gagal dengan code NOT_AUDIO bila bukan audio (mis. halaman error).
@@ -226,6 +240,16 @@ export interface MusicVerseNativePlugin {
   upgradeDownload(options: NativeUpgradeOptions): Promise<NativeUpgradeResult>
   /** Menyalin berkas yang sudah ada ke Music/MusicVerse. */
   exportDownload(options: { path: string; exportName: string; mime: string }): Promise<{ exported: boolean; exportError?: string }>
+  /** Folder "Lokal": izin audio sudah diberikan? (Android 13+: READ_MEDIA_AUDIO; di bawahnya: baca penyimpanan). Butuh APK v0.5.20+. */
+  localAudioPermission(): Promise<{ granted: boolean }>
+  /** Menampilkan dialog izin audio. Bila sudah ditolak permanen dialog tidak muncul: `granted` false, arahkan ke `openAppSettings`. */
+  requestLocalAudioPermission(): Promise<{ granted: boolean }>
+  /** Memindai semua audio di HP KECUALI milik MusicVerse (unduhan + salinan Music/MusicVerse). Gagal dengan code PERMISSION | IO. */
+  scanLocalAudio(): Promise<{ tracks: NativeLocalAudio[] }>
+  /** Menyiapkan sampul lagu lokal di cache/localcovers/<id>.jpg; `has` false = tidak punya sampul. */
+  localAudioCover(options: { id: string }): Promise<{ has: boolean }>
+  /** Membuka halaman info aplikasi di pengaturan sistem (untuk mengubah izin yang ditolak permanen). */
+  openAppSettings(): Promise<void>
   /**
    * Pengunduh native yang BISA MELANJUTKAN: putus sinyal tidak membuang byte yang sudah masuk, jaringan ditunggu lalu
    * disambung lewat Range. Gagal dengan code CANCELLED | HTTP_<kode> | NETWORK | SOURCE_CHANGED | IO | INVALID.
