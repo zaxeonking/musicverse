@@ -3,13 +3,19 @@ import { Component, useEffect, useState, type KeyboardEvent, type ReactNode } fr
 import { createPortal } from 'react-dom'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import { downloadWithPick, findManualCandidates } from '../../native/downloads'
+import { setManualPin } from '../../plugins/manualPins'
+import { searchManualCandidates } from '../../plugins/registry'
 import type { ManualCandidate } from '../../plugins/types'
 import { formatTime } from '../../utils/formatTime'
 import Action from '../player/SheetAction'
 
 interface ManualSearchSheetProps {
-  /** Kunci unduhan yang gagal. */
-  transferKey: string
+  /** Kunci unduhan yang gagal (mode Unduhan). Kosongkan dan isi `track` untuk memilih sumber lagu di playlist. */
+  transferKey?: string
+  /** Mode playlist: lagu yang tidak ditemukan. Pilihan disimpan (dipakai lagi saat diputar/diunduh) tanpa mengunduh. */
+  track?: { title: string; artists?: string }
+  /** Dipanggil setelah pilihan tersimpan (mode playlist). */
+  onPicked?: () => void
   title: string
   onClose: () => void
   onToast: (message: string) => void
@@ -49,7 +55,7 @@ type SearchState = { status: 'loading' } | { status: 'error'; message: string } 
  * Pilih manual saat pencarian otomatis gagal: sampai 5 hasil YouTube Music / YouTube dengan judul, artis, dan durasi.
  * Pengguna yang menentukan mana yang benar; audionya tetap diperiksa (terbaca, bukan cuplikan, durasi sesuai pilihan).
  */
-export default function ManualSearchSheet({ transferKey, title, onClose, onToast }: ManualSearchSheetProps) {
+export default function ManualSearchSheet({ transferKey, track, onPicked, title, onClose, onToast }: ManualSearchSheetProps) {
   useOverlayHistory(true, onClose)
   const [state, setState] = useState<SearchState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -57,7 +63,8 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
   useEffect(() => {
     let cancelled = false
     setState({ status: 'loading' })
-    findManualCandidates(transferKey).then(
+    const search = track ? searchManualCandidates(track) : transferKey ? findManualCandidates(transferKey) : Promise.resolve([] as ManualCandidate[])
+    search.then(
       (results) => {
         if (!cancelled) setState({ status: 'ready', results })
       },
@@ -68,10 +75,16 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
     return () => {
       cancelled = true
     }
-  }, [transferKey, attempt])
+  }, [transferKey, track, attempt])
 
   const choose = (pick: ManualCandidate): void => {
-    if (downloadWithPick(transferKey, pick)) onToast(`Mengunduh “${pick.title}”`)
+    if (track) {
+      // Mode playlist: simpan pilihan untuk lagu ini. Audionya diperiksa saat lagu diputar atau diunduh.
+      if (setManualPin(track, pick)) {
+        onToast(`Disimpan: “${pick.title}” dipakai untuk lagu ini`)
+        onPicked?.()
+      } else onToast('Pilihan tidak bisa disimpan (penyimpanan penuh atau tidak bisa diakses).')
+    } else if (transferKey && downloadWithPick(transferKey, pick)) onToast(`Mengunduh “${pick.title}”`)
     else onToast('Tidak bisa memulai unduhan ini. Coba lagi dari daftar gagal.')
     onClose()
   }
@@ -135,7 +148,7 @@ export default function ManualSearchSheet({ transferKey, title, onClose, onToast
                 ))}
               </ul>
               <p className="px-4 pb-1 pt-3 text-xs text-ink-muted">
-                Pilih yang durasinya paling sesuai. Audionya tetap diperiksa sebelum disimpan; yang cuplikan atau bukan audio ditolak.
+                Pilih yang durasinya paling sesuai. Audionya tetap diperiksa saat diputar atau diunduh; yang cuplikan atau bukan audio ditolak.
               </p>
             </>
           )}

@@ -8,6 +8,7 @@ import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { STATUS_TEXT } from '../../utils/playerStatus'
 import { swallowNextClick } from '../../utils/swallowNextClick'
+import { waitForViewportSettled } from '../../utils/viewportSettle'
 import CoverArt from '../ui/CoverArt'
 import MarqueeText from '../ui/MarqueeText'
 import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
@@ -36,6 +37,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   // Gelembung SEMENTARA karena keyboard terbuka. Tidak disimpan: pilihan pengguna (collapsed) tetap seperti semula,
   // jadi saat keyboard hilang kartu kembali kalau memang itu pilihannya.
   const [kbBubble, setKbBubble] = useState(false)
+  // Keyboard sedang naik: kartu langsung disembunyikan (tanpa animasi), gelembung baru muncul setelah keyboard selesai naik.
+  const [kbHidden, setKbHidden] = useState(false)
+  const cancelSettle = useRef<(() => void) | null>(null)
+  // Gelembung muncul karena keyboard (animasi naik), bukan karena pilihan pengguna.
+  const [bubbleRise, setBubbleRise] = useState(false)
   const kbTimer = useRef(0)
   const prevKeyboard = useRef(false)
   // Pengguna mengetuk gelembung saat keyboard terbuka: keyboard ditutup dulu, kartu membesar sesudahnya.
@@ -71,6 +77,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       window.clearTimeout(collapseTimer.current)
       window.clearTimeout(resetTimer.current)
       window.clearTimeout(kbTimer.current)
+      cancelSettle.current?.()
     },
     [],
   )
@@ -148,10 +155,26 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     prevKeyboard.current = keyboardOpen
     if (keyboardOpen === was) return
     if (keyboardOpen) {
-      if (!collapsed && !kbBubble) flyToBubble(false)
+      if (!collapsed && !kbBubble) {
+        // Tanpa animasi perubahan: kartu hilang seketika, lalu gelembung naik setelah keyboard selesai naik.
+        setKbHidden(true)
+        cancelSettle.current?.()
+        cancelSettle.current = waitForViewportSettled(() => {
+          cancelSettle.current = null
+          setBubbleRise(true)
+          setKbBubble(true)
+          setKbHidden(false)
+        })
+      }
       return
     }
     window.clearTimeout(kbTimer.current)
+    // Keyboard menutup sebelum gelembung sempat muncul: batalkan, kartu kembali (animasi masuk bawaan).
+    if (cancelSettle.current) {
+      cancelSettle.current()
+      cancelSettle.current = null
+    }
+    if (kbHidden) setKbHidden(false)
     if (!kbBubble) {
       // Sempat mulai mengecil tetapi keyboard keburu menutup: kartu kembali ke tempatnya dengan animasi.
       const el = cardRef.current
@@ -171,6 +194,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (kbBubble) {
       setGrowFrom(side)
       setKbBubble(false)
+      setBubbleRise(false)
     }
   })
 
@@ -271,8 +295,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     <div className="pointer-events-none relative z-40 h-0 shrink-0">
     <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
     {showBubble ? (
-      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} />
-    ) : (
+      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} />
+    ) : kbHidden ? null : (
     <div className={`flex origin-bottom flex-col ${cardAnimation}`}>
     {/* Grup yang ikut bergerak saat diseret: glow (di belakang) + kartu. */}
     <div ref={cardRef} className="pointer-events-none relative origin-bottom">

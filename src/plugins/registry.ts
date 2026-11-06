@@ -8,6 +8,7 @@ import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
 import { stripArtistPrefix } from '../utils/trackTitle'
+import { getManualPin } from './manualPins'
 import { DEFAULT_DOWNLOAD_QUALITY, orderStreamsForQuality, type DownloadQuality } from './quality'
 import type { ManualCandidate, ManualPick, ResolverPlugin, StreamSource } from './types'
 import { THIRD_PARTY_SOURCES } from './thirdParty'
@@ -180,7 +181,7 @@ export interface PluginResolveResult {
 /** Sama seperti `resolveViaPluginsDetailed`, tetapi hanya mengembalikan infonya (null bila gagal). */
 export async function resolveViaPlugins(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean; searchOnly?: boolean },
 ): Promise<PlaybackInfo | null> {
   return (await resolveViaPluginsDetailed(wanted, options)).info
 }
@@ -192,9 +193,20 @@ export async function resolveViaPlugins(
  */
 export async function resolveViaPluginsDetailed(
   wanted: WantedTrack,
-  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean },
+  options: { signal?: AbortSignal; expected: number | null; strict?: boolean; quality?: DownloadQuality; avoid?: ReadonlyArray<string>; thirdParty?: boolean; searchOnly?: boolean },
 ): Promise<PluginResolveResult> {
   const { expected, strict = false } = options
+
+  // Pilihan manual pengguna untuk lagu ini (Cari manual) didahulukan. Bila gagal diambil (mis. sinyal lemah atau video
+  // dihapus), tetap lanjut ke pencarian otomatis di bawah; pilihannya tidak dibuang.
+  const pin = getManualPin(wanted)
+  if (pin) {
+    // Hanya cek ketersediaan: lagu yang sudah dipilih manual dianggap ada, tanpa jaringan.
+    if (options.searchOnly) return { info: null, outcome: 'ok' }
+    const pinned = await resolveManualPick(pin, { signal: options.signal, quality: options.quality })
+    if (pinned.info || pinned.outcome === 'aborted') return pinned
+    console.warn(`[MusicVerse] Pilihan manual tersimpan untuk \"${wanted.title}\" tidak bisa dipakai (${pinned.outcome}); mencari otomatis.`)
+  }
   // Kualitas hanya berlaku untuk unduhan (strict). Selain "tinggi" hasilnya disimpan di kunci sendiri supaya tidak
   // menimpa stream yang dipakai pemutaran (yang selalu memakai kualitas terbaik).
   const quality: DownloadQuality = strict ? (options.quality ?? DEFAULT_DOWNLOAD_QUALITY) : DEFAULT_DOWNLOAD_QUALITY
@@ -299,6 +311,8 @@ export async function resolveViaPluginsDetailed(
           .sort((a, b) => b.rank - a.rank)
           .slice(0, MAX_CANDIDATES)
 
+        // Cek ketersediaan: ada kandidat yang lolos skor judul/artis/durasi berarti lagunya ada. Stream tidak diambil.
+        if (options.searchOnly && scored.length > 0) return { info: null, outcome: 'ok' }
         for (const { hit, score, tolerant } of scored) {
           sawCandidate = true
           const streams = orderStreamsForQuality(await plugin.getStreams(hit.id, signal), quality).slice(0, MAX_STREAMS_PER_CANDIDATE)
@@ -525,6 +539,8 @@ export async function resolveManualPick(
  */
 export function warmResolve(wanted: WantedTrack, expected: number | null): void {
   if (cacheGet(cacheKey(wanted))) return
+  // Lagu dengan pilihan manual tidak dihangatkan lewat pencarian otomatis (hasilnya tidak dipakai).
+  if (getManualPin(wanted)) return
   // Beri waktu lagu yang sedang dimuat menyelesaikan permintaannya lebih dulu.
   setTimeout(() => {
     void resolveViaPlugins(wanted, { expected })

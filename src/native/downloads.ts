@@ -1,6 +1,7 @@
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { avoidKeyOf, fetchPlaybackInfo, SpotifyApiError } from '../services/spotifyApi'
 import { isDownloadQuality, type DownloadQuality } from '../plugins/quality'
+import { setManualPin } from '../plugins/manualPins'
 import { forgetResolved, isNativeUnimplemented, searchManualCandidates } from '../plugins/registry'
 import type { ManualCandidate, ManualPick } from '../plugins/types'
 import { markClientRejected } from '../plugins/ytmusic'
@@ -1239,6 +1240,8 @@ export function downloadWithPick(key: string, pick: ManualPick): boolean {
   if (!entry) return false
   failedJobs.delete(key)
   if (entry.epoch === sessionEpoch) sessionFailed = Math.max(0, sessionFailed - 1)
+  // Ingat pilihan ini untuk lagu tersebut, supaya diputar/diunduh lagi nanti tidak error lagi.
+  setManualPin(entry.job.track, pick)
   const result = enqueue(entry.job.track, pick)
   if (result === 'queued') {
     askNotificationPermissionOnce()

@@ -91,6 +91,7 @@ export default function MyPlaylistPage() {
   const [name, setName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   if (!playlist) {
     return (
@@ -133,6 +134,25 @@ export default function MyPlaylistPage() {
       showToast('Server sedang bermasalah. Coba lagi.')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  /** Ambil ulang playlist Spotify asalnya dan tambahkan lagu baru ke playlist ini. Tidak mengunduh apa pun (jalan di web dan APK). */
+  const refreshFromSpotify = async () => {
+    if (!playlist.sourceId || refreshing || syncing) return
+    setRefreshing(true)
+    try {
+      const remote = await fetchPlaylist(`https://open.spotify.com/playlist/${playlist.sourceId}`)
+      const have = new Set(playlist.tracks.map((t) => trackKey(t)))
+      const fresh = remote.tracks.filter((t) => !have.has(trackKey(t)))
+      if (fresh.length === 0) return showToast(`Sudah yang terbaru (${remote.tracks.length} lagu di Spotify).`)
+      const saved = saveDownloadedPlaylist(playlist.sourceId, playlist.name, fresh)
+      if (!saved.ok) return fail(saved.reason)
+      showToast(`${fresh.length} lagu baru ditambahkan dari Spotify.`)
+    } catch {
+      showToast('Server sedang bermasalah. Coba lagi.')
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -223,8 +243,14 @@ export default function MyPlaylistPage() {
             Unduh semua
           </button>
         )}
+        {playlist.sourceId && (
+          <button type="button" onClick={() => void refreshFromSpotify()} disabled={refreshing || syncing} className="btn-secondary">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
+            Muat data terbaru
+          </button>
+        )}
         {isNativeApp() && playlist.sourceId && (
-          <button type="button" onClick={() => void syncFromSpotify()} disabled={syncing} className="btn-secondary">
+          <button type="button" onClick={() => void syncFromSpotify()} disabled={syncing || refreshing} className="btn-secondary">
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
             Unduh yang baru
           </button>

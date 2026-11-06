@@ -72,6 +72,11 @@ export default {
           from: { opacity: '0', transform: 'scale(0.3)' },
           to: { opacity: '1', transform: 'none' },
         },
+        // Disc yang muncul setelah keyboard selesai naik: naik pelan dari bawah sambil membesar.
+        'bubble-rise': {
+          from: { opacity: '0', transform: 'translate3d(0, 28px, 0) scale(0.6)' },
+          to: { opacity: '1', transform: 'none' },
+        },
         'sheet-expand': {
           '0%': { transform: 'translateY(100%) scale(0.94)', opacity: '0.4', borderRadius: '28px' },
           '60%': { opacity: '1' },
@@ -92,6 +97,7 @@ export default {
         'grow-right': 'grow-right 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'grow-left': 'grow-left 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'bubble-rise': 'bubble-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',
         disc: 'disc 18s linear infinite',
         eq: 'eq 1.1s ease-in-out infinite',

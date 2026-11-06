@@ -5,16 +5,19 @@ import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsCo
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { usePlaylist } from '../../context/PlaylistContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { NO_TRACKS, useTrackAvailability } from '../../hooks/useTrackAvailability'
 import { usePlaylistPrefs } from '../../hooks/usePlaylistPrefs'
 import { bulkDownloadText, downloadTracks } from '../../native/downloads'
 import { isNativeApp } from '../../native/platform'
-import type { PlaylistDetail } from '../../types/spotify'
+import type { PlaylistDetail, PlaylistTrack } from '../../types/spotify'
 import { noticeMessage } from '../../utils/libraryNotice'
 import { classifyImportInput } from '../../utils/spotifyUrl'
 import { getRowActivity } from '../../utils/playerStatus'
 import { QUEUE_RESULT_TEXT } from '../../utils/queueResultText'
 import EmptyState from '../ui/EmptyState'
+import ManualSearchSheet from '../library/ManualSearchSheet'
 import AddToPlaylistSheet from './AddToPlaylistSheet'
+import AvailabilityPanel from './AvailabilityPanel'
 import PlaylistHeader from './PlaylistHeader'
 import PlaylistSkeleton from './PlaylistSkeleton'
 import TrackList from './TrackList'
@@ -45,7 +48,12 @@ export default function PlaylistView() {
   const [prefs] = usePlaylistPrefs()
 
   const [picking, setPicking] = useState(false)
+  const [manualFor, setManualFor] = useState<PlaylistTrack | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  // Cek ketersediaan audio semua lagu playlist (bukan hasil cari lagu satuan). Hook ini harus sebelum return di bawah.
+  const checkable = status === 'success' && playlist !== null && playlist.source !== 'search'
+  const availability = useTrackAvailability(playlist?.tracks ?? NO_TRACKS, checkable)
   useEffect(() => {
     if (toast === null) return
     const timer = setTimeout(() => setToast(null), 2500)
@@ -164,6 +172,18 @@ export default function PlaylistView() {
         onAddToPlaylist={playlist.source === 'search' && playlist.tracks.length > 0 ? () => setPicking(true) : undefined}
         onAddToQueue={isSingleSearch && playlist.tracks.length > 0 ? handleAddToQueue : undefined}
       />
+
+      {playlist.source !== 'search' && <AvailabilityPanel availability={availability} onManual={setManualFor} />}
+
+      {manualFor && (
+        <ManualSearchSheet
+          track={manualFor}
+          title={manualFor.title}
+          onPicked={() => availability.recheckOne(manualFor)}
+          onClose={() => setManualFor(null)}
+          onToast={setToast}
+        />
+      )}
 
       {picking && playlist.tracks[0] && (
         <AddToPlaylistSheet

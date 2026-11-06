@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useEnterClosesKeyboard } from '../../hooks/useEnterClosesKeyboard'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import OfflineBanner from './OfflineBanner'
@@ -26,6 +27,7 @@ export default function AppShell() {
   const keyboardOpen = useKeyboardOpen()
   const compactDock = collapsed || keyboardOpen
   const mainRef = useRef<HTMLElement>(null)
+  useEnterClosesKeyboard()
 
   // Area scroll ada di <main>, bukan window: kembalikan ke atas saat pindah halaman.
   useEffect(() => {
