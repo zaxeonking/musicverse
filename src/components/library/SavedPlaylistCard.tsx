@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLongPress } from '../../hooks/useLongPress'
 import type { LibraryView, SavedPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
 import CoverArt from '../ui/CoverArt'
@@ -11,13 +12,16 @@ interface SavedPlaylistCardProps {
   active: boolean
   onOpen: (playlist: SavedPlaylist) => void
   onRemove: (playlist: SavedPlaylist) => void
+  /** Tahan lama (atau klik kanan) pada kartu membuka menu kecilnya. */
+  onMenu: (playlist: SavedPlaylist) => void
 }
 
 /**
  * Satu playlist tersimpan. Menghapus butuh konfirmasi di tempat (bukan dialog) agar sentuhan
  * yang tidak sengaja tidak langsung menghapus. Yang dihapus hanya salinan di Koleksi.
  */
-export default function SavedPlaylistCard({ playlist, layout, active, onOpen, onRemove }: SavedPlaylistCardProps) {
+export default function SavedPlaylistCard({ playlist, layout, active, onOpen, onRemove, onMenu }: SavedPlaylistCardProps) {
+  const press = useLongPress(() => onMenu(playlist))
   const [confirming, setConfirming] = useState(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const trashRef = useRef<HTMLButtonElement>(null)
@@ -84,7 +88,7 @@ export default function SavedPlaylistCard({ playlist, layout, active, onOpen, on
 
   if (layout === 'list') {
     return (
-      <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-2 py-2 transition-colors hover:bg-raised">
+      <li {...press} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-2 py-2 transition-colors hover:bg-raised">
         <div className="w-14 shrink-0">
           <CoverArt cover={fallback} src={playlist.cover} />
         </div>
@@ -101,7 +105,7 @@ export default function SavedPlaylistCard({ playlist, layout, active, onOpen, on
   }
 
   return (
-    <li className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised">
+    <li {...press} className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised">
       <button
         type="button"
         tabIndex={-1}

@@ -158,6 +158,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       const memoryOnly = read.health === 'unavailable'
       const base = memoryOnly ? savedRef.current : read.items
       const target = base.find((item) => item.id === playlistId)
+      // Tidak ada di Koleksi (mis. playlist buatan yang tidak punya salinan Spotify): tidak ada yang ditulis ulang.
+      if (!target) return true
       const next = removeSavedPlaylist(base, playlistId)
       const write = writeSavedPlaylists(next)
 

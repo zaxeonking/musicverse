@@ -17,6 +17,7 @@ import SectionHeader from '../ui/SectionHeader'
 import NewPlaylistForm from './NewPlaylistForm'
 import PlaylistMenuSheet from './PlaylistMenuSheet'
 import SavedPlaylistCard from './SavedPlaylistCard'
+import SavedPlaylistMenuSheet from './SavedPlaylistMenuSheet'
 
 const sortOptions: { id: LibrarySort; label: string }[] = [
   { id: 'recent', label: 'Terbaru' },
@@ -98,6 +99,8 @@ export default function PlaylistsSection() {
   const { showToast } = useTrackMenu()
   const [creating, setCreating] = useState(false)
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [savedMenuId, setSavedMenuId] = useState<string | null>(null)
+  const savedMenuPlaylist = savedMenuId === null ? undefined : saved.find((item) => item.id === savedMenuId)
   const menuPlaylist = menuId === null ? undefined : mine.find((item) => item.id === menuId)
   const sectionRef = useRef<HTMLDivElement>(null)
   const activeId = active?.id ?? null
@@ -235,12 +238,24 @@ export default function PlaylistsSection() {
                   active={entry.id === activeId}
                   onOpen={handleOpen}
                   onRemove={handleRemove}
+                  onMenu={(item) => setSavedMenuId(item.id)}
                 />
               ),
             )}
           </ul>
 
         </div>
+      )}
+      {savedMenuPlaylist && (
+        <SavedPlaylistMenuSheet
+          playlist={savedMenuPlaylist}
+          onClose={() => setSavedMenuId(null)}
+          onOpen={handleOpen}
+          onRemove={(item) => {
+            handleRemove(item)
+            showToast(`"${item.title}" dihapus dari Koleksi`)
+          }}
+        />
       )}
       {menuPlaylist && <PlaylistMenuSheet playlist={menuPlaylist} onClose={() => setMenuId(null)} onToast={showToast} />}
     </section>

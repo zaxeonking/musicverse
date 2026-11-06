@@ -1,6 +1,7 @@
-import { ArrowRightLeft, Copy, ListMusic, Pin, PinOff } from 'lucide-react'
+import { ArrowRightLeft, Copy, ListMusic, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import type { MyPlaylist } from '../../types/library'
@@ -17,13 +18,14 @@ interface PlaylistMenuSheetProps {
   onToast: (message: string) => void
 }
 
-/** Menu kecil satu playlist buatanmu (tahan lama pada kartunya): buka, salin semua lagu, pindahkan semua lagu. */
+/** Menu kecil satu playlist buatanmu (tahan lama pada kartunya): buka, sematkan, salin/pindahkan semua lagu, hapus playlist. */
 export default function PlaylistMenuSheet({ playlist, onClose, onToast }: PlaylistMenuSheetProps) {
   useOverlayHistory(true, onClose)
   const navigate = useNavigate()
-  const { setPinned } = useMyPlaylists()
+  const { setPinned, deletePlaylist } = useMyPlaylists()
+  const { removePlaylist: removeSaved } = useLibrary()
   const sheetRef = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'copy' | 'move' | null>(null)
+  const [mode, setMode] = useState<'copy' | 'move' | 'delete' | null>(null)
   const fallback = useMemo(() => fallbackCover(playlist.name), [playlist.name])
   const count = playlist.tracks.length
 
@@ -63,7 +65,36 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
           </span>
         </div>
 
-        {mode ? (
+        {mode === 'delete' ? (
+          <div className="border-t border-line px-4 pb-2 pt-4" role="group" aria-label={`Konfirmasi hapus ${playlist.name}`}>
+            <p className="text-sm text-ink">Hapus playlist ini?</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              {count === 0 ? 'Playlist kosong ini akan dihapus.' : `${count} lagu di playlist ini ikut terhapus dari daftar.`} Berkas lagu yang sudah diunduh tidak ikut dihapus.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setMode(null)} className="btn-secondary flex-1 px-4">
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const result = deletePlaylist(playlist.id)
+                  if (!result.ok) {
+                    onToast(myPlaylistErrorText(result.reason))
+                    return onClose()
+                  }
+                  // Playlist hasil "Unduh semua": kartu Spotify-nya yang tadi disembunyikan ikut dilepas, supaya tidak muncul lagi.
+                  if (playlist.sourceId) removeSaved(playlist.sourceId)
+                  onToast(`Playlist "${playlist.name}" dihapus`)
+                  onClose()
+                }}
+                className="btn-danger flex-1 px-4"
+              >
+                Hapus
+              </button>
+            </div>
+          </div>
+        ) : mode ? (
           <PlaylistTransferPanel
             source={playlist}
             trackIds={null}
@@ -110,6 +141,9 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
               onClick={() => setMode('move')}
               disabled={count === 0}
             />
+            {!isLikedId(playlist.id) && (
+              <Action icon={Trash2} label="Hapus playlist" hint="Hanya menghapus daftarnya, bukan berkas unduhan" danger onClick={() => setMode('delete')} />
+            )}
           </ul>
         )}
       </div>
