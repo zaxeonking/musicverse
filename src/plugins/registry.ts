@@ -3,7 +3,7 @@ import { isNativeApp } from '../native/platform'
 import type { PlaybackInfo } from '../types/spotify'
 import { durationFit, isLikelyClip, strictDurationProblem } from '../utils/clipDetect'
 import { fetchTitleAliases, peekAliases, type TrackAlias } from '../services/titleAliases'
-import { bothScriptGap, metadataMismatch, scoreWithAliases, versionMarkers, type WantedTrack } from '../utils/matchTrack'
+import { artistVerified, bothScriptGap, metadataMismatch, scoreWithAliases, versionMarkers, type WantedTrack } from '../utils/matchTrack'
 import { getNetworkTier } from '../utils/networkQuality'
 import { probeAudioDuration } from '../utils/probeAudio'
 import { extractSpotifyTrackLink } from '../utils/spotifyUrl'
@@ -282,7 +282,9 @@ export async function resolveViaPluginsDetailed(
             // Judul + artis sama-sama beda aksara: hanya durasi yang bisa dicocokkan, jadi hanya hasil teratas pencarian
             // (urutan relevansi YouTube, yang paham alih aksara) yang dipercaya. Lagu acak berdurasi mirip tidak dipilih.
             const unrelated = bothScriptGap(wanted, probe) && found.indexOf(hit) > 2
-            return { hit, score, blocked: blocked || unrelated, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) }
+            // Artis yang sama (walau beda aksara/penulisan) diutamakan: lagu dari artis lain tidak menang atas yang artisnya sama.
+            const sameArtist = artistVerified(wanted, probe, aliases)
+            return { hit, score, blocked: blocked || unrelated, rank: score - (differs ? 0.3 : 0) + (exact ? 0.05 : 0) + (sameArtist ? 0.2 : 0) }
           })
           .filter((c) => c.score >= ACCEPT_SCORE && !c.blocked)
           .sort((a, b) => b.rank - a.rank)

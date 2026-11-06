@@ -208,6 +208,18 @@ export function scoreWithAliases(
   return best
 }
 
+/**
+ * Artis hasil dianggap SAMA dengan artis lagu walau aksaranya berbeda: cocok dengan artis di playlist, atau dengan salah satu
+ * penulisan lain artis itu (nama dari katalog lain, mis. "RADWIMPS" = "ラッドウィンプス").
+ */
+export function artistVerified(wanted: WantedTrack, info: PlaybackInfo, aliases: ReadonlyArray<{ title: string; artist: string }>): boolean {
+  const variants = [wanted.artists, ...aliases.map((a) => a.artist).filter(Boolean)]
+  return variants.some((name) => {
+    const score = artistScore({ ...wanted, artists: name }, info)
+    return score !== null && score >= 1
+  })
+}
+
 /** True bila judul DAN artis hasil beda aksara dari lagu di playlist (tidak ada teks yang bisa dicocokkan, hanya durasi). */
 export function bothScriptGap(wanted: WantedTrack, info: PlaybackInfo): boolean {
   return (

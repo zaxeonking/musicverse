@@ -17,7 +17,7 @@ export interface TrackAlias {
 
 const STOREFRONTS = ['us', 'jp', 'kr'] as const
 const DURATION_TOLERANCE_S = 2.5
-const MAX_ALIASES = 4
+const MAX_ALIASES = 6
 
 const cache = new Map<string, TrackAlias[]>()
 
@@ -59,7 +59,8 @@ export async function fetchTitleAliases(wanted: WantedTrack, signal?: AbortSigna
 
   const settled = await Promise.allSettled(STOREFRONTS.map((country) => searchStorefront(term, country, signal)))
   const found: TrackAlias[] = []
-  const seen = new Set<string>([normalizeSearchText(title)])
+  // Kunci = judul + artis: nama lain bisa berupa judul yang sama dengan artis beda aksara (RADWIMPS = ラッドウィンプス).
+  const seen = new Set<string>([`${normalizeSearchText(title)}|${normalizeSearchText(artist)}`])
   for (const result of settled) {
     if (result.status !== 'fulfilled') continue
     for (const song of result.value) {
@@ -72,7 +73,7 @@ export async function fetchTitleAliases(wanted: WantedTrack, signal?: AbortSigna
         scriptGap(artist, song.artistName)
       if (!artistOk) continue
       const name = song.trackName.trim()
-      const id = normalizeSearchText(name)
+      const id = `${normalizeSearchText(name)}|${normalizeSearchText(song.artistName)}`
       if (!name || seen.has(id)) continue
       seen.add(id)
       found.push({ title: name, artist: song.artistName.trim() })
