@@ -135,7 +135,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
         aria-label="Antrean"
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] animate-sheet-up flex-col rounded-t-2xl border-t border-line bg-card pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] focus:outline-none lg:inset-y-0 lg:animate-panel-in lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
+        className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] animate-sheet-up flex-col rounded-t-2xl border-t border-line bg-card pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-2xl shadow-black/60 focus:outline-none lg:inset-y-0 lg:animate-panel-in lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
       >
         <header className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
           <div className="flex min-w-0 items-center gap-2">

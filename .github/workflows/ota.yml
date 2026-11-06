@@ -49,10 +49,11 @@ jobs:
             echo "::error::Secret RELEASES_TOKEN belum diisi (PAT dengan izin Contents: Read and write pada repo rilis $RELEASE_REPO)."
             exit 1
           fi
+          HINT="::error::Token RELEASES_TOKEN ditolak saat menulis ke $RELEASE_REPO (403). Fine-grained PAT: Repository access harus mencakup repo itu dan Permissions > Contents = Read and write. Atau pakai classic PAT dengan scope repo."
           if ! gh release view ota --repo "$RELEASE_REPO" >/dev/null 2>&1; then
             gh release create ota --repo "$RELEASE_REPO" \
               --title "OTA (otomatis, jangan dihapus)" \
               --notes "Paket tampilan otomatis untuk aplikasi. Dibuat oleh workflow Publish OTA; bukan rilis APK." \
-              --prerelease --latest=false
+              --prerelease --latest=false || { echo "$HINT"; exit 1; }
           fi
-          gh release upload ota ota-out/bundle.zip ota-out/ota.json --repo "$RELEASE_REPO" --clobber
+          gh release upload ota ota-out/bundle.zip ota-out/ota.json --repo "$RELEASE_REPO" --clobber || { echo "$HINT"; exit 1; }

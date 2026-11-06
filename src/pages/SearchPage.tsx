@@ -53,7 +53,7 @@ export default function SearchPage() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">Cari</h1>
 
-      <div className="sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8">
         <label htmlFor="search-input" className="sr-only">
           Cari lagu berdasarkan judul atau artis
         </label>

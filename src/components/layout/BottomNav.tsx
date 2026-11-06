@@ -4,12 +4,15 @@ import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { activeNavIndex } from '../../utils/navActive'
 
 /**
- * Bottom nav: bar pil solid melayang di dasar layar. Tab aktif ditandai blok datar `bg-raised` yang meluncur antar tab
- * (hanya `transform` yang dianimasikan), tanpa kaca, kilau, atau cahaya.
+ * Bottom nav "kaca cair" (liquid glass): pil melayang dengan latar kaca tembus pandang (blur + saturasi, jadi warnanya
+ * mengikuti konten yang lewat di belakangnya), tepi berkilau, dan satu "lensa" kaca beraksen di belakang tab aktif yang
+ * meluncur antar tab. Warna aksen dan permukaan memakai token tema (accent, raised), bukan warna tetap.
  *
- * Tata letak: pembungkus setinggi 0 (seperti dock mini player) dan bar diposisikan absolut di dasar. Ruang yang dipesan bar
- * dibagikan lewat variabel CSS `--dock-offset` (diatur AppShell), bernilai 0 saat keyboard terbuka / di layar lebar.
- * Keyboard layar terbuka: bar turun keluar layar sambil memudar, lalu naik lagi.
+ * Tata letak: pembungkus setinggi 0 (seperti dock mini player) dan bar diposisikan absolut di dasar, jadi `<main>` meluas sampai
+ * ke tepi bawah dan konten tampak lewat di bawah kaca. Ruang yang dipesan bar dibagikan lewat variabel CSS `--dock-offset`
+ * (diatur AppShell): padding konten dan posisi mini player memakainya, dan nilainya 0 saat keyboard terbuka / di layar lebar.
+ *
+ * Keyboard layar terbuka: bar turun keluar layar sambil memudar, lalu naik lagi saat keyboard hilang.
  */
 export default function BottomNav() {
   const keyboardOpen = useKeyboardOpen()
@@ -29,11 +32,21 @@ export default function BottomNav() {
       >
         <nav
           aria-label="Navigasi utama"
-          className={`relative w-full max-w-md rounded-full border border-line bg-card p-1 ${
+          style={{
+            WebkitBackdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
+            backdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
+          }}
+          className={`relative w-full max-w-md rounded-full border border-white/[0.12] bg-[#161616]/85 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),inset_0_0_18px_rgba(255,255,255,0.05)] supports-[backdrop-filter]:bg-[#161616]/60 ${
             keyboardOpen ? 'pointer-events-none' : 'pointer-events-auto'
           }`}
         >
-          {/* Penanda tab aktif: blok datar selebar ikon + label, meluncur antar tab; hilang bila tak ada tab aktif (mis. Pengaturan). */}
+          {/* Kilau lengkung di tepi atas bar. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent"
+          />
+          {/* Penanda tab aktif: kotak kaca melengkung yang ringkas, hanya selebar ikon + label dan tetap di dalam bar,
+              diwarnai aksen tema. Meluncur antar tab; hilang bila tak ada tab aktif (mis. Pengaturan). */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 left-1 right-1">
             {/* Lajur selebar satu tab; hanya `transform` yang dianimasikan (jalur GPU, tanpa layout ulang tiap frame). */}
             <span
@@ -44,8 +57,13 @@ export default function BottomNav() {
               className="absolute inset-y-0 left-0 flex justify-center transition-transform duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)] will-change-transform motion-reduce:transition-none"
             >
               <span
-                style={{ width: '4.5rem', opacity: active >= 0 ? 1 : 0 }}
-                className="h-full rounded-2xl bg-raised transition-opacity duration-300 motion-reduce:transition-none"
+                style={{
+                  width: '4.5rem',
+                  opacity: active >= 0 ? 1 : 0,
+                  backgroundImage:
+                    'radial-gradient(circle at 50% 38%, rgba(29,185,84,0.38) 0%, rgba(29,185,84,0.12) 38%, transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
+                }}
+                className="h-full rounded-2xl border border-white/20 bg-accent/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(255,255,255,0.06)] transition-opacity duration-300 motion-reduce:transition-none"
               />
             </span>
           </span>

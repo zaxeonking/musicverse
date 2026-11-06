@@ -160,7 +160,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         aria-label={main.label}
         aria-busy={main.kind === 'busy'}
         data-player-status={status}
-        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
+        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black ${xl ? 'shadow-[0_0_36px_rgba(255,255,255,0.35)]' : ''} transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
       >
         <MainIcon
           className={`${icon} ${main.kind === 'busy' ? 'animate-spin motion-reduce:animate-none' : ''}`}

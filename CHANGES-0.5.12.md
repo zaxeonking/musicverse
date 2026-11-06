@@ -1,15 +1,7 @@
-# 0.5.12 — Penerapan aturan antislop-ui + gutter responsif
-
-Dihapus (R-10, R-12, R-13, R-19):
-- BottomNav: kaca cair, kilau gradien, glow radial hijau, tumpukan inset-shadow -> bar solid + penanda aktif datar.
-- MiniPlayer: blur 40px, glow warna sampul yang berdenyut, bayangan inset -> kartu solid. Hook useCoverGlow ikut dihapus.
-- MiniBubble: blur dan sheen conic-gradient. MobileHeader: backdrop-blur.
-- PlaylistHeader: orb sampul blur-3xl di belakang header.
-- FullPlayer: glow putih tombol putar, blur bar "Berikutnya", teks artis uppercase.
-- Bayangan besar (shadow-lg/xl/2xl) pada setiap sampul dan sheet; bayangan hanya tersisa di elemen yang benar-benar melayang.
-- Radius: sampul pemutar penuh 1.75rem dan MiniPlayer 3xl -> skala yang sudah ada (xl/2xl).
-
-Responsif (R-03, Two-State Layout):
-- Gutter halaman punya langkah tablet: 16px -> 24px (sm) -> 32px (lg), termasuk HorizontalRow dan bar pencarian.
-- Grid kartu playlist menambah langkah md (4 kolom).
-- Hanya JS\/CSS (OTA).
+# 0.5.12 — Lagu dengan artis yang jelas beda tidak lagi lolos
+- Gerbang artis di `scoreCandidate`: bila artis hasil sama sekali tidak cocok (skor 0, aksara sama sehingga bisa dibandingkan), skor dibatasi 0,45 (di bawah `ACCEPT_SCORE`). Judul dan durasi yang mirip tidak lagi menutupi artis yang salah (mis. "Pure Heart — Nymith" tidak lagi diterima untuk "Ho - Kago Tea Time - Pure Pure Heart").
+- Pengecualian: judul persis sama (ejaan hampir identik) tetap lolos, karena channel label/uploader sering mengisi field artis dengan nama lain.
+- `artistScore`: nama artis yang muncul di judul hasil ("Artis - Judul") kini dihitung cocok.
+- `titleScore`: kata berulang dihitung per kemunculan ("Pure Pure Heart" vs "Pure Heart" = 2 dari 3 kata, bukan 3 dari 3).
+- Hasil cache lama yang salah dinilai ulang dan dibuang otomatis.
+- Hanya JS (OTA).

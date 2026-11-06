@@ -86,7 +86,17 @@ function titleScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   const artistTokens = new Set(tokens(wanted.artists))
   // Judul API cadangan berformat "Judul - Artis": token artis tidak dihitung sebagai kelebihan.
   const gotTitleOnly = got.filter((t) => !artistTokens.has(t) || wantSet.has(t))
-  const hit = want.filter((t) => got.includes(t)).length
+  // Hitung per kemunculan: "Pure Pure Heart" vs "Pure Heart" -> 2 dari 3 kata, bukan 3 dari 3.
+  const pool = new Map<string, number>()
+  for (const t of got) pool.set(t, (pool.get(t) ?? 0) + 1)
+  let hit = 0
+  for (const t of want) {
+    const left = pool.get(t) ?? 0
+    if (left > 0) {
+      hit += 1
+      pool.set(t, left - 1)
+    }
+  }
   const coverage = hit / want.length
   const precision = gotTitleOnly.length === 0 ? coverage : Math.min(1, hit / gotTitleOnly.length)
   return 0.7 * coverage + 0.3 * precision
@@ -105,6 +115,9 @@ function artistScore(wanted: WantedTrack, info: PlaybackInfo): number | null {
   haystack = haystack.replace(/\s+/g, ' ')
   if (wantNames.some((name) => haystack.includes(name))) return 1
   if (sameSpelling(wanted.artists, info.artist || haystack)) return 1
+  // Uploader YouTube sering label/channel, sedangkan nama artis aslinya ada di judul ("Artis - Judul").
+  const titleText = normalizeSearchText(info.title).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ')
+  if (wantNames.some((name) => name.length >= 4 && ` ${titleText} `.includes(` ${name} `))) return 1
   const gotTokens = new Set(haystack.split(' ').filter(Boolean))
   // Urutan nama beda (\"Kamiya Hiroshi\" vs \"Hiroshi Kamiya\"): semua kata satu nama artis ada di data server = cocok.
   if (wantNames.some((name) => name.split(' ').filter(Boolean).every((t) => gotTokens.has(t)))) return 1
@@ -180,6 +193,15 @@ export function scoreCandidate(
   // GERBANG JUDUL: judul dinilai sendiri, terpisah dari artis. Artis dan durasi yang cocok tidak boleh menutupi judul yang
   // jelas beda (lagu lain dari artis yang sama dengan durasi mirip). Judul beda aksara (title === null) tidak kena gerbang.
   if (title !== null && title < 0.4) score = Math.min(score, 0.45)
+  // GERBANG ARTIS: artis sama sekali tidak cocok (skor 0, aksara sama sehingga bisa dibandingkan) berarti kemungkinan besar
+  // lagu lain dengan judul mirip ("Pure Pure Heart" vs "Pure Heart" oleh artis lain). Judul + durasi tidak boleh menutupinya.
+  // Pengecualian: judul PERSIS sama (ejaan hampir identik) boleh lolos, karena channel label/uploader sering mengisi
+  // field artis dengan nama lain.
+  if (artist !== null && artist === 0 && !artistGap) {
+    const wantTitle = stripArtistPrefix(wanted.title, wanted.artists)
+    const exactTitle = title !== null && (title >= 1 && tokens(wantTitle).join(' ') === tokens(info.title).join(' ') || sameSpelling(wantTitle, info.title))
+    if (!exactTitle) score = Math.min(score, 0.45)
+  }
   if (viaLink) score += 0.15
   else {
     const wantedId = extractTrackId(wanted.url ?? '')

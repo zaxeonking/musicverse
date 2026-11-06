@@ -20,7 +20,7 @@ function PlaylistCard({ playlist }: { playlist: MyPlaylist }) {
         className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised focus-ring"
       >
         <span className="mb-3 block">
-          <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} />
+          <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
         </span>
         <span title={playlist.name} className="flex items-start gap-1.5 font-display text-base font-bold leading-snug text-ink">
           {isLikedId(playlist.id) && <Heart className="mt-1 h-4 w-4 shrink-0 text-accent" fill="currentColor" aria-hidden="true" />}
@@ -66,7 +66,7 @@ export default function MyPlaylistsSection() {
           <NewPlaylistForm onCreate={create} onCancel={() => setCreating(false)} />
         </div>
       )}
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 xl:grid-cols-5">
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {playlists.map((playlist) => (
           <PlaylistCard key={playlist.id} playlist={playlist} />
         ))}

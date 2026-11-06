@@ -1,7 +1,28 @@
 import { Download, ListChecks, ListEnd, ListPlus, Play, RotateCw } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fallbackCover } from '../../utils/fallbackCover'
+import { isSafeHttpUrl } from '../../utils/spotifyUrl'
 import CoverArt from '../ui/CoverArt'
+
+function HeaderBackdrop({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
+  if (!isSafeHttpUrl(src) || failed) return null
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-30 blur-3xl"
+    />
+  )
+}
 
 interface PlaylistHeaderProps {
   title: string
@@ -40,10 +61,11 @@ export default function PlaylistHeader({
   const fallback = useMemo(() => fallbackCover(title), [title])
 
   return (
-    <header className="rounded-lg bg-card p-4 sm:p-6">
+    <header className="relative isolate overflow-hidden rounded-lg bg-card p-4 sm:p-6">
+      <HeaderBackdrop src={cover} />
       <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:gap-6 sm:text-left">
         <div className="w-40 shrink-0 sm:w-48 lg:w-56">
-          <CoverArt cover={fallback} src={cover} />
+          <CoverArt cover={fallback} src={cover} className="shadow-2xl shadow-black/60" />
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Playlist</p>
