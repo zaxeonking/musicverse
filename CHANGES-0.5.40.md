@@ -5,3 +5,9 @@
 - File baru: `services/playbackSpeed.ts`, `components/player/SpeedSheet.tsx`.
 - **Butuh APK baru** (ada perubahan Java). Di APK lama, panggilan diabaikan: kecepatan hanya berubah di web.
 - Belum dibuild atau diuji di perangkat; hanya sintaks yang dicek.
+
+## Radio, tombol prev, dan seek notifikasi
+- **Radio tanpa akhir**: radio terus mengisi antrean tanpa batas. Bila lagu mirip dari lagu aktif habis, dicoba dari 5 lagu terakhir di antrean, lalu Riwayat didaur ulang (20 lagu terakhir di antrean dilewati). `services/radio.ts` (`findEndlessTracks`), `components/player/AutoRadioSync.tsx`. Hanya JS.
+- **Tombol prev memakai audio tersimpan**: data audio tiap lagu yang berhasil dimuat disimpan 20 menit per lagu (maks 50 lagu); prev memutarnya langsung tanpa mencari ulang. Bila gagal dimuat atau lewat 20 menit, otomatis ambil URL baru. Lagu lokal/unduhan dan pilihan manual tidak disimpan. `hooks/useAudioPlayerController.ts` (`playedCacheRef`, opsi `useSaved`). Hanya JS.
+- **Seek di notifikasi langsung berlaku**: sebelumnya geseran bilah progres hanya diteruskan ke JS sehingga bilah mental balik sampai aplikasi dibuka. Sekarang `PlaybackService.handleSeek` langsung seek pemutar native dan memperbarui sesi + notifikasi; JS tetap diberi tahu. Digeser sampai ujung: JS pindah ke lagu berikutnya. **Perubahan native: perlu build APK baru.**
+- Belum dibuild atau diuji di perangkat.

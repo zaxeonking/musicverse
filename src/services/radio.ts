@@ -238,3 +238,32 @@ export async function findSimilarTracks(seed: PlaylistTrack, exclude: ReadonlySe
   }
   return out
 }
+
+/**
+ * Radio tanpa akhir: coba lagu mirip dari lagu aktif; kalau habis, coba dari lagu lain di antrean (terbaru dulu);
+ * kalau masih kosong, putar ulang Riwayat (lagu yang baru saja diputar tidak diulang). Hanya kosong bila Riwayat pun kosong.
+ */
+export async function findEndlessTracks(seed: PlaylistTrack, queue: readonly PlaylistTrack[], signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const exclude = new Set(queue.map(trackKey))
+  let out = await findSimilarTracks(seed, exclude, signal)
+  if (out.length > 0 || signal?.aborted) return out
+  const seedKey = trackKey(seed)
+  const others = [...queue].reverse().filter((t) => trackKey(t) !== seedKey).slice(0, 5)
+  for (const other of others) {
+    out = await findSimilarTracks(other, exclude, signal)
+    if (out.length > 0 || signal?.aborted) return out
+  }
+  // Semua sumber habis: daur ulang Riwayat, hindari 20 lagu terakhir di antrean agar tidak langsung berulang.
+  const recent = new Set(queue.slice(-20).map(trackKey))
+  recent.add(seedKey)
+  const seen = new Set<string>()
+  const recycled: PlaylistTrack[] = []
+  for (const { track } of shuffle(readPlayLog())) {
+    const key = trackKey(track)
+    if (recent.has(key) || seen.has(key)) continue
+    seen.add(key)
+    recycled.push(track)
+    if (recycled.length >= RADIO_BATCH) break
+  }
+  return recycled
+}

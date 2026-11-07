@@ -64,6 +64,11 @@ const initialTime: PlaybackTime = { currentTime: 0, duration: null, seekable: fa
  */
 const STALE_PAUSE_MS = 10 * 60_000
 
+/** Data audio lagu yang sudah diputar disimpan selama ini (per lagu) supaya tombol prev memutarnya lagi tanpa mencari ulang. */
+const PLAYED_KEEP_MS = 20 * 60_000
+/** Paling banyak lagu yang disimpan sekaligus (yang tertua dibuang). */
+const PLAYED_KEEP_MAX = 50
+
 interface StartOptions {
   /** Pertahankan urutan acak yang sedang berjalan (mis. lanjut ke lagu berikutnya). */
   keepOrder?: boolean
@@ -73,6 +78,8 @@ interface StartOptions {
   resumeAt?: number
   /** Pemuatan ulang otomatis karena gangguan jaringan (hitungan percobaan tidak direset). */
   isRetry?: boolean
+  /** Pakai data audio yang disimpan (maks 20 menit) bila ada, sekali saja; dipakai tombol prev. */
+  useSaved?: boolean
 }
 
 /** Lagu berikutnya yang sedang/sudah dimuat di elemen cadangan untuk crossfade. */
@@ -342,6 +349,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const preloadRef = useRef<Preload | null>(null)
   /** Hasil resolve lagu-lagu di depan (kunci: id lagu), dipakai ulang agar tidak di-resolve berulang. */
   const upcomingCacheRef = useRef(new Map<string, { info: PlaybackInfo; at: number }>())
+  /** Data audio lagu yang sudah berhasil diputar (kunci: id lagu), disimpan PLAYED_KEEP_MS untuk tombol prev. */
+  const playedCacheRef = useRef(new Map<string, { info: PlaybackInfo; at: number }>())
   /** Lagu yang sedang diserahkan ke native (kunci: indeks antrean): untuk menyamakan state saat native pindah sendiri. */
   const upcomingByIndexRef = useRef(new Map<number, { trackId: string; info: PlaybackInfo }>())
   const upcomingSentRef = useRef('')
@@ -815,13 +824,23 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const avoid: ApiSourceName[] = []
 
       let resolveFailures = 0
+      // Data tersimpan hanya dicoba pada percobaan pertama; kegagalan apa pun setelahnya mengambil URL baru.
+      let triedSaved = false
       // Audio dari semua sumber tidak cocok dengan playlist: minta ulang (server kadang memberi versi lain di permintaan berikutnya).
       let mismatchRetries = 0
       const attempt = async (): Promise<void> => {
         // Setiap permintaan play selalu mengambil URL audio terbaru (tanpa cache).
         let info: PlaybackInfo
         try {
-          info = await fetchPlaybackInfo(track, { signal: controller.signal, avoid })
+          const saved = options.useSaved && !triedSaved ? playedCacheRef.current.get(track.id) : undefined
+          triedSaved = true
+          if (saved && Date.now() - saved.at <= PLAYED_KEEP_MS) {
+            plog(`prev: memakai data audio tersimpan "${track.title}"`)
+            info = saved.info
+          } else {
+            playedCacheRef.current.delete(track.id)
+            info = await fetchPlaybackInfo(track, { signal: controller.signal, avoid })
+          }
           activeUaRef.current = info.directUserAgent
         } catch (error) {
           if (isStale()) return
@@ -916,8 +935,26 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
 
         try {
           await audioEngine.load(info.audioUrl, diskCacheKey(track, info))
+          // Berhasil dimuat: simpan 20 menit (lagu lokal/unduhan tidak perlu; sudah instan).
+          if (!isStale() && info.source !== 'local' && info.source !== 'offline' && !info.manualPick) {
+            const cache = playedCacheRef.current
+            const now = Date.now()
+            cache.delete(track.id)
+            cache.set(track.id, { info, at: now })
+            for (const [id, entry] of cache) {
+              if (now - entry.at > PLAYED_KEEP_MS || cache.size > PLAYED_KEEP_MAX) cache.delete(id)
+              else break
+            }
+          }
         } catch (error) {
           if (isStale()) return
+          // Data tersimpan gagal dimuat (URL mati): buang dan ambil URL baru.
+          if (options.useSaved && playedCacheRef.current.delete(track.id) && !(error instanceof AudioEngineError && error.code === 'aborted')) {
+            plog(`prev: data tersimpan gagal, mengambil URL baru "${track.title}"`)
+            commit({ status: 'resolving', playbackInfo: null, error: null })
+            void attempt()
+            return
+          }
           const code = error instanceof AudioEngineError ? error.code : 'unknown'
           if (code === 'aborted') return // dijeda/diganti saat play() menunggu
           fail(code)
@@ -1164,13 +1201,13 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       // Lagu sudah berjalan > 3 detik: ulang lagu ini. Bila audio tidak bisa di-seek,
       // muat ulang dari awal (URL baru) agar hasilnya tetap sama.
       if (seekable) seekTo(0)
-      else if (currentIndex !== null) startPlayback(queue, currentIndex, { keepOrder: true })
+      else if (currentIndex !== null) startPlayback(queue, currentIndex, { keepOrder: true, useSaved: true })
     } else if (previous !== null) {
-      playAt(previous)
+      startPlayback(queue, previous, { keepOrder: true, useSaved: true })
     } else if (inTrack && seekable) {
       seekTo(0)
     }
-  }, [playAt, seekTo, startPlayback])
+  }, [seekTo, startPlayback])
 
   /** Mengulang lagu aktif dari 0:00. Memakai audio yang sudah dimuat; gagal = minta URL baru. */
   const replayCurrent = useCallback(() => {

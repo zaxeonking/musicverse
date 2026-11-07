@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { endRadio, findSimilarTracks, getRadioAuto, isRadioActive, isRadioTrack, markRadioTracks, trackKey, useRadioAuto } from '../../services/radio'
+import { endRadio, findEndlessTracks, getRadioAuto, isRadioActive, isRadioTrack, markRadioTracks, useRadioAuto } from '../../services/radio'
 import { getUpcomingTracks } from '../../utils/playerQueue'
 
 /** Isi ulang antrean bila lagu yang tersisa setelah lagu aktif tinggal sebanyak ini atau kurang. */
@@ -10,7 +10,7 @@ const LOW_WATER = 1
 /**
  * Radio: saat antrean hampir habis, tambahkan lagu mirip di akhir antrean (lihat services/radio.ts).
  * Aktif bila "Radio otomatis" menyala di Pengaturan, atau radio dimulai dari menu lagu. Tidak melakukan apa pun
- * saat mode ulang "satu lagu" atau saat berhenti setelah lagu ini (sleep timer).
+ * saat mode ulang "satu lagu" atau saat berhenti setelah lagu ini (sleep timer). Tanpa batas: terus mengisi selama lagu diputar.
  */
 export default function AutoRadioSync() {
   const player = useAudioPlayer()
@@ -40,8 +40,7 @@ export default function AutoRadioSync() {
     triedFor.current = seedKey
     busy.current = true
     const controller = new AbortController()
-    const exclude = new Set(queue.map(trackKey))
-    void findSimilarTracks(currentTrack, exclude, controller.signal)
+    void findEndlessTracks(currentTrack, queue, controller.signal)
       .then((similar) => {
         if (controller.signal.aborted) return
         markRadioTracks(similar)

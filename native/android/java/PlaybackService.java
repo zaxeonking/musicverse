@@ -1122,7 +1122,7 @@ public class PlaybackService extends Service {
       @Override public void onStop() { emit("stop", -1); }
       @Override public void onSkipToNext() { handleAction("next"); }
       @Override public void onSkipToPrevious() { handleAction("previous"); }
-      @Override public void onSeekTo(long pos) { emit("seek", pos); }
+      @Override public void onSeekTo(long pos) { handleSeek(pos); }
     });
     PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
     if (pm != null) {
@@ -1374,6 +1374,34 @@ public class PlaybackService extends Service {
    * Tombol notifikasi / sesi media. Normalnya diteruskan ke JS (yang memegang antrean). Bila JS beku (tanpa detak),
    * native mengerjakannya sendiri, jadi tombol tetap berfungsi dan pemutaran tidak "mati" setelah beberapa lagu.
    */
+  /**
+   * Bilah progres notifikasi / layar kunci digeser. Dikerjakan di native SEKARANG: pemutar langsung loncat dan posisi sesi
+   * diperbarui, jadi bilah tidak mental balik ke posisi lama walau WebView di latar belakang beku / lambat. JS tetap diberi
+   * tahu (untuk state aplikasi, dan untuk pindah lagu bila digeser sampai ujung); seek ganda di JS tidak berbahaya.
+   */
+  private void handleSeek(long pos) {
+    if (stopped) return;
+    long target = Math.max(0, pos);
+    if (current.durationMs > 0 && target > current.durationMs) target = current.durationMs;
+    // Digeser sampai ujung = ingin ganti lagu: biarkan JS yang pindah ke lagu berikutnya.
+    boolean nearEnd = current.durationMs > 0 && target >= current.durationMs - 750L;
+    ExoPlayer p = player;
+    if (!nearEnd && p != null && hasMedia && p.getPlaybackState() != Player.STATE_ENDED) {
+      lastPosMs = target;
+      bufferingSince = 0;
+      stallStage = 0;
+      if (p.getPlaybackState() == Player.STATE_IDLE) p.prepare();
+      p.seekTo(target);
+    }
+    current.positionMs = target;
+    positionAt = SystemClock.elapsedRealtime();
+    pushPlaybackState();
+    // ROM yang menggambar bilah dari notifikasi (bukan dari sesi): perbarui notifikasinya juga.
+    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
+    emit("seek", pos);
+  }
+
   private void handleAction(String action) {
     if (stopped) return;
     if (!nativeInCharge()) {
