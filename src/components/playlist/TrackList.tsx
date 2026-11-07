@@ -118,7 +118,7 @@ export default function TrackList({
         </div>
           </>
         )}
-        <p role="status" aria-live="polite" className="mt-2 min-h-5 px-1 text-xs text-ink-muted">
+        <p role="status" aria-live="polite" className={isFiltering ? 'mt-2 px-1 text-xs text-ink-muted' : 'sr-only'}>
           {isFiltering ? `${visible.length} dari ${tracks.length} lagu` : ''}
         </p>
       </div>

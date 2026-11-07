@@ -1,4 +1,4 @@
-import { ListMusic, Loader2, Pause, Play } from 'lucide-react'
+import { CheckCircle2, ListMusic, Loader2, Pause, Play } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
@@ -105,6 +105,9 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         className="min-w-0 rounded-sm text-left focus-ring"
       >
         <p title={track.title} className={`truncate text-base font-medium ${highlighted ? 'text-accent' : 'text-ink'}`}>
+          {inPlaylists.length > 0 && (
+            <CheckCircle2 className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" aria-label="Sudah ada di playlist" />
+          )}
           {track.title}
         </p>
         <p className="truncate text-sm text-ink-muted">

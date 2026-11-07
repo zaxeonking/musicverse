@@ -1,9 +1,9 @@
-import { ListMusic } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { Check, ListMusic } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import type { PlaylistTrack } from '../../types/spotify'
-import type { BulkAddResult } from '../../utils/myPlaylistStorage'
+import { trackIdentity, type BulkAddResult } from '../../utils/myPlaylistStorage'
 import { fallbackCover } from '../../utils/fallbackCover'
 import NewPlaylistForm from '../library/NewPlaylistForm'
 import Action from '../player/SheetAction'
@@ -28,12 +28,11 @@ interface ArtistPlaylistSheetProps {
 export default function ArtistPlaylistSheet({ artist, songs, onClose, onDone }: ArtistPlaylistSheetProps) {
   const { playlists, addTracks, createPlaylist } = useMyPlaylists()
   const sheetRef = useRef<HTMLDivElement>(null)
-  const busy = useRef(false)
   useOverlayHistory(true, onClose)
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
-    sheetRef.current?.querySelector<HTMLElement>('button, input')?.focus()
+    sheetRef.current?.querySelector<HTMLElement>('ul button, input')?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -44,26 +43,52 @@ export default function ArtistPlaylistSheet({ artist, songs, onClose, onDone }: 
     }
   }, [onClose])
 
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const [status, setStatus] = useState('')
+  const [summary, setSummary] = useState<string[]>([])
+  const identities = useMemo(() => songs.map(trackIdentity), [songs])
+
+  /** Berapa lagu dari daftar ini yang sudah ada di playlist tertentu. */
+  const haveIn = (tracks: readonly PlaylistTrack[]) => {
+    const known = new Set(tracks.map(trackIdentity))
+    return identities.filter((identity) => known.has(identity)).length
+  }
+
+  const confirm = (id: string, ok: boolean, message: string) => {
+    navigator.vibrate?.(ok ? 12 : [30, 40, 30])
+    setFlashId(id)
+    setStatus(message)
+    setNotes((prev) => ({ ...prev, [id]: message }))
+  }
+
+  // Sheet tetap terbuka setelah diketuk: konfirmasi tampil di barisnya, jadi bisa memilih beberapa playlist.
   const addTo = (id: string, name: string) => {
-    if (busy.current) return
-    busy.current = true
     const result = addTracks(id, songs)
-    onDone(result.ok ? addedMessage(name, result.value) : myPlaylistErrorText(result.reason))
-    onClose()
+    if (!result.ok) return confirm(id, false, myPlaylistErrorText(result.reason))
+    const message = addedMessage(name, result.value)
+    if (result.value.added > 0) setSummary((prev) => [...prev.filter((item) => item !== name), name])
+    confirm(id, true, message)
   }
 
   const create = (name: string): string | null => {
     const made = createPlaylist(name)
     if (!made.ok) return myPlaylistErrorText(made.reason)
     const filled = addTracks(made.value.id, songs)
-    onDone(filled.ok ? `Playlist “${made.value.name}” dibuat, ${filled.value.added} lagu disimpan` : myPlaylistErrorText(filled.reason))
-    onClose()
+    if (!filled.ok) return myPlaylistErrorText(filled.reason)
+    setSummary((prev) => [...prev, made.value.name])
+    confirm(made.value.id, true, `Playlist “${made.value.name}” dibuat, ${filled.value.added} lagu disimpan`)
     return null
+  }
+
+  const finish = () => {
+    if (summary.length > 0) onDone(`${songs.length} lagu disimpan ke ${summary.map((name) => `“${name}”`).join(', ')}`)
+    onClose()
   }
 
   return (
     <OverlayPortal>
-      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
+      <div aria-hidden="true" onClick={finish} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
         role="dialog"
@@ -81,18 +106,29 @@ export default function ArtistPlaylistSheet({ artist, songs, onClose, onDone }: 
               {artist.name} · {songs.length} lagu
             </span>
           </span>
+          <button type="button" onClick={finish} className="btn-primary h-9 shrink-0 px-4 text-sm">
+            Selesai
+          </button>
         </div>
+        <p role="status" aria-live="polite" className="sr-only">
+          {status}
+        </p>
         {playlists.length > 0 && (
           <ul className="max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
-            {playlists.map((playlist) => (
-              <Action
-                key={playlist.id}
-                icon={ListMusic}
-                label={playlist.name}
-                hint={`${playlist.tracks.length} lagu`}
-                onClick={() => addTo(playlist.id, playlist.name)}
-              />
-            ))}
+            {playlists.map((playlist) => {
+              const have = haveIn(playlist.tracks)
+              const all = songs.length > 0 && have >= songs.length
+              return (
+                <Action
+                  key={playlist.id}
+                  icon={all ? Check : ListMusic}
+                  iconClassName={flashId === playlist.id ? 'animate-pop' : all ? 'text-accent' : undefined}
+                  label={playlist.name}
+                  hint={notes[playlist.id] ?? (have > 0 ? `${have} dari ${songs.length} lagu sudah ada` : `${playlist.tracks.length} lagu`)}
+                  onClick={() => addTo(playlist.id, playlist.name)}
+                />
+              )
+            })}
           </ul>
         )}
         <div className="border-t border-line px-4 pt-3">

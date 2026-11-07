@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isSafeHttpUrl } from '../../utils/spotifyUrl'
 import CoverArt from '../ui/CoverArt'
+import RoundAction from '../ui/RoundAction'
 
 function HeaderBackdrop({ src }: { src: string }) {
   const [failed, setFailed] = useState(false)
@@ -79,53 +80,20 @@ export default function PlaylistHeader({
             {trackCount} lagu
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
-            <button
-              type="button"
-              onClick={onPlayAll}
-              disabled={trackCount === 0 || playAllDisabled}
-              className="btn-primary px-6"
-            >
-              <Play className="h-4 w-4" fill="currentColor" aria-hidden="true" />
-              Putar semua
-            </button>
+            <RoundAction primary fill icon={Play} label="Putar semua" onClick={onPlayAll} disabled={trackCount === 0 || playAllDisabled} />
             {onAddAsPlaylist && (
-              <button type="button" onClick={onAddAsPlaylist} disabled={trackCount === 0} className="btn-secondary">
-                {addedAsPlaylist ? (
-                  <ListChecks className="h-4 w-4 text-accent" aria-hidden="true" />
-                ) : (
-                  <ListPlus className="h-4 w-4" aria-hidden="true" />
-                )}
-                {addedAsPlaylist ? 'Perbarui playlist' : 'Tambah ke playlist'}
-              </button>
+              <RoundAction
+                icon={addedAsPlaylist ? ListChecks : ListPlus}
+                iconClassName={addedAsPlaylist ? 'text-accent' : undefined}
+                label={addedAsPlaylist ? 'Perbarui playlist' : 'Tambah ke playlist'}
+                onClick={onAddAsPlaylist}
+                disabled={trackCount === 0}
+              />
             )}
-            {onDownloadAll && (
-              <button type="button" onClick={onDownloadAll} disabled={trackCount === 0} className="btn-secondary">
-                <Download className="h-4 w-4" aria-hidden="true" />
-                Unduh semua
-              </button>
-            )}
-            {onAddToQueue && (
-              <button type="button" onClick={onAddToQueue} className="btn-secondary">
-                <ListEnd className="h-4 w-4" aria-hidden="true" />
-                Tambah ke antrean
-              </button>
-            )}
-            {onAddToPlaylist && (
-              <button type="button" onClick={onAddToPlaylist} aria-haspopup="dialog" className="btn-secondary">
-                <ListPlus className="h-4 w-4" aria-hidden="true" />
-                Tambah ke playlist
-              </button>
-            )}
-            {onReload && (
-              <button
-                type="button"
-                onClick={onReload}
-                className="btn-secondary"
-              >
-                <RotateCw className="h-4 w-4" aria-hidden="true" />
-                Muat ulang
-              </button>
-            )}
+            {onDownloadAll && <RoundAction icon={Download} label="Unduh semua" onClick={onDownloadAll} disabled={trackCount === 0} />}
+            {onAddToQueue && <RoundAction icon={ListEnd} label="Tambah ke antrean" onClick={onAddToQueue} />}
+            {onAddToPlaylist && <RoundAction icon={ListPlus} label="Tambah ke playlist" onClick={onAddToPlaylist} haspopup />}
+            {onReload && <RoundAction icon={RotateCw} label="Muat ulang" onClick={onReload} />}
           </div>
         </div>
       </div>

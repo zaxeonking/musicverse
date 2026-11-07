@@ -2,7 +2,9 @@ import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListMusic, Loader2, Mor
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
+import RefreshChoiceSheet from '../components/library/RefreshChoiceSheet'
 import EmptyState from '../components/ui/EmptyState'
+import RoundAction from '../components/ui/RoundAction'
 import { useLibrary } from '../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsContext'
 import { useTrackMenu } from '../context/TrackMenuContext'
@@ -92,6 +94,7 @@ export default function MyPlaylistPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshMenu, setRefreshMenu] = useState(false)
 
   if (!playlist) {
     return (
@@ -228,48 +231,38 @@ export default function MyPlaylistPage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => player.playList(tracks, 0)} disabled={tracks.length === 0} className="btn-primary">
-          <Play className="h-4 w-4" aria-hidden="true" />
-          Putar semua
-        </button>
+        <RoundAction primary fill icon={Play} label="Putar semua" onClick={() => player.playList(tracks, 0)} disabled={tracks.length === 0} />
         {isNativeApp() && (
-          <button
-            type="button"
+          <RoundAction
+            icon={Download}
+            label="Unduh semua"
             onClick={() => showToast(bulkDownloadText(downloadTracks(tracks)))}
             disabled={tracks.length === 0}
-            className="btn-secondary"
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Unduh semua
-          </button>
+          />
         )}
         {playlist.sourceId && (
-          <button type="button" onClick={() => void refreshFromSpotify()} disabled={refreshing || syncing} className="btn-secondary">
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
-            Muat data terbaru
-          </button>
-        )}
-        {isNativeApp() && playlist.sourceId && (
-          <button type="button" onClick={() => void syncFromSpotify()} disabled={syncing || refreshing} className="btn-secondary">
-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
-            Unduh yang baru
-          </button>
+          <RoundAction
+            icon={RefreshCw}
+            iconClassName={refreshing || syncing ? 'animate-spin motion-reduce:animate-none' : undefined}
+            label={isNativeApp() ? 'Perbarui playlist' : 'Muat data terbaru'}
+            haspopup={isNativeApp()}
+            disabled={refreshing || syncing}
+            // Di APK ada dua pilihan (muat data / unduh yang baru), jadi tanya dulu; di web hanya satu, langsung jalan.
+            onClick={() => (isNativeApp() ? setRefreshMenu(true) : void refreshFromSpotify())}
+          />
         )}
         {!builtIn && (
-          <button
-            type="button"
+          <RoundAction
+            icon={playlist.pinned ? PinOff : Pin}
+            iconClassName={playlist.pinned ? 'text-accent' : undefined}
+            label={playlist.pinned ? 'Lepas sematan playlist' : 'Sematkan playlist'}
+            pressed={playlist.pinned === true}
             onClick={() => {
               const result = setPinned(playlist.id, !playlist.pinned)
               if (!result.ok) fail(result.reason)
               else showToast(result.value.pinned ? 'Playlist disematkan di atas' : 'Sematan dilepas')
             }}
-            aria-pressed={playlist.pinned === true}
-            aria-label={playlist.pinned ? 'Lepas sematan playlist' : 'Sematkan playlist'}
-            title={playlist.pinned ? 'Lepas sematan' : 'Sematkan di atas'}
-            className={`icon-btn bg-raised ${playlist.pinned ? 'text-accent' : ''}`}
-          >
-            {playlist.pinned ? <PinOff className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
-          </button>
+          />
         )}
         {builtIn ? null : confirmDelete ? (
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Konfirmasi hapus playlist">
@@ -300,11 +293,17 @@ export default function MyPlaylistPage() {
             </button>
           </div>
         ) : (
-          <button type="button" onClick={() => setConfirmDelete(true)} aria-label="Hapus playlist" className="icon-btn bg-raised hover:text-danger">
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </button>
+          <RoundAction danger icon={Trash2} label="Hapus playlist" onClick={() => setConfirmDelete(true)} />
         )}
       </div>
+
+      {refreshMenu && (
+        <RefreshChoiceSheet
+          onClose={() => setRefreshMenu(false)}
+          onRefresh={() => void refreshFromSpotify()}
+          onSync={() => void syncFromSpotify()}
+        />
+      )}
 
       {tracks.length === 0 ? (
         <EmptyState

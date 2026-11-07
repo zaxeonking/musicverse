@@ -1,4 +1,4 @@
-import { Heart, LayoutGrid, Library, List, ListChecks, Pin, Plus } from 'lucide-react'
+import { Heart, LayoutGrid, Library, List, Pin, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
@@ -6,6 +6,7 @@ import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsCo
 import { usePlaylist } from '../../context/PlaylistContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
+import { useSwipeSelect } from '../../hooks/useSwipeSelect'
 import type { LibrarySort, LibraryView, MyPlaylist, SavedPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { toPlaylistDetail } from '../../utils/libraryStorage'
@@ -162,14 +163,23 @@ export default function PlaylistsSection() {
     if (selecting && selectable.length === 0) exitSelecting()
   }, [selecting, selectable.length, exitSelecting])
 
-  const toggleSelected = (entry: Entry) =>
-    setSelected((prev) => {
-      const next = new Set(prev)
-      const key = keyOf(entry)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+  const toggleSelected = (entry: Entry) => {
+    const next = new Set(selected)
+    const key = keyOf(entry)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setSelected(next)
+    // Pilihan terakhir dibatalkan: tidak ada lagi yang dipilih, tutup mode pilih.
+    if (next.size === 0) setSelecting(false)
+  }
+
+  /** Geser kanan/kiri pada playlist = mulai memilih (atau pilih/batal pilih kalau sudah dalam mode pilih). */
+  const swipeHandlers = useSwipeSelect((index) => {
+    const entry = entries[index]
+    if (!entry || (entry.kind === 'mine' && isLikedId(entry.id))) return
+    setSelecting(true)
+    toggleSelected(entry)
+  })
 
   /** Menghapus semua yang dipilih sekaligus (satu penulisan per jenis), dengan Urungkan. Berkas unduhan dan antrean tidak disentuh. */
   const handleDeleteSelected = () => {
@@ -227,18 +237,10 @@ export default function PlaylistsSection() {
           subtitle={subtitle}
           action={
             !creating && !selecting ? (
-              <div className="flex shrink-0 items-center gap-2">
-                {selectable.length > 0 && (
-                  <button type="button" onClick={() => setSelecting(true)} className="btn-secondary h-10 px-4 text-sm">
-                    <ListChecks className="h-4 w-4" aria-hidden="true" />
-                    Pilih
-                  </button>
-                )}
-                <button type="button" onClick={() => setCreating(true)} className="btn-secondary h-10 px-4 text-sm">
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Buat playlist
-                </button>
-              </div>
+              <button type="button" onClick={() => setCreating(true)} className="btn-secondary h-10 shrink-0 px-4 text-sm">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Buat playlist
+              </button>
             ) : undefined
           }
         />
@@ -302,11 +304,12 @@ export default function PlaylistsSection() {
           </div>
 
           <ul
-            className={
+            {...swipeHandlers}
+            className={`touch-pan-y ${
               prefs.view === 'grid'
                 ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5'
                 : '-mx-2'
-            }
+            }`}
           >
             {entries.map((entry) =>
               selecting ? (

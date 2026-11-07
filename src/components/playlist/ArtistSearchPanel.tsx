@@ -11,6 +11,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import { getRowActivity } from '../../utils/playerStatus'
 import Chip from '../ui/Chip'
 import CoverArt from '../ui/CoverArt'
+import RoundAction from '../ui/RoundAction'
 import EmptyState from '../ui/EmptyState'
 import ArtistList from './ArtistList'
 import ArtistPlaylistSheet, { addedMessage } from './ArtistPlaylistSheet'
@@ -145,29 +146,18 @@ export default function ArtistSearchPanel() {
     showToast(existed ? addedMessage(playlist.name, { added, skipped }) : `Playlist “${playlist.name}” dibuat, ${added} lagu disimpan`)
   }
 
+  const disabled = viewSongs.length === 0
   const actions = (
-    <div className="flex flex-wrap gap-2">
-      <button type="button" className="btn-primary" disabled={viewSongs.length === 0} onClick={() => player.playList(viewSongs, 0)}>
-        <Play className="h-4 w-4" aria-hidden="true" />
-        Putar semua
-      </button>
-      <button
-        type="button"
-        className="btn-secondary"
-        disabled={viewSongs.length === 0}
+    <div className="flex items-center gap-3">
+      <RoundAction primary fill icon={Play} label="Putar semua" disabled={disabled} onClick={() => player.playList(viewSongs, 0)} />
+      <RoundAction
+        icon={Shuffle}
+        label="Acak"
+        disabled={disabled}
         onClick={() => player.playAll([...viewSongs].sort(() => Math.random() - 0.5))}
-      >
-        <Shuffle className="h-4 w-4" aria-hidden="true" />
-        Acak
-      </button>
-      <button type="button" className="btn-secondary" disabled={viewSongs.length === 0} onClick={() => setSheetOpen(true)}>
-        <ListPlus className="h-4 w-4" aria-hidden="true" />
-        Tambah ke playlist
-      </button>
-      <button type="button" className="btn-secondary" disabled={viewSongs.length === 0} onClick={createViewPlaylist}>
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        Buat playlist
-      </button>
+      />
+      <RoundAction icon={ListPlus} label="Tambah ke playlist" disabled={disabled} haspopup onClick={() => setSheetOpen(true)} />
+      <RoundAction icon={Plus} label="Buat playlist" disabled={disabled} onClick={createViewPlaylist} />
     </div>
   )
 
@@ -234,15 +224,16 @@ export default function ArtistSearchPanel() {
   } else {
     body = (
       <>
-        {actions}
-        <div className="flex items-center gap-2" role="group" aria-label="Urutkan lagu">
-          <span className="text-xs text-ink-muted">Urutkan</span>
-          <Chip active={sort === 'popular'} onClick={() => artistSearch.setSort('popular')}>
-            Populer
-          </Chip>
-          <Chip active={sort === 'az'} onClick={() => artistSearch.setSort('az')}>
-            A–Z
-          </Chip>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          {actions}
+          <div className="flex items-center gap-2" role="group" aria-label="Urutkan lagu">
+            <Chip active={sort === 'popular'} onClick={() => artistSearch.setSort('popular')}>
+              Populer
+            </Chip>
+            <Chip active={sort === 'az'} onClick={() => artistSearch.setSort('az')}>
+              A–Z
+            </Chip>
+          </div>
         </div>
         {trackList}
       </>
