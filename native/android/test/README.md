@@ -7,3 +7,10 @@ Folder ini tidak ikut disalin ke proyek Android (`setup-android.mjs` hanya menya
     cp native/android/test/mv/RadioTest.java $T/mv/
     java --module jdk.compiler/com.sun.tools.javac.Main -d $T/out native/android/test/org/json/*.java $T/mv/*.java
     java -cp $T/out mv.RadioTest
+
+Tes logika warna widget (`WidgetColors`, murni tanpa Android):
+
+    T=$(mktemp -d); mkdir -p $T/mv
+    sed 's/__APP_ID__/mv/' native/android/java/WidgetColors.java > $T/mv/WidgetColors.java
+    cp native/android/test/mv/WidgetColorsTest.java $T/mv/
+    javac -d $T/out $T/mv/*.java && java -cp $T/out mv.WidgetColorsTest

@@ -18,6 +18,7 @@ import LyricsPanel from './LyricsPanel'
 import SeekBar from './SeekBar'
 import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
 import { isNativeApp } from '../../native/platform'
+import { takeFlyOrigin } from '../../services/flyOrigin'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
 /** Durasi & easing gerakan pemutar penuh <-> mini player (satu animasi berkelanjutan). */
@@ -27,6 +28,8 @@ const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 const EASE_HERO = 'cubic-bezier(0.45, 0, 0.15, 1)'
 /** Buka: melesat dulu lalu mengendap pelan di posisi akhir (ease-out kuat), seperti sampul "ditarik" ke atas. */
 const EASE_OPEN = 'cubic-bezier(0.22, 1, 0.36, 1)'
+/** Tutup setelah diseret: gerak langsung cepat (melanjutkan seretan jari), lalu mengendap. */
+const EASE_DRAG_CLOSE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 /** Jeda masuk bertahap (ms) untuk elemen pemutar penuh. */
@@ -46,15 +49,17 @@ const miniCoverRadius = (width: number) => {
 }
 
 const FLY_STEPS = 10
-const SHADOW = '0 25px 50px -12px'
+/** Kotak minimal yang dibutuhkan flyKeyframes (DOMRect atau hasil konversi koordinat). */
+type Box = Pick<DOMRect, 'left' | 'top' | 'width'>
 
 /**
  * Keyframe sampul terbang antara kotak kecil `from` dan kotak besar `to` (FLIP, asal sudut kiri atas).
  * Skala murni ikut mengecilkan radius sudut (28px x 0,15 ~ 4px), jadi sudut tampak melompat. Di sini radius tiap
- * langkah dihitung ulang supaya radius TAMPAK berubah mulus dari `rFrom` ke `rTo`, dan bayangan memudar masuk
- * selama sampul naik. `reverse` = dari besar ke kecil (menutup); offset tetap menaik, hanya isinya yang dibalik.
+ * langkah dihitung ulang supaya radius TAMPAK berubah mulus dari `rFrom` ke `rTo`. Bayangan sengaja TIDAK dianimasikan:
+ * box-shadow besar digambar ulang tiap frame dan membuat gerak tersendat; bayangan statis di kelas sampul ikut diskalakan.
+ * `reverse` = dari besar ke kecil (menutup); offset tetap menaik, hanya isinya yang dibalik.
  */
-function flyKeyframes(from: DOMRect, to: DOMRect, rFrom: number, rTo: number, reverse = false): Keyframe[] {
+function flyKeyframes(from: Box, to: Box, rFrom: number, rTo: number, reverse = false): Keyframe[] {
   const s0 = from.width / to.width
   const frames: Keyframe[] = []
   for (let i = 0; i <= FLY_STEPS; i += 1) {
@@ -66,7 +71,6 @@ function flyKeyframes(from: DOMRect, to: DOMRect, rFrom: number, rTo: number, re
       offset,
       transform: `translate3d(${(from.left - to.left) * (1 - p)}px, ${(from.top - to.top) * (1 - p)}px, 0) scale(${scale})`,
       borderRadius: `${visual / scale}px`,
-      boxShadow: `${SHADOW} rgba(0,0,0,${(0.6 * p).toFixed(3)})`,
     })
   }
   return frames
@@ -178,11 +182,16 @@ export default function FullPlayer({
     openedRef.current = true
     if (prefersReducedMotion()) return
     const to = el.getBoundingClientRect()
-    const from = miniCoverRect()
+    // Asal terbang: posisi sampul mini TEPAT saat dilepas (dicatat MiniPlayer), bukan posisi saat kartunya bergerak kembali.
+    const from = takeFlyOrigin() ?? miniCoverRect()
     if (from && to.width > 0) {
       el.style.transformOrigin = 'top left'
+      el.style.willChange = 'transform'
       const rTo = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 28
-      el.animate(flyKeyframes(from, to, miniCoverRadius(from.width), rTo), { duration: OPEN_MS, easing: EASE_OPEN })
+      const anim = el.animate(flyKeyframes(from, to, miniCoverRadius(from.width), rTo), { duration: OPEN_MS, easing: EASE_OPEN })
+      anim.onfinish = () => {
+        el.style.willChange = ''
+      }
     } else {
       // Mini player berupa gelembung / belum ada: sampul naik pelan dari bawah.
       el.animate(
@@ -226,6 +235,8 @@ export default function FullPlayer({
     onClosedRef.current = onClosed
   }, [onClosed])
   const closingRef = useRef(false)
+  // Seretan turun yang sedang berlangsung (px turun + skala kartu): dipakai animasi tutup agar melanjutkan dari posisi jari.
+  const dragRef = useRef({ pull: 0, scale: 1 })
   const animateClose = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
@@ -246,36 +257,46 @@ export default function FullPlayer({
     const ms = prefersReducedMotion() ? 0 : CLOSE_MS
     const cover = coverRef.current
     const mini = miniCoverRect()
-    // Sisa seretan (turun + mengecil) dikembalikan halus ke posisi normal bersamaan dengan sampul terbang.
-    const residue = el.style.transform
+    // Setelah diseret, kartu masih turun + mengecil (sisa seretan). JANGAN dikembalikan ke posisi penuh (itu yang dulu membuat
+    // kartu "membalik" naik lalu menghilang): kartu dibiarkan di tempatnya dan hanya memudar, sementara sampul terbang dari
+    // posisi tampaknya sekarang ke sampul mini. Koordinat target dikonversi ke ruang lokal kartu (kebalikan dari transformnya).
+    const { pull, scale: s } = dragRef.current
+    const dragged = pull > 0
     let natural = cover?.getBoundingClientRect() ?? null
-    if (residue && cover) {
+    if (dragged && cover) {
+      const keep = el.style.transform
       el.style.transition = 'none'
       el.style.transform = ''
-      natural = cover.getBoundingClientRect()
-      el.style.transform = residue
-      void el.offsetHeight
+      natural = cover.getBoundingClientRect() // posisi alami (kartu memenuhi layar, jadi sama dengan koordinat lokal)
+      el.style.transform = keep
     }
-    if (residue) {
-      el.style.transition = `transform ${ms}ms ${EASE}`
-      el.style.transform = ''
-      el.style.borderRadius = ''
-    }
+    const cx = el.clientWidth / 2
+    const toLocal = (r: DOMRect): Box & { height: number } =>
+      dragged
+        ? { left: cx + (r.left - cx) / s, top: (r.top - pull) / s, width: r.width / s, height: r.height / s }
+        : r
     if (cover && natural) {
       cover.style.transformOrigin = 'top left'
+      cover.style.willChange = 'transform'
       const rFull = parseFloat(getComputedStyle(cover).borderTopLeftRadius) || 28
       const target: Keyframe[] =
         mini && natural.width > 0
-          ? flyKeyframes(mini, natural, miniCoverRadius(mini.width), rFull, true)
+          ? flyKeyframes(toLocal(mini), natural, miniCoverRadius(mini.width) / (dragged ? s : 1), rFull, true)
           : [
               { opacity: 1, transform: 'none' },
               { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.92)' },
             ]
-      cover.animate(target, { duration: ms, easing: EASE_HERO, fill: 'forwards' })
+      cover.animate(target, { duration: ms, easing: dragged ? EASE_DRAG_CLOSE : EASE_HERO, fill: 'forwards' })
     } else {
       slotRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.5, easing: EASE, fill: 'forwards' })
     }
-    bgRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.75, delay: ms * 0.3, easing: EASE, fill: 'forwards' })
+    // Latar memudar searah sampul; setelah diseret mulai lebih awal karena kartu sudah bergerak.
+    bgRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: ms * (dragged ? 0.8 : 0.75),
+      delay: ms * (dragged ? 0.1 : 0.3),
+      easing: EASE,
+      fill: 'forwards',
+    })
     const timer = window.setTimeout(() => onClosedRef.current?.(), ms + 40)
     return () => window.clearTimeout(timer)
   }, [closing])
@@ -315,6 +336,7 @@ export default function FullPlayer({
     }
 
     const springBack = () => {
+      dragRef.current = { pull: 0, scale: 1 }
       el.style.transition = 'transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 380ms, opacity 200ms'
       el.style.transform = ''
       el.style.borderRadius = ''
@@ -358,7 +380,9 @@ export default function FullPlayer({
       const pull = Math.max(0, dy - 8)
       const p = Math.min(pull / 320, 1)
       el.style.transition = 'none'
-      el.style.transform = `translate3d(0, ${pull}px, 0) scale(${1 - p * 0.07})`
+      const scale = 1 - p * 0.07
+      dragRef.current = { pull, scale }
+      el.style.transform = `translate3d(0, ${pull}px, 0) scale(${scale})`
       el.style.borderRadius = `${Math.min(pull / 4, 28)}px`
       const over = pull > CLOSE_PX
       if (over !== crossed) {

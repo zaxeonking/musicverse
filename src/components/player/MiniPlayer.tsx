@@ -4,6 +4,7 @@ import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useCoverGlow } from '../../hooks/useCoverGlow'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useLongPress } from '../../hooks/useLongPress'
+import { setFlyOrigin } from '../../services/flyOrigin'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { STATUS_TEXT } from '../../utils/playerStatus'
@@ -332,8 +333,22 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
    * Bila dibuka lewat seretan ke atas, kartu kembali halus ke posisinya selagi pemutar penuh memudar masuk.
    */
   const openFull = () => {
-    springBack()
+    // Catat posisi sampul TEPAT saat dilepas (termasuk geseran ke atas): sampul pemutar penuh terbang dari sini.
+    setFlyOrigin(document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect())
+    settleAfterOpen()
     onOpen()
+  }
+
+  /** Kartu kembali ke tempatnya selagi pemutar penuh memudar masuk: meluncur halus tanpa membal (membal akan terlihat menembus). */
+  const settleAfterOpen = () => {
+    const el = cardRef.current
+    if (!el) return
+    el.style.transition = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms'
+    el.style.transform = ''
+    el.style.opacity = ''
+    window.setTimeout(() => {
+      if (cardRef.current) cardRef.current.style.transition = ''
+    }, 380)
   }
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {

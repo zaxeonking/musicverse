@@ -5,7 +5,7 @@
 //
 // Yang dilakukan:
 //  0. Menambah dependency androidx.media3 (ExoPlayer) ke app/build.gradle (langkah 3)
-//  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity ke android/app/src/main/java/<appId>/
+//  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity, widget (6 bentuk + layar atur) ke android/app/src/main/java/<appId>/
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
 //  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
@@ -42,6 +42,12 @@ for (const file of readdirSync(join(nativeDir, 'java'))) {
 
 // 2. Resource
 cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
+// 2a. XML penyedia widget memuat nama kelas layar atur (android:configure) yang butuh appId lengkap: isi __APP_ID__ di salinannya.
+const xmlSrc = join(nativeDir, 'res', 'xml')
+for (const file of readdirSync(xmlSrc)) {
+  const text = readFileSync(join(xmlSrc, file), 'utf8')
+  if (text.includes('__APP_ID__')) writeFileSync(join(androidMain, 'res', 'xml', file), text.replaceAll('__APP_ID__', appId))
+}
 
 // 2b. Splash native & tema: splash bawaan (ikon launcher besar di tengah / gambar splash Capacitor) diganti layar polos
 // sewarna aplikasi, layar penuh sampai ke area poni. Logo beranimasi ada di splash web (index.html). Diubah lewat patch pada
@@ -171,21 +177,50 @@ if (!manifest.includes('.UpdateFileProvider')) {
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${provider}$1</application>`)
 }
 
-// Widget layar utama (4x1): receiver yang menerima pembaruan dari PlaybackService dan ketukan tombol.
-if (!manifest.includes('.MusicVerseWidget')) {
+// Widget layar utama: 6 bentuk (Standar 4x1, Kotak 2x2, Tinggi 2x3, Besar 4x2, Strip 4x1 tipis, Mini 1x1). Tiap bentuk satu receiver
+// (semuanya menerima pembaruan dari PlaybackService dan ketukan tombol), ditambah layar atur per widget.
+// Dicek satu per satu supaya manifest dari versi lama (hanya widget Standar) ikut mendapat yang baru.
+const widgetReceivers = [
+  ['MusicVerseWidget', 'MusicVerse · Standar 4×1', 'widget_player_info'],
+  ['MusicVerseWidgetSquare', 'MusicVerse · Kotak 2×2', 'widget_square_info'],
+  ['MusicVerseWidgetTall', 'MusicVerse · Tinggi 2×3', 'widget_tall_info'],
+  ['MusicVerseWidgetLarge', 'MusicVerse · Besar 4×2', 'widget_large_info'],
+  ['MusicVerseWidgetStrip', 'MusicVerse · Strip 4×1', 'widget_strip_info'],
+  ['MusicVerseWidgetTiny', 'MusicVerse · Mini 1×1', 'widget_tiny_info'],
+]
+for (const [cls, label, info] of widgetReceivers) {
+  if (manifest.includes(`android:name=".${cls}"`)) continue
   const receiver =
     '        <receiver\n' +
-    '            android:name=".MusicVerseWidget"\n' +
+    `            android:name=".${cls}"\n` +
     '            android:exported="false"\n' +
-    '            android:label="MusicVerse">\n' +
+    `            android:label="${label}">\n` +
     '            <intent-filter>\n' +
     '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n' +
     '            </intent-filter>\n' +
     '            <meta-data\n' +
     '                android:name="android.appwidget.provider"\n' +
-    '                android:resource="@xml/widget_player_info" />\n' +
+    `                android:resource="@xml/${info}" />\n` +
     '        </receiver>\n'
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${receiver}$1</application>`)
+}
+
+// Layar atur widget. exported=true wajib: peluncur layar utama yang membukanya (APPWIDGET_CONFIGURE). Task terpisah supaya tidak
+// bercampur dengan aplikasi utama.
+if (!manifest.includes('.MusicVerseWidgetConfigActivity')) {
+  const activity =
+    '        <activity\n' +
+    '            android:name=".MusicVerseWidgetConfigActivity"\n' +
+    '            android:exported="true"\n' +
+    '            android:excludeFromRecents="true"\n' +
+    '            android:label="Atur widget MusicVerse"\n' +
+    '            android:taskAffinity=""\n' +
+    '            android:theme="@android:style/Theme.Material.NoActionBar">\n' +
+    '            <intent-filter>\n' +
+    '                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />\n' +
+    '            </intent-filter>\n' +
+    '        </activity>\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${activity}$1</application>`)
 }
 
 // Android Auto: pintu telusur media (exported wajib true agar Android Auto / Asisten Google bisa menyambung).

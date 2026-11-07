@@ -7,11 +7,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application>
 
-    <!-- Widget layar utama -->
+    <!-- Widget layar utama: Standar 4×1 -->
     <receiver
         android:name=".MusicVerseWidget"
         android:exported="false"
-        android:label="MusicVerse">
+        android:label="MusicVerse · Standar 4×1">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>
@@ -19,6 +19,84 @@
           android:name="android.appwidget.provider"
           android:resource="@xml/widget_player_info" />
     </receiver>
+
+    <!-- Widget layar utama: Kotak 2×2 -->
+    <receiver
+        android:name=".MusicVerseWidgetSquare"
+        android:exported="false"
+        android:label="MusicVerse · Kotak 2×2">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_square_info" />
+    </receiver>
+
+    <!-- Widget layar utama: Tinggi 2×3 -->
+    <receiver
+        android:name=".MusicVerseWidgetTall"
+        android:exported="false"
+        android:label="MusicVerse · Tinggi 2×3">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_tall_info" />
+    </receiver>
+
+    <!-- Widget layar utama: Besar 4×2 -->
+    <receiver
+        android:name=".MusicVerseWidgetLarge"
+        android:exported="false"
+        android:label="MusicVerse · Besar 4×2">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_large_info" />
+    </receiver>
+
+    <!-- Widget layar utama: Strip 4×1 -->
+    <receiver
+        android:name=".MusicVerseWidgetStrip"
+        android:exported="false"
+        android:label="MusicVerse · Strip 4×1">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_strip_info" />
+    </receiver>
+
+    <!-- Widget layar utama: Mini 1×1 -->
+    <receiver
+        android:name=".MusicVerseWidgetTiny"
+        android:exported="false"
+        android:label="MusicVerse · Mini 1×1">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_tiny_info" />
+    </receiver>
+
+    <!-- Layar atur widget (exported wajib true: dibuka oleh peluncur layar utama) -->
+    <activity
+        android:name=".MusicVerseWidgetConfigActivity"
+        android:exported="true"
+        android:excludeFromRecents="true"
+        android:label="Atur widget MusicVerse"
+        android:taskAffinity=""
+        android:theme="@android:style/Theme.Material.NoActionBar">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+      </intent-filter>
+    </activity>
 
     <!-- Android Auto: pintu telusur media (exported wajib true agar Auto/Asisten bisa menyambung) -->
     <service
