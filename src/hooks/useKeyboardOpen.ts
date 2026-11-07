@@ -22,14 +22,51 @@ function readInput(): KeyboardInput {
 }
 
 let state: KeyboardState = INITIAL_KEYBOARD_STATE
+/**
+ * Dugaan dini: kolom isian baru difokus di layar sentuh, jadi keyboard hampir pasti segera naik. WebView mengecil lebih
+ * dulu daripada pengukuran (rAF + resize) mengabarkan "terbuka", sehingga tanpa ini nav bawah ikut terangkat bersama
+ * tepi bawah WebView lalu baru turun. Dengan dugaan ini nav langsung disembunyikan saat fokus, sebelum WebView berubah
+ * ukuran. Dugaan dibatalkan bila fokus lepas, atau bila dalam PENDING_MS tinggi layar ternyata tidak berubah
+ * (mis. keyboard fisik).
+ */
+const PENDING_MS = 900
+let pending = false
+let pendingTimer = 0
 const listeners = new Set<() => void>()
 let detach: (() => void) | null = null
 
+const visible = (): boolean => state.open || pending
+const notify = () => listeners.forEach((listener) => listener())
+
+function setPending(value: boolean): void {
+  window.clearTimeout(pendingTimer)
+  pendingTimer = 0
+  if (value) {
+    pendingTimer = window.setTimeout(() => {
+      pendingTimer = 0
+      if (!pending) return
+      const before = visible()
+      pending = false
+      if (before !== visible()) notify()
+    }, PENDING_MS)
+  }
+  if (pending === value) return
+  const before = visible()
+  pending = value
+  if (before !== visible()) notify()
+}
+
 function evaluate(): void {
+  const before = visible()
   const next = nextKeyboardState(state, readInput())
-  const changed = next.open !== state.open
   state = next
-  if (changed) listeners.forEach((listener) => listener())
+  // Terukur terbuka: dugaan dini sudah terbukti, tidak perlu lagi.
+  if (next.open && pending) {
+    pending = false
+    window.clearTimeout(pendingTimer)
+    pendingTimer = 0
+  }
+  if (before !== visible()) notify()
 }
 
 function attach(): () => void {
@@ -43,6 +80,18 @@ function attach(): () => void {
     })
   }
   // Fokus berpindah lebih dulu daripada WebView mengecil (animasi keyboard): ukur lagi sesudahnya.
+  const onFocusIn = () => {
+    const coarse = readInput().coarsePointer
+    if (coarse && isEditable(document.activeElement) && !state.open) setPending(true)
+    onFocusChange()
+  }
+  const onFocusOut = () => {
+    // Fokus berpindah antar kolom: activeElement baru terisi sesudah focusout, jadi cek dulu di giliran berikutnya.
+    window.setTimeout(() => {
+      if (!isEditable(document.activeElement)) setPending(false)
+    }, 0)
+    onFocusChange()
+  }
   const onFocusChange = () => {
     schedule()
     for (const delay of [120, 350]) {
@@ -57,15 +106,17 @@ function attach(): () => void {
   window.addEventListener('resize', schedule)
   window.addEventListener('orientationchange', schedule)
   window.visualViewport?.addEventListener('resize', schedule)
-  document.addEventListener('focusin', onFocusChange)
-  document.addEventListener('focusout', onFocusChange)
+  document.addEventListener('focusin', onFocusIn)
+  document.addEventListener('focusout', onFocusOut)
   return () => {
     window.removeEventListener('resize', schedule)
     window.removeEventListener('orientationchange', schedule)
     window.visualViewport?.removeEventListener('resize', schedule)
-    document.removeEventListener('focusin', onFocusChange)
-    document.removeEventListener('focusout', onFocusChange)
+    document.removeEventListener('focusin', onFocusIn)
+    document.removeEventListener('focusout', onFocusOut)
     window.cancelAnimationFrame(raf)
+    window.clearTimeout(pendingTimer)
+    pending = false
     timers.forEach((id) => window.clearTimeout(id))
   }
 }
@@ -84,7 +135,7 @@ export const keyboardStore = {
       }
     }
   },
-  getSnapshot: (): boolean => state.open,
+  getSnapshot: (): boolean => visible(),
   getServerSnapshot: (): boolean => false,
 }
 

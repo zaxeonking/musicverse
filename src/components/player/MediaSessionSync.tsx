@@ -4,6 +4,7 @@ import { composeNotificationCover } from '../../utils/notificationCover'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isNativeApp } from '../../native/platform'
 import NativeMediaSync from './NativeMediaSync'
+import WidgetLyricsSync from './WidgetLyricsSync'
 
 /** Ikon app (PNG dari favicon): sampul sementara selagi sampul lagu + badge logo dibuat, dan cadangan jika gagal. */
 const ARTWORK_SIZES = [192, 512] as const
@@ -198,5 +199,12 @@ function WebMediaSessionSync() {
  * Dipilih sekali per proses, jadi jumlah hook di tiap komponen tetap.
  */
 export default function MediaSessionSync() {
-  return isNativeApp() ? <NativeMediaSync /> : <WebMediaSessionSync />
+  return isNativeApp() ? (
+    <>
+      <NativeMediaSync />
+      <WidgetLyricsSync />
+    </>
+  ) : (
+    <WebMediaSessionSync />
+  )
 }

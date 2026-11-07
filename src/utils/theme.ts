@@ -49,6 +49,8 @@ export interface ThemeState {
   radius: RadiusStyle
   /** Aksen aplikasi mengikuti warna sampul lagu yang sedang diputar. */
   dynamicAccent: boolean
+  /** Cahaya lembut warna aksen di bagian atas latar aplikasi. */
+  glow: boolean
 }
 
 const DEFAULT_STATE: ThemeState = {
@@ -59,6 +61,7 @@ const DEFAULT_STATE: ThemeState = {
   customBgLight: '#F5F7F5',
   radius: 'normal',
   dynamicAccent: false,
+  glow: false,
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -77,6 +80,7 @@ function sanitize(raw: unknown): ThemeState | null {
     customBgLight: hexOr(v.customBgLight, DEFAULT_STATE.customBgLight),
     radius: v.radius === 'tajam' || v.radius === 'bulat' ? v.radius : 'normal',
     dynamicAccent: v.dynamicAccent === true,
+    glow: v.glow === true,
   }
 }
 
@@ -343,7 +347,7 @@ export function initTheme(): void {
 const CODE_PREFIX = 'MVT1.'
 
 export function encodeTheme(s: ThemeState): string {
-  const json = JSON.stringify({ m: s.mode, p: s.preset, a: s.customAccent, d: s.customBgDark, l: s.customBgLight, r: s.radius, y: s.dynamicAccent })
+  const json = JSON.stringify({ m: s.mode, p: s.preset, a: s.customAccent, d: s.customBgDark, l: s.customBgLight, r: s.radius, y: s.dynamicAccent, g: s.glow })
   return CODE_PREFIX + btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
@@ -354,8 +358,58 @@ export function decodeTheme(code: string): ThemeState | null {
   try {
     const b64 = text.slice(CODE_PREFIX.length).replace(/-/g, '+').replace(/_/g, '/')
     const v = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4))) as Record<string, unknown>
-    return sanitize({ mode: v.m, preset: v.p, customAccent: v.a, customBgDark: v.d, customBgLight: v.l, radius: v.r, dynamicAccent: v.y })
+    return sanitize({ mode: v.m, preset: v.p, customAccent: v.a, customBgDark: v.d, customBgLight: v.l, radius: v.r, dynamicAccent: v.y, glow: v.g })
   } catch {
     return null
   }
+}
+
+// ---------- Tema acak ----------
+const rand = (min: number, max: number) => min + Math.random() * (max - min)
+
+/** Tema kustom acak yang serasi: satu rona untuk aksen dan latar (kejenuhan & kecerahan dijaga supaya teks tetap terbaca). */
+export function randomThemePatch(): Partial<ThemeState> {
+  const hue = Math.random()
+  const hex = (s: number, l: number) => rgbToHex(hslToRgb([hue, s, l])).toUpperCase()
+  return {
+    preset: CUSTOM_ID,
+    customAccent: hex(rand(0.6, 0.9), rand(0.5, 0.62)),
+    customBgDark: clampBg(hex(rand(0.2, 0.4), rand(0.06, 0.1)), 'dark'),
+    customBgLight: clampBg(hex(rand(0.25, 0.5), rand(0.94, 0.97)), 'light'),
+  }
+}
+
+// ---------- Tema tersimpan ----------
+const SAVED_KEY = 'musicverse:theme:saved:v1'
+export const MAX_SAVED_THEMES = 6
+
+/** Tema yang disimpan pengguna, terbaru di depan. Disimpan sebagai kode tema (MVT1.…), jadi ringkas dan tervalidasi saat dibaca. */
+export function getSavedThemes(): ThemeState[] {
+  const out = readJson(SAVED_KEY)
+  if (out.status !== 'ok' || !Array.isArray(out.value)) return []
+  const themes: ThemeState[] = []
+  for (const code of out.value) {
+    const parsed = typeof code === 'string' ? decodeTheme(code) : null
+    if (parsed) themes.push(parsed)
+  }
+  return themes.slice(0, MAX_SAVED_THEMES)
+}
+
+function writeSaved(themes: readonly ThemeState[]): void {
+  writeJson(SAVED_KEY, themes.map(encodeTheme))
+}
+
+/** Simpan tema aktif; tema yang persis sama tidak digandakan, melainkan dipindah ke depan. */
+export function saveCurrentTheme(): ThemeState[] {
+  const current = getTheme()
+  const code = encodeTheme(current)
+  const next = [current, ...getSavedThemes().filter((t) => encodeTheme(t) !== code)].slice(0, MAX_SAVED_THEMES)
+  writeSaved(next)
+  return next
+}
+
+export function deleteSavedTheme(index: number): ThemeState[] {
+  const next = getSavedThemes().filter((_, i) => i !== index)
+  writeSaved(next)
+  return next
 }

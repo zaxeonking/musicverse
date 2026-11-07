@@ -36,7 +36,9 @@ const OPEN_PROJECTION = 0.2
 const OPEN_HAPTIC_AT = 0.2
 const DRAG_START_PX = 8
 /** Lama kartu tenggelam ke belakang nav lalu hilang (ms). */
-const LEAVE_MS = 440
+const LEAVE_MS = 520
+/** Diameter disc (px); sama dengan SIZE di MiniBubble. */
+const BUBBLE_PX = 56
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
@@ -261,31 +263,42 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const style = getComputedStyle(card)
     const cardFrom = style.opacity
     const fromTransform = style.transform
-    // Seberapa jauh kartu turun: bagian atasnya sampai tengah nav, jadi seluruh kartu lewat di belakang nav.
-    const nav = document.querySelector<HTMLElement>('nav[aria-label="Navigasi utama"]')
-    const navRect = nav?.getBoundingClientRect()
-    const naturalTop = dock.getBoundingClientRect().bottom - card.offsetHeight
-    const dy = navRect && navRect.height > 0 ? navRect.top + navRect.height / 2 - naturalTop : card.offsetHeight + 24
+    // Kartu "mengerut" langsung jadi piringan: bentuk kartu dipotong (clip-path) sampai tinggal lingkaran di pojok tempat disc
+    // berada, lalu memudar di atas disc yang sudah muncul di bawahnya. Satu gerakan utuh, tanpa turun ke belakang nav.
+    const w = region.offsetWidth
+    const h = region.offsetHeight
+    const discTop = Math.max(0, h - BUBBLE_PX)
+    const discLeft = side === 'right' ? Math.max(0, w - BUBBLE_PX) : 0
+    const discRight = side === 'right' ? 0 : Math.max(0, w - BUBBLE_PX)
+    // -48px = tidak memotong apa pun (bayangan kartu ikut terlihat) sampai gerakan benar-benar dimulai.
+    const open = 'inset(-48px -48px -48px -48px round 24px)'
+    const disc = `inset(${discTop}px ${discRight}px 0px ${discLeft}px round ${BUBBLE_PX / 2}px)`
     region.style.pointerEvents = 'none'
-    behindNav(true)
     // Lepas transisi sisa seretan; gerakan dilanjutkan dari posisi jari (fromTransform), bukan melompat ke tempat awal.
     card.style.transition = 'none'
     leaveAnims.current = [
       card.animate(
         [
-          { transform: fromTransform, opacity: cardFrom, filter: 'blur(0px)', offset: 0 },
-          { opacity: cardFrom, filter: 'blur(0px)', offset: 0.3 },
-          { transform: `translate3d(0, ${dy}px, 0) scale(0.92)`, opacity: 0, filter: 'blur(10px)', offset: 1 },
+          { transform: fromTransform, opacity: cardFrom, offset: 0 },
+          { transform: 'none', opacity: '1', offset: 1 },
         ],
-        { duration: LEAVE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' },
+        { duration: LEAVE_MS * 0.4, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+      ),
+      region.animate(
+        [
+          { clipPath: open, opacity: 1, offset: 0 },
+          { clipPath: disc, opacity: 1, offset: 0.76 },
+          { clipPath: disc, opacity: 0, offset: 1 },
+        ],
+        { duration: LEAVE_MS, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' },
       ),
     ]
-    if (glow) leaveAnims.current.push(glow.animate([{ opacity: glowFrom }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' }))
+    if (glow) leaveAnims.current.push(glow.animate([{ opacity: glowFrom }, { opacity: 0 }], { duration: 240, easing: 'ease-out', fill: 'forwards' }))
     setLeaving(true)
     const timer = persist ? collapseTimer : kbTimer
     window.clearTimeout(timer.current)
     window.clearTimeout(leaveTimer.current)
-    timer.current = window.setTimeout(commit, LEAVE_MS * 0.72)
+    timer.current = window.setTimeout(commit, LEAVE_MS * 0.5)
     leaveTimer.current = window.setTimeout(() => {
       stopLeave()
       setGrowFrom(null)
@@ -487,12 +500,14 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   // Saat bukan playing/paused, tampilkan status nyata menggantikan nama artis.
   const subtitle = status === 'resolving' || status === 'loading' || status === 'buffering' ? statusText : now.artists
 
-  const cardAnimation =
+  // Disc -> kartu: kartu terbuka dari lingkaran di pojok disc (clip-path) ke bentuk penuh; lihat `card-from-*` di tailwind.config.js.
+  const cardAnimation = growFrom ? '' : 'animate-player-up'
+  const regionGrow =
     growFrom === 'right'
-      ? 'animate-grow-right motion-reduce:animate-none'
+      ? 'animate-card-from-right motion-reduce:animate-none'
       : growFrom === 'left'
-        ? 'animate-grow-left motion-reduce:animate-none'
-        : 'animate-player-up'
+        ? 'animate-card-from-left motion-reduce:animate-none'
+        : ''
 
   return (
     <div ref={wrapRef} className="pointer-events-none relative z-40 h-0 shrink-0">
@@ -535,7 +550,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-veil/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
+      className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-veil/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]`}
     >
       {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
       <button

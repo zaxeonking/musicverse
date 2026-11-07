@@ -443,6 +443,12 @@ export interface MusicVerseNativePlugin {
   stopPlayback(): Promise<void>
   /** Memberi tahu widget layar utama apakah lagu aktif sudah disukai (hati terisi / kosong). */
   setWidgetLiked(options: { title: string; liked: boolean }): Promise<void>
+  /**
+   * Mengirim lirik berwaktu lagu aktif ke widget layar utama (bentuk Tinggi dan Besar). `t` = ms pada AUDIO (sudah termasuk
+   * skala durasi, penyelarasan, dan mendahului sedikit); widget memilih baris dari posisi lagu sendiri. `lines` kosong = tanpa lirik.
+   * Perlu APK yang memuat setWidgetLyrics; di APK lama pemanggilan gagal dan diabaikan.
+   */
+  setWidgetLyrics(options: { title: string; lines: Array<{ t: number; s: string }> }): Promise<void>
   /** Android 13+: minta izin notifikasi. Di versi lain langsung 'granted'. */
   requestNotificationPermission(): Promise<{ granted: boolean }>
   /** True jika aplikasi dikecualikan dari penghemat baterai. */

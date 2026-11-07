@@ -60,6 +60,18 @@
             android:textColor="#B3FFFFFF"
             android:textSize="13sp" />
 
+        <TextView
+            android:id="@+id/widget_lyric"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <ProgressBar
             android:id="@+id/widget_loading"
             style="?android:attr/progressBarStyleHorizontal"

@@ -157,6 +157,7 @@ export default function BrowsePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={tab === 'artist' ? 'Cari artis' : 'Cari album'}
+              enterKeyHint="search"
               className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-muted"
             />
           </label>

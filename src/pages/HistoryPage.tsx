@@ -65,7 +65,7 @@ export default function HistoryPage() {
   }, [log])
 
   return (
-    <div className="space-y-6 px-4 pb-8 pt-2 sm:px-0">
+    <div className="space-y-6 pb-8 pt-2">
       <Link to="/library" className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Playlist
@@ -91,7 +91,7 @@ export default function HistoryPage() {
         />
       ) : (
         <>
-          <section aria-label="Statistik" className="grid gap-3 sm:grid-cols-2">
+          <section aria-label="Statistik" className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
             <div className="rounded-lg bg-card p-4">
               <h2 className="mb-2 text-sm font-semibold text-ink">Lagu terbanyak</h2>
               <ol className="mv-list space-y-1 text-sm">

@@ -170,6 +170,12 @@ public class PlaybackService extends Service {
     new Handler(Looper.getMainLooper()).post(() -> MusicVerseWidget.pushLiked(app, title, liked));
   }
 
+  /** JS mengirim lirik berwaktu lagu aktif (waktu dalam ms audio): widget memilih barisnya sendiri dari posisi lagu. */
+  static void setWidgetLyrics(Context context, String title, long[] times, String[] texts) {
+    final Context app = context.getApplicationContext();
+    new Handler(Looper.getMainLooper()).post(() -> MusicVerseWidget.pushLyrics(app, title, times, texts));
+  }
+
   /** Widget baru ditambahkan saat memutar: dorong ulang keadaan sekarang. */
   static void refreshWidget() {
     PlaybackService running = instance;

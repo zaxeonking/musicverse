@@ -247,6 +247,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
       toggle(switches, "Tampilkan bilah progres", () -> cfg.showProgress, v -> cfg.showProgress = v);
       toggle(switches, "Tampilkan waktu", () -> cfg.showTime, v -> cfg.showTime = v);
     }
+    if (form.hasLyric()) toggle(switches, "Tampilkan lirik (baris yang sedang dinyanyikan)", () -> cfg.showLyrics, v -> cfg.showLyrics = v);
     if (form.like) toggle(switches, "Tampilkan tombol suka", () -> cfg.showLike, v -> cfg.showLike = v);
     if (form.controls) toggle(switches, "Tampilkan sebelumnya dan berikutnya", () -> cfg.showControls, v -> cfg.showControls = v);
     if (form.text) toggle(switches, "Tampilkan nama artis", () -> cfg.showArtist, v -> cfg.showArtist = v);

@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ClipboardPaste, Copy, Download, Home, Library, Moon, Play, RotateCcw, Search, Smartphone, Sparkles, Sun, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, Check, ClipboardPaste, Copy, Dices, Download, Home, Library, Moon, Play, RotateCcw, Search, Smartphone, Sparkles, Sun, Sunrise, X, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import ColorField from '../components/settings/ColorField'
@@ -11,13 +11,19 @@ import {
   CUSTOM_ID,
   clampBg,
   decodeTheme,
+  deleteSavedTheme,
   deriveTokens,
   encodeTheme,
+  getSavedThemes,
+  MAX_SAVED_THEMES,
+  randomThemePatch,
   resolveColors,
   resolveMode,
+  saveCurrentTheme,
   THEME_PRESETS,
   type RadiusStyle,
   type ThemeMode,
+  type ThemeState,
   type ThemeTokens,
 } from '../utils/theme'
 
@@ -41,6 +47,7 @@ export default function ThemeSettingsPage() {
   const [theme, setTheme] = useTheme()
   const [codeInput, setCodeInput] = useState('')
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [saved, setSaved] = useState<ThemeState[]>(() => getSavedThemes())
   if (!isNativeApp()) return <Navigate to="/" replace />
 
   const mode = resolveMode(theme)
@@ -85,9 +92,12 @@ export default function ThemeSettingsPage() {
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Pengaturan
       </Link>
-      <h1 className="mb-4 text-3xl font-extrabold text-ink">Tema</h1>
+      <h1 className="mb-3 text-3xl font-extrabold text-ink">Tema</h1>
 
-      <LivePreview />
+      {/* Menempel di atas area scroll: perubahan terlihat langsung tanpa naik-turun halaman. */}
+      <div className="sticky top-0 z-20 -mx-4 bg-bg/90 px-4 pb-2 pt-1 backdrop-blur">
+        <LivePreview glow={theme.glow} />
+      </div>
 
       <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Mode</h2>
       <Segmented value={theme.mode} options={MODES} onChange={(id) => setTheme({ mode: id })} label="Mode tampilan" />
@@ -112,6 +122,11 @@ export default function ThemeSettingsPage() {
           />
         </li>
       </ul>
+
+      <button type="button" onClick={() => setTheme(randomThemePatch())} className="btn-secondary mt-2 w-full">
+        <Dices className="h-4 w-4" aria-hidden="true" />
+        Acak tema
+      </button>
 
       {custom ? (
         <div className="mt-4 space-y-2">
@@ -164,7 +179,67 @@ export default function ThemeSettingsPage() {
           label="Aksen ikut sampul lagu"
           hint="Warna aksen seluruh aplikasi berubah mengikuti sampul lagu yang diputar."
         />
+        <SettingSwitch
+          checked={theme.glow}
+          onChange={() => setTheme({ glow: !theme.glow })}
+          icon={Sunrise}
+          label="Cahaya latar"
+          hint="Semburat lembut warna aksen di bagian atas layar."
+        />
       </div>
+
+      <div className="mb-2 mt-6 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-ink-muted">Tema tersimpan</h2>
+        <button
+          type="button"
+          disabled={saved.length >= MAX_SAVED_THEMES && saved.some((t) => encodeTheme(t) === encodeTheme(theme)) === false}
+          onClick={() => {
+            setSaved(saveCurrentTheme())
+            say('ok', 'Tema saat ini disimpan.')
+          }}
+          className="focus-ring flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-accent disabled:opacity-40"
+        >
+          <BookmarkPlus className="h-4 w-4" aria-hidden="true" />
+          Simpan tema ini
+        </button>
+      </div>
+      {saved.length === 0 ? (
+        <p className="px-1 text-xs text-ink-faint">Belum ada. Atur tema sesukamu, lalu simpan supaya bisa dipakai lagi kapan saja (maks. {MAX_SAVED_THEMES}).</p>
+      ) : (
+        <ul className="grid grid-cols-3 gap-2" aria-label="Tema tersimpan">
+          {saved.map((item, index) => {
+            const m = resolveMode(item)
+            const c = resolveColors(item, m)
+            const t = deriveTokens(c.accent, c.bg, m)
+            const active = encodeTheme(item) === encodeTheme(theme)
+            return (
+              <li key={`${encodeTheme(item)}-${index}`} className="relative">
+                <button
+                  type="button"
+                  aria-label={`Pakai tema tersimpan ${index + 1}`}
+                  aria-pressed={active}
+                  onClick={() => setTheme(item)}
+                  className="focus-ring block h-14 w-full overflow-hidden rounded-xl border-2"
+                  style={{ backgroundColor: `rgb(${t.bg})`, borderColor: active ? `rgb(${t.accent})` : `rgb(${t.veil} / 0.14)` }}
+                >
+                  <span className="flex h-full items-end gap-1 p-1.5">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: `rgb(${t.accent})` }} />
+                    <span className="h-2 flex-1 rounded-full" style={{ backgroundColor: `rgb(${t.raised})` }} />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Hapus tema tersimpan ${index + 1}`}
+                  onClick={() => setSaved(deleteSavedTheme(index))}
+                  className="focus-ring absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-raised text-ink-muted"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Bagikan tema</h2>
       <div className="space-y-2 rounded-lg bg-card px-4 py-3">
@@ -202,7 +277,7 @@ export default function ThemeSettingsPage() {
 
       <button
         type="button"
-        onClick={() => setTheme({ mode: 'dark', preset: 'hijau', radius: 'normal', dynamicAccent: false })}
+        onClick={() => setTheme({ mode: 'dark', preset: 'hijau', radius: 'normal', dynamicAccent: false, glow: false })}
         className="btn-secondary mt-6 w-full"
       >
         <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -212,52 +287,46 @@ export default function ThemeSettingsPage() {
   )
 }
 
-/** Pratinjau langsung: layar mini yang memakai kelas aplikasi asli, jadi selalu persis seperti hasilnya. */
-function LivePreview() {
+/** Pratinjau langsung (ringkas): layar mini yang memakai kelas aplikasi asli, jadi selalu persis seperti hasilnya. */
+function LivePreview({ glow }: { glow: boolean }) {
+  const rows = [
+    { t: 'Lagu yang sedang diputar', a: 'Artis Favorit', now: true },
+    { t: 'Judul lagu kedua', a: 'Nama Artis', now: false },
+  ]
   return (
-    <div className="overflow-hidden rounded-2xl border border-veil/10 bg-bg" aria-label="Pratinjau tema" role="img">
-      <div className="px-3 pt-3">
-        <p className="font-display text-base font-extrabold text-ink">Beranda</p>
-        <div className="mt-2 flex gap-1.5">
-          <span className="rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-accent-on">Semua</span>
-          <span className="rounded-full bg-raised px-3 py-1 text-[11px] text-ink">Disukai</span>
-          <span className="rounded-full bg-raised px-3 py-1 text-[11px] text-ink">Unduhan</span>
-        </div>
+    <div className={`overflow-hidden rounded-xl border border-veil/10 bg-bg shadow-lg shadow-black/20 ${glow ? 'mv-glow' : ''}`} aria-label="Pratinjau tema" role="img">
+      <div className="flex items-center gap-2 px-2.5 pt-2">
+        <p className="font-display text-sm font-extrabold text-ink">Beranda</p>
+        <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-on">Semua</span>
+        <span className="rounded-full bg-raised px-2 py-0.5 text-[10px] text-ink">Disukai</span>
       </div>
-      <ul className="mt-2 space-y-1 px-2">
-        {[
-          { t: 'Lagu yang sedang diputar', a: 'Artis Favorit', now: true },
-          { t: 'Judul lagu kedua', a: 'Nama Artis', now: false },
-          { t: 'Judul lagu ketiga', a: 'Nama Artis', now: false },
-        ].map((row, i) => (
-          <li key={i} className={`flex items-center gap-2.5 rounded-lg bg-card px-2 py-1.5 ${row.now ? 'shadow-now' : ''}`}>
-            <span className="h-9 w-9 shrink-0 rounded-md bg-raised" style={row.now ? { backgroundImage: 'linear-gradient(135deg, rgb(var(--mv-accent)) 0%, rgb(var(--mv-accent-deep)) 100%)' } : undefined} />
+      <ul className="mt-1.5 space-y-1 px-2">
+        {rows.map((row) => (
+          <li key={row.t} className={`flex items-center gap-2 rounded-lg bg-card px-1.5 py-1 ${row.now ? 'shadow-now' : ''}`}>
+            <span className="h-6 w-6 shrink-0 rounded-md bg-raised" style={row.now ? { backgroundImage: 'linear-gradient(135deg, rgb(var(--mv-accent)) 0%, rgb(var(--mv-accent-deep)) 100%)' } : undefined} />
             <span className="min-w-0 flex-1">
-              <span className={`block truncate text-xs font-semibold ${row.now ? 'text-accent' : 'text-ink'}`}>{row.t}</span>
-              <span className="block truncate text-[11px] text-ink-muted">{row.a}</span>
+              <span className={`block truncate text-[11px] font-semibold leading-tight ${row.now ? 'text-accent' : 'text-ink'}`}>{row.t}</span>
+              <span className="block truncate text-[10px] leading-tight text-ink-muted">{row.a}</span>
             </span>
-            <span className="text-[11px] text-ink-faint">3:24</span>
+            <span className="text-[10px] text-ink-faint">3:24</span>
           </li>
         ))}
       </ul>
-      <div className="mx-2 mt-2 rounded-xl bg-raised p-2">
+      <div className="mx-2 mt-1.5 rounded-lg bg-raised px-2 py-1.5">
         <div className="flex items-center gap-2">
-          <span className="h-8 w-8 shrink-0 rounded-md bg-accent/30" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-semibold text-ink">Lagu yang sedang diputar</span>
-            <span className="block truncate text-[11px] text-ink-muted">Artis Favorit</span>
-          </span>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-bg">
-            <Play className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+          <span className="h-6 w-6 shrink-0 rounded-md bg-accent/30" />
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-ink">Lagu yang sedang diputar</span>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink text-bg">
+            <Play className="h-3 w-3" fill="currentColor" aria-hidden="true" />
           </span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-veil/15">
+        <div className="mt-1.5 h-0.5 overflow-hidden rounded-full bg-veil/15">
           <div className="h-full w-2/5 rounded-full bg-accent" />
         </div>
       </div>
-      <div className="m-2 flex justify-around rounded-full border border-veil/10 bg-card py-2">
+      <div className="m-2 mt-1.5 flex justify-around rounded-full border border-veil/10 bg-card py-1.5">
         {[Home, Search, Library, Download].map((Icon, i) => (
-          <Icon key={i} className={`h-4 w-4 ${i === 0 ? 'text-accent' : 'text-ink-muted'}`} aria-hidden="true" />
+          <Icon key={i} className={`h-3.5 w-3.5 ${i === 0 ? 'text-accent' : 'text-ink-muted'}`} aria-hidden="true" />
         ))}
       </div>
     </div>

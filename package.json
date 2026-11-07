@@ -1,8 +1,8 @@
 {
   "name": "musicverse",
   "private": true,
-  "version": "0.5.47",
-  "appVersion": "0.5.47.8",
+  "version": "0.5.50",
+  "appVersion": "0.5.50",
   "type": "module",
   "scripts": {
     "dev": "vite",

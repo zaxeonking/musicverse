@@ -4,6 +4,7 @@ import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useEnterClosesKeyboard } from '../../hooks/useEnterClosesKeyboard'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
+import { useTheme } from '../../hooks/useTheme'
 import OfflineBanner from './OfflineBanner'
 import PageTransition from './PageTransition'
 import UpdateBanner from './UpdateBanner'
@@ -29,6 +30,7 @@ export default function AppShell() {
   const keyboardOpen = useKeyboardOpen()
   const compactDock = collapsed || keyboardOpen
   const mainRef = useRef<HTMLElement>(null)
+  const [theme] = useTheme()
   useEnterClosesKeyboard()
 
   // Area scroll ada di <main>, bukan window: kembalikan ke atas saat halaman baru terpasang (lihat PageTransition).
@@ -41,7 +43,7 @@ export default function AppShell() {
     // konten (di bawah) dan posisi mini player; 0 di layar lebar (tidak ada nav bawah) dan saat keyboard terbuka (nav turun).
     <div
       data-keyboard={keyboardOpen ? 'open' : 'closed'}
-      className="fixed inset-0 flex overflow-hidden bg-bg text-ink [--dock-offset:calc(4.5rem_+_env(safe-area-inset-bottom,0px))] data-[keyboard=open]:[--dock-offset:0px] lg:[--dock-offset:0px]"
+      className={`fixed inset-0 flex overflow-hidden bg-bg text-ink ${theme.glow ? 'mv-glow' : ''} [--dock-offset:calc(4.5rem_+_env(safe-area-inset-bottom,0px))] data-[keyboard=open]:[--dock-offset:0px] lg:[--dock-offset:0px]`}
     >
       <a
         href="#konten"

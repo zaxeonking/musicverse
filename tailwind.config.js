@@ -79,17 +79,22 @@ export default {
           from: { opacity: '0', transform: 'translateY(12px)' },
           to: { opacity: '1', transform: 'none' },
         },
-        'grow-right': {
-          from: { opacity: '0', transform: 'translate3d(42%, 0, 0) scale(0.18)' },
-          to: { opacity: '1', transform: 'none' },
+        // Disc -> kartu: kartu dibuka dari lingkaran 56px di pojok disc ke bentuk penuh (kebalikan gerakan mengerut).
+        // -48px di ujung = tidak memotong apa pun, jadi bayangan kartu tetap utuh setelah animasi selesai.
+        'card-from-right': {
+          '0%': { clipPath: 'inset(calc(100% - 56px) 0px 0px calc(100% - 56px) round 28px)', opacity: '0.4' },
+          '35%': { opacity: '1' },
+          '100%': { clipPath: 'inset(-48px -48px -48px -48px round 24px)', opacity: '1' },
         },
-        'grow-left': {
-          from: { opacity: '0', transform: 'translate3d(-42%, 0, 0) scale(0.18)' },
-          to: { opacity: '1', transform: 'none' },
+        'card-from-left': {
+          '0%': { clipPath: 'inset(calc(100% - 56px) calc(100% - 56px) 0px 0px round 28px)', opacity: '0.4' },
+          '35%': { opacity: '1' },
+          '100%': { clipPath: 'inset(-48px -48px -48px -48px round 24px)', opacity: '1' },
         },
         // Disc yang muncul setelah kartu tenggelam ke belakang nav: naik sedikit dari arah nav sambil membesar, lalu mengendap.
+        // Disc yang muncul di bawah kartu yang sedang mengerut: hanya memudar masuk dan mengendap dari sedikit lebih kecil.
         'bubble-morph': {
-          from: { opacity: '0', transform: 'translate3d(0, 14px, 0) scale(0.6)' },
+          from: { opacity: '0', transform: 'scale(0.86)' },
           to: { opacity: '1', transform: 'none' },
         },
         'bubble-in': {
@@ -123,9 +128,9 @@ export default {
         'page-in': 'page-in 200ms ease-out both',
         'player-up': 'player-up 220ms ease-out both',
         'glow-pulse': 'glow-pulse 1400ms ease-out backwards',
-        'grow-right': 'grow-right 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
-        'grow-left': 'grow-left 340ms cubic-bezier(0.22, 1, 0.36, 1) both',
-        'bubble-morph': 'bubble-morph 300ms cubic-bezier(0.34, 1.4, 0.64, 1) both',
+        'card-from-right': 'card-from-right 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'card-from-left': 'card-from-left 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'bubble-morph': 'bubble-morph 280ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         'bubble-rise': 'bubble-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',

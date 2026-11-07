@@ -68,6 +68,11 @@ public class MusicVerseWidget extends AppWidgetProvider {
     final int previewW;
     final int previewH;
 
+    /** Bentuk yang punya baris lirik (widget_lyric): Tinggi dan Besar. */
+    boolean hasLyric() {
+      return this == TALL || this == LARGE;
+    }
+
     Form(int layout, Class<?> receiver, String label, boolean text, boolean controls, boolean loading, boolean progress, boolean like,
         int coverPx, int titleSp, int artistSp, int previewW, int previewH) {
       this.layout = layout;
@@ -153,6 +158,52 @@ public class MusicVerseWidget extends AppWidgetProvider {
     render(context, m);
   }
 
+  // --- Lirik: waktu (ms audio) dan teks per baris untuk lagu `lyricTitle`, dikirim JS sekali per lagu. Baris aktif dipilih di sini ---
+  // dari posisi lagu, supaya tetap jalan saat WebView dibekukan (layar mati / app di latar belakang).
+  private static String lyricTitle = "";
+  private static long[] lyricTimes = new long[0];
+  private static String[] lyricTexts = new String[0];
+  /** Teks lirik yang terakhir digambar ke widget; pembanding supaya tick hanya memperbarui saat barisnya berganti. */
+  private static String shownLyric = null;
+
+  /** JS mengirim lirik lagu `title` (kosong = tidak ada lirik berwaktu). */
+  static void pushLyrics(Context context, String title, long[] times, String[] texts) {
+    lyricTitle = title == null ? "" : title;
+    lyricTimes = times == null ? new long[0] : times;
+    lyricTexts = texts == null ? new String[0] : texts;
+    Model m = last;
+    if (m != null) render(context, m);
+  }
+
+  /** Baris lirik pada posisi `m`, atau null bila lagu ini tidak punya lirik berwaktu / lirik lagu lain yang tersimpan. */
+  private static String currentLyric(Model m) {
+    if (m == null || lyricTimes.length == 0 || lyricTimes.length != lyricTexts.length || !m.title.equals(lyricTitle)) return null;
+    int lo = 0;
+    int hi = lyricTimes.length - 1;
+    int idx = -1;
+    while (lo <= hi) {
+      int mid = (lo + hi) >>> 1;
+      if (lyricTimes[mid] <= m.positionMs) {
+        idx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (idx < 0) return "\u266A"; // intro: belum ada baris
+    String text = lyricTexts[idx].trim();
+    return text.isEmpty() ? "\u266A" : text;
+  }
+
+  private static void applyLyric(RemoteViews views, String lyric, Palette pal, float scale, Form form) {
+    boolean show = lyric != null;
+    views.setViewVisibility(R.id.widget_lyric, show ? View.VISIBLE : View.GONE);
+    if (!show) return;
+    views.setTextViewText(R.id.widget_lyric, lyric);
+    views.setTextColor(R.id.widget_lyric, pal.accentTheme ? pal.textPrimary : pal.accent);
+    views.setTextViewTextSize(R.id.widget_lyric, TypedValue.COMPLEX_UNIT_SP, (form.artistSp - 1) * scale);
+  }
+
   private static long lastTickAt = 0;
 
   /**
@@ -172,18 +223,28 @@ public class MusicVerseWidget extends AppWidgetProvider {
       android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(Context.POWER_SERVICE);
       if (pm != null && !pm.isInteractive()) return;
       AppWidgetManager manager = AppWidgetManager.getInstance(app);
+      String lyric = currentLyric(m);
+      boolean lyricChanged = !java.util.Objects.equals(lyric, shownLyric);
       for (Form form : Form.values()) {
         if (!form.progress) continue;
         int[] ids = manager.getAppWidgetIds(new ComponentName(app, form.receiver));
         if (ids == null) continue;
         for (int id : ids) {
           MusicVerseWidgetConfig cfg = MusicVerseWidgetConfig.load(app, id);
-          if (!cfg.showProgress && !cfg.showTime) continue;
+          boolean wantProgress = cfg.showProgress || cfg.showTime;
+          boolean wantLyric = form.hasLyric() && cfg.showLyrics && lyricChanged;
+          if (!wantProgress && !wantLyric) continue;
           RemoteViews part = new RemoteViews(app.getPackageName(), form.layout);
-          applyProgress(part, m, cfg, palette(cfg, m.cover, 0));
+          Palette pal = palette(cfg, m.cover, 0);
+          if (wantProgress) applyProgress(part, m, cfg, pal);
+          if (wantLyric) {
+            float scale = cfg.textSize == MusicVerseWidgetConfig.SIZE_SMALL ? 0.93f : cfg.textSize == MusicVerseWidgetConfig.SIZE_LARGE ? 1.2f : 1f;
+            applyLyric(part, lyric, pal, scale, form);
+          }
           manager.partiallyUpdateAppWidget(id, part);
         }
       }
+      shownLyric = lyric;
     } catch (RuntimeException ignored) {
       // pembaruan penuh berikutnya akan menyusul
     }
@@ -192,6 +253,10 @@ public class MusicVerseWidget extends AppWidgetProvider {
   /** Service berhenti: kembali ke keadaan siap. */
   static void pushIdle(Context context) {
     last = null;
+    lyricTitle = "";
+    lyricTimes = new long[0];
+    lyricTexts = new String[0];
+    shownLyric = null;
     coverSrc = null;
     java.util.Arrays.fill(coverOut, null);
     WidgetGlass.clearCache();
@@ -379,6 +444,14 @@ public class MusicVerseWidget extends AppWidgetProvider {
           views.setColorStateList(R.id.widget_loading, "setIndeterminateTintList", ColorStateList.valueOf(accentTheme ? textPrimary : accent));
         }
       }
+    }
+
+    // --- Lirik (baris yang sedang dinyanyikan) ---
+    if (form.hasLyric()) {
+      String lyric = live && cfg.showLyrics ? currentLyric(model) : null;
+      float lyricScale = cfg.textSize == MusicVerseWidgetConfig.SIZE_SMALL ? 0.93f : cfg.textSize == MusicVerseWidgetConfig.SIZE_LARGE ? 1.2f : 1f;
+      applyLyric(views, lyric, pal, lyricScale, form);
+      shownLyric = lyric;
     }
 
     // --- Sampul ---

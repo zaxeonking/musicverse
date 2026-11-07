@@ -44,6 +44,8 @@ final class MusicVerseWidgetConfig {
   boolean showProgress = true;
   boolean showTime = true;
   boolean showLike = true;
+  /** Baris lirik yang sedang dinyanyikan (hanya bentuk Tinggi dan Besar). */
+  boolean showLyrics = true;
 
   private static final String PREFS = "mv_widget_cfg";
   private static final String DEFAULTS_KEY = "default";
@@ -82,6 +84,7 @@ final class MusicVerseWidgetConfig {
     cfg.showProgress = p.getBoolean(k + ".showProgress", cfg.showProgress);
     cfg.showTime = p.getBoolean(k + ".showTime", cfg.showTime);
     cfg.showLike = p.getBoolean(k + ".showLike", cfg.showLike);
+    cfg.showLyrics = p.getBoolean(k + ".showLyrics", cfg.showLyrics);
     return cfg;
   }
 
@@ -111,7 +114,8 @@ final class MusicVerseWidgetConfig {
         .putInt(k + ".frost", frost)
         .putBoolean(k + ".showProgress", showProgress)
         .putBoolean(k + ".showTime", showTime)
-        .putBoolean(k + ".showLike", showLike);
+        .putBoolean(k + ".showLike", showLike)
+        .putBoolean(k + ".showLyrics", showLyrics);
   }
 
   static void delete(Context c, int id) {

@@ -1177,6 +1177,29 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve();
   }
 
+  /** JS -> widget: lirik berwaktu lagu aktif. `lines` = [{ t: ms audio, s: teks }]; kosong = tidak ada lirik. */
+  @PluginMethod
+  public void setWidgetLyrics(PluginCall call) {
+    String title = call.getString("title", "");
+    JSArray arr = call.getArray("lines");
+    int n = arr == null ? 0 : Math.min(arr.length(), 800);
+    long[] times = new long[n];
+    String[] texts = new String[n];
+    int k = 0;
+    for (int i = 0; i < n; i++) {
+      try {
+        org.json.JSONObject o = arr.getJSONObject(i);
+        times[k] = o.optLong("t", 0);
+        texts[k] = o.optString("s", "");
+        k++;
+      } catch (org.json.JSONException ignored) {
+        // lewati baris rusak
+      }
+    }
+    PlaybackService.setWidgetLyrics(getContext(), title, java.util.Arrays.copyOf(times, k), java.util.Arrays.copyOf(texts, k));
+    call.resolve();
+  }
+
   @PluginMethod
   public void stopPlayback(PluginCall call) {
     PlaybackService.stop(getContext());

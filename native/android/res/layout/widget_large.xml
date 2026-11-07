@@ -27,8 +27,9 @@
             android:layout_height="match_parent"
             android:contentDescription="Sampul"
             android:scaleType="fitCenter"
-            android:adjustViewBounds="true" 
-        android:src="@drawable/notif_default_cover" />
+            android:adjustViewBounds="true"
+            android:maxWidth="120dp"
+            android:src="@drawable/notif_default_cover" />
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
@@ -67,6 +68,18 @@
             android:textColor="#B3FFFFFF"
             android:textSize="14sp" />
 
+        <TextView
+            android:id="@+id/widget_lyric"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <ProgressBar
             android:id="@+id/widget_loading"
             style="?android:attr/progressBarStyleHorizontal"
@@ -87,7 +100,8 @@
 
         <ImageButton
             android:id="@+id/widget_like"
-            android:layout_width="36dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="36dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Suka"
@@ -97,7 +111,8 @@
 
         <ImageButton
             android:id="@+id/widget_prev"
-            android:layout_width="36dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="36dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Sebelumnya"
@@ -132,7 +147,8 @@
 
         <ImageButton
             android:id="@+id/widget_next"
-            android:layout_width="36dp"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="36dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Berikutnya"
