@@ -1,0 +1,70 @@
+import { useEffect, useRef } from 'react'
+import { useTrackMenu } from '../../context/TrackMenuContext'
+import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { endRadio, findEndlessTracks, getRadioAuto, isRadioActive, isRadioTrack, markRadioTracks, useRadioAuto } from '../../services/radio'
+import { getUpcomingTracks } from '../../utils/playerQueue'
+import { mergePendingExtras } from '../../native/radioExtras'
+
+/**
+ * Isi ulang antrean bila lagu yang tersisa setelah lagu aktif tinggal sebanyak ini atau kurang. Sengaja besar: saat aplikasi
+ * lama di latar belakang JS beku dan hanya native yang memindah lagu (dari daftar yang sudah disiapkan sebelumnya),
+ * jadi radio harus menyimpan cukup banyak lagu di depan agar tidak habis sebelum aplikasi dibuka lagi.
+ */
+const LOW_WATER = 12
+
+/**
+ * Radio: saat antrean hampir habis, tambahkan lagu mirip di akhir antrean (lihat services/radio.ts).
+ * Aktif bila "Radio otomatis" menyala di Pengaturan, atau radio dimulai dari menu lagu. Tidak melakukan apa pun
+ * saat mode ulang "satu lagu" atau saat berhenti setelah lagu ini (sleep timer). Tanpa batas: terus mengisi selama lagu diputar.
+ */
+export default function AutoRadioSync() {
+  const player = useAudioPlayer()
+  const { showToast } = useTrackMenu()
+  const auto = useRadioAuto()
+  const { currentTrack, queue, currentIndex, shuffleOrder, repeat, stopAfterTrack, addToQueue } = player
+  const addRef = useRef(addToQueue)
+  addRef.current = addToQueue
+  /** Lagu yang sudah dicoba diisi (supaya hasil kosong tidak diulang terus untuk lagu yang sama). */
+  const triedFor = useRef<string | null>(null)
+  const busy = useRef(false)
+
+  // Pengguna pindah ke lagu di luar radio: radio mulai-manual berakhir.
+  useEffect(() => {
+    if (currentTrack && isRadioActive() && !isRadioTrack(currentTrack)) endRadio()
+  }, [currentTrack])
+
+  useEffect(() => {
+    if (!currentTrack || busy.current) return undefined
+    if (!(getRadioAuto() || isRadioActive())) return undefined
+    if (repeat === 'one' || stopAfterTrack) return undefined
+    if (currentIndex === null) return undefined
+    const upcoming = getUpcomingTracks(queue, currentIndex, shuffleOrder)
+    if (upcoming.length > LOW_WATER) return undefined
+    const seedKey = `${currentTrack.id}@${queue.length}`
+    if (triedFor.current === seedKey) return undefined
+    triedFor.current = seedKey
+    busy.current = true
+    const controller = new AbortController()
+    // Tambahan radio yang dicari native saat JS beku masuk antrean dulu; bila ada, putaran ini dilewati (antrean berubah, efek
+    // berjalan lagi dengan antrean baru).
+    void mergePendingExtras()
+      .then((merged) => (merged || controller.signal.aborted ? [] : findEndlessTracks(currentTrack, queue, controller.signal)))
+      .then((similar) => {
+        if (controller.signal.aborted) return
+        markRadioTracks(similar)
+        for (const track of similar) addRef.current(track, { fromSearch: true })
+        if (similar.length === 0 && isRadioActive()) showToast('Tidak menemukan lagu mirip untuk dilanjutkan')
+      })
+      .finally(() => {
+        busy.current = false
+      })
+    return () => {
+      // Lagu berganti sebelum hasil datang: batalkan; percobaan berikutnya memakai lagu yang baru.
+      controller.abort()
+      busy.current = false
+      if (triedFor.current === seedKey) triedFor.current = null
+    }
+  }, [currentTrack, queue, currentIndex, shuffleOrder, repeat, stopAfterTrack, auto, showToast])
+
+  return null
+}
