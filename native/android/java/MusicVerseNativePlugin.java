@@ -956,42 +956,48 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve();
   }
 
+  /** Mengurai larik butir lagu dari JS (upcoming / previous); butir rusak atau tanpa URL dan judul dilewati. */
+  private static java.util.List<PlaybackService.UpcomingItem> parseUpcomingItems(JSArray items) {
+    java.util.List<PlaybackService.UpcomingItem> list = new java.util.ArrayList<>();
+    if (items == null) return list;
+    for (int i = 0; i < items.length(); i++) {
+      try {
+        org.json.JSONObject o = items.getJSONObject(i);
+        String url = o.optString("url", "");
+        // Tanpa URL = belum di-resolve JS: native mencarinya sendiri (butuh judul).
+        if (url.isEmpty() && o.optString("title", "").isEmpty()) continue;
+        PlaybackService.UpcomingItem upItem =
+            new PlaybackService.UpcomingItem(
+                o.optInt("index", -1),
+                url,
+                o.has("cacheKey") && !o.isNull("cacheKey") ? o.optString("cacheKey") : null,
+                o.optString("title", ""),
+                o.optString("artist", ""),
+                o.optString("album", ""),
+                o.optString("cover", ""),
+                o.optLong("durationMs", 0),
+                (float) o.optDouble("norm", 1.0),
+                o.optString("trackId", ""),
+                o.optString("trackUrl", ""));
+        // Id video YouTube dari JS (bila URL-nya stream YouTube langsung): dipakai native untuk mengambil link baru.
+        if (!url.isEmpty()) upItem.ytId = o.optString("ytId", "");
+        list.add(upItem);
+      } catch (org.json.JSONException ignored) {
+        // butir rusak dilewati
+      }
+    }
+    return list;
+  }
+
   /**
    * Daftar lagu berikutnya yang URL-nya sudah di-resolve JS. Native memutarnya sendiri saat lagu aktif selesai, jadi
    * pemutaran berlanjut walau WebView dibekukan di latar belakang. Daftar kosong = native tidak pindah lagu sendiri.
    */
   @PluginMethod
   public void engineSetUpcoming(PluginCall call) {
-    java.util.List<PlaybackService.UpcomingItem> list = new java.util.ArrayList<>();
-    JSArray items = call.getArray("items");
-    if (items != null) {
-      for (int i = 0; i < items.length(); i++) {
-        try {
-          org.json.JSONObject o = items.getJSONObject(i);
-          String url = o.optString("url", "");
-          // Tanpa URL = belum di-resolve JS: native mencarinya sendiri (butuh judul).
-          if (url.isEmpty() && o.optString("title", "").isEmpty()) continue;
-          PlaybackService.UpcomingItem upItem =
-              new PlaybackService.UpcomingItem(
-                  o.optInt("index", -1),
-                  url,
-                  o.has("cacheKey") && !o.isNull("cacheKey") ? o.optString("cacheKey") : null,
-                  o.optString("title", ""),
-                  o.optString("artist", ""),
-                  o.optString("album", ""),
-                  o.optString("cover", ""),
-                  o.optLong("durationMs", 0),
-                  (float) o.optDouble("norm", 1.0),
-                  o.optString("trackId", ""),
-                  o.optString("trackUrl", ""));
-          // Id video YouTube dari JS (bila URL-nya stream YouTube langsung): dipakai native untuk mengambil link baru.
-          if (!url.isEmpty()) upItem.ytId = o.optString("ytId", "");
-          list.add(upItem);
-        } catch (org.json.JSONException ignored) {
-          // butir rusak dilewati
-        }
-      }
-    }
+    java.util.List<PlaybackService.UpcomingItem> list = parseUpcomingItems(call.getArray("items"));
+    // Lagu sebelum lagu aktif (opsional): bekal tombol Sebelumnya saat JS beku.
+    java.util.List<PlaybackService.UpcomingItem> previous = parseUpcomingItems(call.getArray("previous"));
     // Info radio (opsional): antrean JS berakhir di sini + radio menyala. Tanpa itu native tidak menambah lagu radio.
     int radioTail = -1;
     java.util.List<String> radioExclude = new java.util.ArrayList<>();
@@ -1006,7 +1012,7 @@ public class MusicVerseNativePlugin extends Plugin {
         }
       }
     }
-    PlaybackService.engineSetUpcoming(call.getInt("currentIndex", -1), list, radioTail, radioExclude);
+    PlaybackService.engineSetUpcoming(call.getInt("currentIndex", -1), list, radioTail, radioExclude, previous);
     call.resolve();
   }
 

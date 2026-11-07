@@ -136,7 +136,7 @@ export default function LibraryPage() {
         ) : (
           <RecentlyPlayedList
             items={recent}
-            currentTrackUrl={currentTrack?.url ?? null}
+            currentTrack={currentTrack}
             currentActivity={getRowActivity(player.status)}
             onPlay={handlePlayRecent}
           />

@@ -1,6 +1,5 @@
 import { CheckCircle2, ListMusic, Loader2, Pause, Play } from 'lucide-react'
 import { memo, useMemo } from 'react'
-import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
@@ -8,7 +7,6 @@ import { OFFLINE_BLOCK_TEXT } from '../../hooks/useOfflineBlock'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
-import { trackIdentity } from '../../utils/myPlaylistStorage'
 import CoverArt from '../ui/CoverArt'
 
 /**
@@ -37,19 +35,16 @@ interface TrackRowProps {
   locked?: boolean
   /** Perangkat offline dan lagu ini belum diunduh: tampil redup, ketukan hanya memberi tahu (tidak diputar). */
   offlineBlocked?: boolean
+  /** Nama playlist buatanmu yang sudah berisi lagu ini, digabung dengan \u0001 (string supaya baris tetap hemat render). Kosong = belum ada. */
+  playlistNames?: string
 }
 
-function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false, locked = false, offlineBlocked = false }: TrackRowProps) {
+function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false, locked = false, offlineBlocked = false, playlistNames = '' }: TrackRowProps) {
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const { openTrackMenu, showToast } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
-  const { playlists } = useMyPlaylists()
-  // Hasil cari lagu satuan: tandai kalau lagunya sudah ada di playlist buatanmu (dan di playlist mana).
-  const inPlaylists = useMemo(() => {
-    if (!fromSearch) return [] as string[]
-    const identity = trackIdentity(track)
-    return playlists.filter((item) => item.tracks.some((t) => trackIdentity(t) === identity)).map((item) => item.name)
-  }, [fromSearch, playlists, track])
+  // Tandai kalau lagunya sudah ada di playlist buatanmu (dan di playlist mana); daftar dihitung sekali di TrackList.
+  const inPlaylists = useMemo(() => (playlistNames ? playlistNames.split('\u0001') : []), [playlistNames])
   const inPlaylistsText =
     inPlaylists.length === 0
       ? ''

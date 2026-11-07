@@ -171,7 +171,7 @@ export default function ArtistSearchPanel() {
       emptyState={<EmptyState compact icon={UserRound} title="Belum ada lagu" />}
       searchable
       onPlay={(_track, index) => player.playList(viewSongs, index)}
-      playingTrackId={player.currentTrack?.id ?? null}
+      playingTrack={player.currentTrack}
       playbackActivity={getRowActivity(player.status)}
     />
   )

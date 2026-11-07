@@ -926,6 +926,7 @@ class AudioEngine {
     currentIndex: number,
     items: ReadonlyArray<{ index: number; url: string; cacheKey?: string; title: string; artist: string; album: string; cover: string; durationMs: number; norm?: number; trackId?: string; trackUrl?: string; ytId?: string }>,
     radio?: NativeRadioTail,
+    previous?: ReadonlyArray<{ index: number; url: string; cacheKey?: string; title: string; artist: string; album: string; cover: string; durationMs: number; norm?: number; trackId?: string; trackUrl?: string; ytId?: string }>,
   ): void {
     if (!this.isNative()) return
     this.upcomingMap.clear()
@@ -934,6 +935,7 @@ class AudioEngine {
       currentIndex,
       items: items.map((item) => ({ ...item, url: toNativeUrl(item.url) })),
       ...(radio ? { radio } : {}),
+      ...(previous && previous.length > 0 ? { previous: previous.map((item) => ({ ...item, url: toNativeUrl(item.url) })) } : {}),
     }).catch(() => {
       // APK lama tanpa fitur ini: pemutaran berjalan seperti biasa.
     })

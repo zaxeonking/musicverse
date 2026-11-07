@@ -1,3 +1,4 @@
+import { isSameSong, type SongRef } from '../../utils/sameSong'
 import { Loader2, Pause, Play } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
@@ -101,8 +102,8 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
 
 interface RecentlyPlayedListProps {
   items: readonly RecentPlay[]
-  /** URL lagu yang sedang aktif di pemutar (null jika tidak ada). */
-  currentTrackUrl: string | null
+  /** Lagu yang sedang aktif di pemutar (null jika tidak ada). Dikenali juga bila lagu yang sama diputar dari daftar lain. */
+  currentTrack: SongRef | null
   /** Status playback untuk lagu aktif (dari `getRowActivity`). */
   currentActivity: RowActivity
   onPlay: (entry: RecentPlay) => void
@@ -110,7 +111,7 @@ interface RecentlyPlayedListProps {
 
 export default function RecentlyPlayedList({
   items,
-  currentTrackUrl,
+  currentTrack,
   currentActivity,
   onPlay,
 }: RecentlyPlayedListProps) {
@@ -120,7 +121,7 @@ export default function RecentlyPlayedList({
         <RecentRow
           key={recentKey(entry.track)}
           entry={entry}
-          activity={currentTrackUrl !== null && entry.track.url === currentTrackUrl ? currentActivity : 'none'}
+          activity={currentTrack !== null && isSameSong(entry.track, currentTrack) ? currentActivity : 'none'}
           onPlay={onPlay}
         />
       ))}

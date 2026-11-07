@@ -196,7 +196,7 @@ export default function PlaylistView() {
         key={playlist.id}
         tracks={playlist.tracks}
         onPlay={player.selectTrack}
-        playingTrackId={player.currentTrack?.id ?? null}
+        playingTrack={player.currentTrack}
         playbackActivity={getRowActivity(player.status)}
         // Lagu satuan dari pencarian boleh masuk antrean lewat menu lagu; playlist tetap tidak dicampur.
         searchable={isSingleSearch}

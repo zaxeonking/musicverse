@@ -8,6 +8,35 @@ import { isNativeApp } from './platform'
  * JS membacanya saat app dibuka lagi dan menyamakan diri.
  */
 
+/**
+ * Gerbang rekonsiliasi: setelah JS boot dari sesi tersimpan, state-nya "dijeda di posisi lama" sampai catatan native selesai
+ * dibaca. Selama itu pembaruan notifikasi native TIDAK boleh dikirim, kalau tidak notifikasi (dan widget) tertimpa status
+ * "jeda + posisi lama" padahal pemutar native masih berbunyi di posisi yang benar.
+ */
+let reconciled = false
+const reconcileListeners = new Set<() => void>()
+
+export function isNativeSessionReconciled(): boolean {
+  return reconciled
+}
+
+export function markNativeSessionReconciled(): void {
+  if (reconciled) return
+  reconciled = true
+  for (const listener of [...reconcileListeners]) listener()
+  reconcileListeners.clear()
+}
+
+/** Mendengar saat rekonsiliasi selesai. Mengembalikan fungsi berhenti mendengar. */
+export function onNativeSessionReconciled(listener: () => void): () => void {
+  if (reconciled) {
+    listener()
+    return () => {}
+  }
+  reconcileListeners.add(listener)
+  return () => reconcileListeners.delete(listener)
+}
+
 /** Membaca catatan sesi native. APK lama (tanpa fitur), web, atau tidak ada catatan: null. */
 export async function readNativeSession(): Promise<NativeSessionInfo | null> {
   if (!isNativeApp()) return null

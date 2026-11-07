@@ -7,6 +7,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import { parseDurationText } from '../../hooks/useAudioPlayerController'
 import { parseDuration } from '../../utils/formatTime'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
+import { isNativeSessionReconciled, onNativeSessionReconciled } from '../../native/nativeSession'
 
 /** Selisih (detik) antara posisi yang diperkirakan notifikasi dan posisi sebenarnya sebelum dilaporkan ulang. */
 const DRIFT_S = 1.5
@@ -14,6 +15,8 @@ const DRIFT_S = 1.5
 const REFRESH_MS = 8000
 /** Detak: selama memutar, posisi sebenarnya dari elemen audio dikirim ke notifikasi tiap sekian milidetik. */
 const HEARTBEAT_MS = 2000
+/** Batas tunggu rekonsiliasi sesi native; lewat ini notifikasi tetap diperbarui supaya tidak macet. */
+const RECONCILE_TIMEOUT_MS = 4000
 
 async function blobUrlToBase64(url: string): Promise<string | null> {
   try {
@@ -43,6 +46,18 @@ export default function NativeMediaSync() {
   const actions = usePlayerActions()
   const { currentTime, duration } = usePlaybackTime()
   const { isLiked, toggleLike } = useMyPlaylists()
+
+  // Setelah boot dari sesi tersimpan, tunggu JS menyamakan diri dengan pemutar native sebelum menyentuh notifikasi.
+  const [sessionReady, setSessionReady] = useState(isNativeSessionReconciled)
+  useEffect(() => {
+    if (sessionReady) return
+    const stopListening = onNativeSessionReconciled(() => setSessionReady(true))
+    const timer = window.setTimeout(() => setSessionReady(true), RECONCILE_TIMEOUT_MS)
+    return () => {
+      stopListening()
+      window.clearTimeout(timer)
+    }
+  }, [sessionReady])
 
   const latest = useRef({ status, actions, currentTime, currentTrack, toggleLike })
   useEffect(() => {
@@ -155,6 +170,9 @@ export default function NativeMediaSync() {
   const knownDuration = useRef<{ trackId: string; seconds: number } | null>(null)
 
   useEffect(() => {
+    // Keadaan "dijeda di posisi lama" hasil pemulihan belum tentu benar: jangan timpa notifikasi native sebelum disamakan.
+    // Pemutaran yang dimulai pengguna (playing) tetap boleh lewat.
+    if (!sessionReady && !playing) return
     if (trackId === null) {
       if (sentTrack.current !== null) {
         sentTrack.current = null
@@ -228,7 +246,7 @@ export default function NativeMediaSync() {
     void MusicVerseNative.updateNowPlaying(payload).catch((error: unknown) => {
       console.warn('[MusicVerse] Notifikasi native gagal diperbarui:', error)
     })
-  }, [trackId, title, artists, album, playing, loading, hasNext, hasPrevious, currentTime, duration, cover, currentTrack])
+  }, [trackId, title, artists, album, playing, loading, hasNext, hasPrevious, currentTime, duration, cover, currentTrack, sessionReady])
 
   // Detak posisi: tidak bergantung pada render React / event `timeupdate` (yang bisa jarang atau berhenti saat layar mati
   // atau saat memutar berkas lokal). Posisi dan durasi dibaca langsung dari elemen audio, sehingga bilah progres

@@ -43,7 +43,7 @@ import {
 } from '../utils/playerQueue'
 import { judgeNativeAdvance, type AdvanceStreak } from '../utils/nativeAdvance'
 import { removeDownload, trackKey } from '../native/offline'
-import { ackNativeSession, matchSessionIndex, readNativeSession } from '../native/nativeSession'
+import { ackNativeSession, markNativeSessionReconciled, matchSessionIndex, readNativeSession } from '../native/nativeSession'
 import { isNativeApp } from '../native/platform'
 import type { NativeRadioTail } from '../native/musicVerseNative'
 import { getRadioAuto, isRadioActive, markRadioTracks, trackKey as radioTrackKey } from '../services/radio'
@@ -103,6 +103,8 @@ interface Preload {
 
 /** Berapa lagu di depan yang URL-nya di-resolve lebih awal dan diserahkan ke native (pindah lagu tanpa JS saat WebView beku). */
 const NATIVE_UPCOMING_DEPTH = 20
+/** Berapa lagu sebelum lagu aktif yang diserahkan ke native untuk tombol Sebelumnya saat JS beku. */
+const NATIVE_PREVIOUS_DEPTH = 3
 /** URL hasil resolve yang lebih tua dari ini tidak diserahkan lagi ke native (link YouTube kedaluwarsa setelah beberapa jam). */
 const UPCOMING_MAX_AGE_MS = 90 * 60_000
 
@@ -289,6 +291,9 @@ const ACTIVE_STATUSES: PlaybackStatus[] = ['playing', 'buffering', 'loading']
  */
 export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const [boot] = useState(buildBootSession)
+  // Waktu simpanan posisi JS SEBELUM efek persist di mount menimpanya dengan `Date.now()`. Dipakai untuk membandingkan
+  // dengan catatan native; kalau dibaca belakangan, selisihnya selalu "JS lebih baru" dan catatan native selalu dibuang.
+  const [bootSavedAt] = useState(() => (boot ? savedPositionAt() : 0))
   const [state, setState] = useState<AudioPlayerState>(boot?.state ?? initialState)
   const [time, setTime] = useState<PlaybackTime>(boot?.time ?? initialTime)
   const [prefs, setPrefs] = useState<PlayerPrefs>(loadPrefs)
@@ -1554,9 +1559,14 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   // bisa terus jalan dan pindah lagu sendiri. Samakan lagu aktif + posisi dengan catatan native; bila native masih memutar,
   // adopsi audionya (tanpa memuat ulang) supaya tombol jeda / seek bekerja pada suara yang sedang berbunyi.
   useEffect(() => {
-    if (!isNativeApp()) return
+    if (!isNativeApp() || !restoredRef.current) {
+      // Tidak ada sesi tersimpan yang perlu disamakan: notifikasi boleh langsung diperbarui.
+      markNativeSessionReconciled()
+      return
+    }
     let cancelled = false
     void (async () => {
+     try {
       // Tambahan radio native masuk antrean dulu: sesi native bisa menunjuk lagu tambahan itu.
       await mergeExtrasRef.current()
       if (cancelled) return
@@ -1567,7 +1577,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       const before = stateRef.current
       const at = typeof session.at === 'number' ? session.at : 0
       // Catatan hidup (pemutar masih ada) selalu menang; catatan tersimpan hanya bila lebih baru dari simpanan JS.
-      if (session.live !== true && at <= savedPositionAt()) {
+      if (session.live !== true && at <= bootSavedAt) {
         void ackNativeSession()
         return
       }
@@ -1606,11 +1616,15 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         commit({ status: 'playing', error: null })
       }
       void ackNativeSession()
+     } finally {
+      // Apa pun hasilnya (tidak ada catatan, tidak cocok, pengguna sudah bertindak): notifikasi boleh diperbarui lagi.
+      if (!cancelled) markNativeSessionReconciled()
+     }
     })()
     return () => {
       cancelled = true
     }
-  }, [commit, updateTime])
+  }, [commit, updateTime, bootSavedAt])
 
   // App ke background / ditutup: simpan posisi terakhir.
   useEffect(() => {
@@ -1690,11 +1704,15 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const upcomingTrackId = state.currentTrack?.id ?? null
   useEffect(() => {
     if (!audioEngine.supportsNativeChain()) return
+    // Lagu-lagu tepat SEBELUM lagu aktif (maks. NATIVE_PREVIOUS_DEPTH), dari hasil resolve yang sudah ada di cache (tanpa jaringan).
+    // Bekal tombol Sebelumnya di notifikasi saat WebView beku: tanpa ini native hanya bisa mengulang lagu aktif.
+    let previousItems: Array<Parameters<typeof audioEngine.setUpcoming>[1][number]> = []
     const publish = (items: Parameters<typeof audioEngine.setUpcoming>[1], current: number, radio?: NativeRadioTail) => {
-      const signature = `${current}|${items.map((item) => `${item.index}:${item.url}`).join(',')}|${radio ? `r${radio.tailIndex}:${radio.exclude.length}` : ''}`
+      const previousSig = previousItems.map((item) => `${item.index}:${item.url}`).join(',')
+      const signature = `${current}|${items.map((item) => `${item.index}:${item.url}`).join(',')}|${radio ? `r${radio.tailIndex}:${radio.exclude.length}` : ''}|p${previousSig}`
       if (signature === upcomingSentRef.current) return
       upcomingSentRef.current = signature
-      audioEngine.setUpcoming(current, items, radio)
+      audioEngine.setUpcoming(current, items, radio, previousItems)
     }
     if (nativeChainOffRef.current) {
       publish([], currentIndex ?? -1)
@@ -1709,6 +1727,35 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       upcomingByIndexRef.current.clear()
       publish([], currentIndex)
       return
+    }
+    {
+      let back: number | null = currentIndex
+      const seen = new Set<number>([currentIndex])
+      const collected: typeof previousItems = []
+      for (let i = 0; i < NATIVE_PREVIOUS_DEPTH; i += 1) {
+        const prev: number | null = getPreviousIndex(queue, back, shuffleOrder)
+        if (prev === null || seen.has(prev) || !queue[prev]) break
+        const track = queue[prev]
+        const cachedPrev = upcomingCacheRef.current.get(track.id)
+        if (!cachedPrev || Date.now() - cachedPrev.at > UPCOMING_MAX_AGE_MS) break // tanpa tautan yang masih segar: berhenti di sini
+        seen.add(prev)
+        collected.unshift({
+          index: prev,
+          url: cachedPrev.info.audioUrl,
+          cacheKey: diskCacheKey(track, cachedPrev.info),
+          title: track.title,
+          artist: track.artists ?? '',
+          album: track.album ?? '',
+          cover: track.cover ?? '',
+          durationMs: Math.round((cachedPrev.info.probedDuration ?? parseDurationText(track.duration ?? '') ?? 0) * 1000),
+          norm: normGainFor(cachedPrev.info.loudnessDb),
+          trackId: track.id,
+          trackUrl: track.url,
+          ytId: cachedPrev.info.ytVideoId,
+        })
+        back = prev
+      }
+      previousItems = collected
     }
     const controller = new AbortController()
     void (async () => {

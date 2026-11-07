@@ -86,6 +86,11 @@ public class PlaybackService extends Service {
   static final String ACTION_NEXT = "__APP_ID__.action.NEXT";
   static final String ACTION_PREVIOUS = "__APP_ID__.action.PREVIOUS";
   static final String ACTION_DISMISS = "__APP_ID__.action.DISMISS";
+  /**
+   * Notifikasi dihapus SISTEM / digeser (deleteIntent), bukan tombol "Tutup". Beda dengan ACTION_DISMISS: saat terhenti karena
+   * gangguan sesaat (app lain / panggilan) dan menunggu putar-ulang, ini TIDAK boleh mematikan service; notifikasi dipasang lagi.
+   */
+  static final String ACTION_SWIPED = "__APP_ID__.action.SWIPED";
 
   public interface ActionListener {
     void onAction(String action, long seekMs);
@@ -364,6 +369,8 @@ public class PlaybackService extends Service {
     final String trackUrl;
     /** Sampul yang sedang tampil saat lagu ditinggalkan: dipakai lagi saat kembali (lagu yang dimuat JS tidak punya URL sampul di native). */
     final Bitmap cover;
+    /** Id video YouTube (dari bekal JS) untuk mengambil link baru bila tautan sudah mati; kosong bila tidak ada. */
+    String ytId = "";
 
     HistoryItem(String url, String cacheKey, String title, String artist, String album, String coverUrl, long durationMs, int index, long at, float normGain, String trackId, String trackUrl, Bitmap cover) {
       this.cover = cover;
@@ -383,6 +390,11 @@ public class PlaybackService extends Service {
   }
 
   private final List<HistoryItem> history = new ArrayList<>();
+  /**
+   * Lagu tepat sebelum lagu aktif menurut JS (terlama dulu, tautan sudah di-resolve JS). Dipakai tombol Sebelumnya saat JS beku
+   * bila `history` kosong (riwayat native hanya berisi lagu yang ditinggalkan rantai native, dan dikosongkan tiap JS pindah lagu).
+   */
+  private final List<UpcomingItem> prevSeed = new ArrayList<>();
   /** Sampul lagu yang baru diputar (10 terakhir), kunci = judul + artis. */
   private final java.util.LinkedHashMap<String, Bitmap> coverMemo = new java.util.LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
     @Override
@@ -444,12 +456,22 @@ public class PlaybackService extends Service {
 
   /** Previous tanpa JS: kembali ke lagu sebelumnya dari riwayat (lagu yang ditinggalkan kembali menjadi "berikutnya"). */
   private boolean chainPrevious() {
-    if (stopped || player == null || history.isEmpty()) return false;
-    HistoryItem h = history.remove(history.size() - 1);
-    if (SystemClock.elapsedRealtime() - h.at > HISTORY_KEEP_MS) {
-      history.clear();
-      return false;
+    if (stopped || player == null) return false;
+    HistoryItem h = null;
+    if (!history.isEmpty()) {
+      h = history.remove(history.size() - 1);
+      if (SystemClock.elapsedRealtime() - h.at > HISTORY_KEEP_MS) {
+        history.clear();
+        h = null;
+      }
     }
+    // Riwayat native kosong / kedaluwarsa (mis. lagu sebelumnya diputar saat JS masih hidup): pakai bekal dari JS.
+    if (h == null && !prevSeed.isEmpty()) {
+      UpcomingItem p = prevSeed.remove(prevSeed.size() - 1);
+      h = new HistoryItem(p.url, p.cacheKey, p.title, p.artist, p.album, p.coverUrl, p.durationMs, p.index, SystemClock.elapsedRealtime(), p.normGain, p.trackId, p.trackUrl, null);
+      h.ytId = p.ytId == null ? "" : p.ytId;
+    }
+    if (h == null) return false;
     Src leaving = activeSrc;
     if (leaving != null && knownIndex >= 0 && !current.title.isEmpty()) {
       UpcomingItem leavingItem = new UpcomingItem(knownIndex, leaving.proxyUrl, leaving.cacheKey, current.title, current.artist, current.album, currentCoverUrl, current.durationMs, engineNorm, activeTrackId(), activeTrackUrl());
@@ -459,7 +481,7 @@ public class PlaybackService extends Service {
     engineNorm = h.normGain;
     applyVolumes();
     loadMedia(h.url, 0, h.cacheKey);
-    resetRelink("");
+    resetRelink(h.ytId);
     player.setPlayWhenReady(true);
     playingIndex = h.index;
     knownIndex = h.index;
@@ -607,8 +629,13 @@ public class PlaybackService extends Service {
    * boleh menambah lagu radio sendiri. `radioExclude` = kunci judul + artis semua lagu di antrean JS (tidak diulang radio).
    */
   public static void engineSetUpcoming(int currentIndex, List<UpcomingItem> items, int radioTail, List<String> radioExclude) {
+    engineSetUpcoming(currentIndex, items, radioTail, radioExclude, null);
+  }
+
+  /** Plus `previous`: lagu tepat sebelum lagu aktif (urut dari terlama), bekal tombol Sebelumnya saat JS beku. */
+  public static void engineSetUpcoming(int currentIndex, List<UpcomingItem> items, int radioTail, List<String> radioExclude, List<UpcomingItem> previous) {
     PlaybackService running = instance;
-    if (running != null) running.handler.post(() -> running.setUpcoming(currentIndex, items, radioTail, radioExclude));
+    if (running != null) running.handler.post(() -> running.setUpcoming(currentIndex, items, radioTail, radioExclude, previous));
   }
 
   public static void engineClearStandby() {
@@ -1570,6 +1597,15 @@ public class PlaybackService extends Service {
         case ACTION_NEXT: handleAction("next"); break;
         case ACTION_PREVIOUS: handleAction("previous"); break;
         case ACTION_DISMISS: shutdown(); return START_NOT_STICKY;
+        case ACTION_SWIPED:
+          if (!stopped && hasMedia && (current.interrupted || (resumer != null && resumer.isWaiting()))) {
+            // Gangguan sesaat: sebagian ROM (ColorOS/MIUI, Android 14+) menyingkirkan notifikasi media yang sedang jeda.
+            // Pasang lagi alih-alih mematikan pemutar, supaya lagu bisa lanjut sendiri setelah gangguan selesai.
+            startInForeground(buildNotification());
+            break;
+          }
+          shutdown();
+          return START_NOT_STICKY;
         default: break;
       }
     }
@@ -1600,11 +1636,16 @@ public class PlaybackService extends Service {
     return !jsAlive() && (current.playing || playingIndex != -1);
   }
 
-  void setUpcoming(int currentIndex, List<UpcomingItem> items, int radioTail, List<String> radioExclude) {
+  void setUpcoming(int currentIndex, List<UpcomingItem> items, int radioTail, List<String> radioExclude, List<UpcomingItem> previous) {
     if (stopped) return;
     // Native sudah pindah sendiri dan JS belum menyamakan: daftar ini dibuat dari keadaan lama.
     if (playingIndex != -1 && currentIndex != playingIndex) return;
     knownIndex = currentIndex;
+    // Bekal Sebelumnya dari JS menggantikan yang lama (JS yang memegang antrean).
+    prevSeed.clear();
+    if (previous != null) {
+      for (UpcomingItem p : previous) if (p != null && !p.url.isEmpty()) prevSeed.add(p);
+    }
     // Info radio dari JS (antrean JS yang berlaku). JS yang memegang antrean: pencarian yang sedang jalan dibuang.
     radioTailIndex = radioTail;
     radioNextIndex = radioTail;
@@ -2037,6 +2078,7 @@ public class PlaybackService extends Service {
       previousRestart = livePosition() > 3_000L;
       showPositionZero();
     }
+    final boolean restartOnly = previousRestart;
     if (!nativeInCharge()) {
       // Putar ditekan saat dijeda: tampilkan "Memuat lagu…" di notifikasi dan widget SEKARANG juga. JS bisa terlambat bereaksi
       // (WebView di latar belakang) dan mengambil tautan baru butuh beberapa detik; tanpa ini tampilan tetap "jeda" tanpa tanda apa pun.
@@ -2061,6 +2103,7 @@ public class PlaybackService extends Service {
           if (stopped || lastJsUpdateAt > pressedAt) return;
           if (!before.equals(current.title + "\u0001" + playingIndex)) return;
           if (action.equals("next")) chainAdvance(true);
+          else if (!restartOnly && chainPrevious()) return;
           else if (player != null && hasMedia) {
             player.seekTo(0);
             player.play();
@@ -2412,7 +2455,7 @@ public class PlaybackService extends Service {
         .setSubText(current.album.isEmpty() ? null : current.album)
         .setLargeIcon(current.cover != null ? current.cover : defaultCover())
         .setContentIntent(content)
-        .setDeleteIntent(action(ACTION_DISMISS, 5))
+        .setDeleteIntent(action(ACTION_SWIPED, 5))
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setCategory(Notification.CATEGORY_TRANSPORT)
         .setOnlyAlertOnce(true)

@@ -16,10 +16,10 @@ import { isNativeApp } from './native/platform'
  * pemutar tidak dimuat sama sekali (import dinamis), jadi tidak ada versi web yang bisa dipakai.
  */
 /**
- * Splash (index.html): logo -> nama -> zoom pelan, jadi tampil minimal ±2,2 dtk sejak dibuka (setelah itu zoom menembus keluar,
+ * Splash (index.html): logo -> nama -> zoom pelan, jadi tampil minimal ±3,4 dtk sejak dibuka (animasi masuk selesai ±1,7 dtk, lalu ditahan sebentar) (setelah itu zoom menembus keluar,
  * Beranda masuk bersamaan). Tanpa gerakan (preferensi "kurangi gerakan"): cukup ±0,5 dtk.
  */
-const SPLASH_MIN_MS = 2200
+const SPLASH_MIN_MS = 3400
 function dismissSplash() {
   const html = document.documentElement
   const splash = document.getElementById('splash')

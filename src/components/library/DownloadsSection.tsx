@@ -22,6 +22,7 @@ import {
 import { fallbackCover } from '../../utils/fallbackCover'
 import { formatBytes } from '../../utils/formatTime'
 import { getRowActivity } from '../../utils/playerStatus'
+import { isSameSong } from '../../utils/sameSong'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
@@ -226,7 +227,7 @@ export default function DownloadsSection() {
             item={item}
             track={list[index]}
             selected={selectedKey === item.key}
-            activity={currentKey === item.key ? currentActivity : 'none'}
+            activity={currentKey === item.key || (player.currentTrack !== null && isSameSong(list[index], player.currentTrack)) ? currentActivity : 'none'}
             onSelect={() => setSelectedKey(item.key)}
             onPlay={() => {
               setSelectedKey(item.key)

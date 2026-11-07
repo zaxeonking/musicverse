@@ -23,6 +23,7 @@ import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { formatBytes, formatTime } from '../../utils/formatTime'
 import { getRowActivity } from '../../utils/playerStatus'
+import { isSameSong } from '../../utils/sameSong'
 
 /** Baris yang ditampilkan sekaligus: daftar bisa ribuan lagu, jadi dibuka bertahap. */
 const PAGE = 100
@@ -228,7 +229,7 @@ export default function LocalFolder() {
                     key={item.id}
                     item={item}
                     track={list[index]}
-                    activity={currentKey === `lc-${item.id}` ? currentActivity : 'none'}
+                    activity={currentKey === `lc-${item.id}` || (player.currentTrack !== null && isSameSong(list[index], player.currentTrack)) ? currentActivity : 'none'}
                     onPlay={() => player.playList(list, index)}
                     onToggle={player.togglePlayPause}
                   />

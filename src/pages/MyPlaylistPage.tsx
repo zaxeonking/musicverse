@@ -23,6 +23,7 @@ import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
 import { isLikedId, MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
 import { getRowActivity } from '../utils/playerStatus'
+import { makeSongMatcher } from '../utils/sameSong'
 
 function TrackLine({
   playlistId,
@@ -209,7 +210,7 @@ export default function MyPlaylistPage() {
 
   const { tracks } = playlist
   const activity = getRowActivity(player.status)
-  const playingId = player.currentTrack?.id ?? null
+  const isPlayingRow = makeSongMatcher(tracks, player.currentTrack)
   const fail = (reason: Parameters<typeof myPlaylistErrorText>[0]) => showToast(myPlaylistErrorText(reason))
 
   /** Playlist hasil "Unduh semua": ambil ulang playlist Spotify-nya, tambah lagu baru, lalu unduh yang belum terunduh. */
@@ -267,7 +268,7 @@ export default function MyPlaylistPage() {
 
   const playAt = (index: number) => {
     const track = tracks[index]
-    if (player.currentTrack?.id === track.id && activity !== 'none') {
+    if (isPlayingRow(track) && activity !== 'none') {
       player.selectTrack(track, index) // lagu aktif: jeda / lanjut
       return
     }
@@ -457,7 +458,7 @@ export default function MyPlaylistPage() {
               track={track}
               index={index}
               last={index === tracks.length - 1}
-              activity={track.id === playingId ? activity : 'none'}
+              activity={isPlayingRow(track) ? activity : 'none'}
               onPlay={() => playAt(index)}
               selecting={selecting}
               selected={selected.has(track.id)}

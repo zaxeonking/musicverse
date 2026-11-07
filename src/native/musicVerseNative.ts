@@ -400,8 +400,10 @@ export interface MusicVerseNativePlugin {
    * Daftar lagu berikutnya yang URL-nya sudah di-resolve. Native memutarnya sendiri saat lagu aktif selesai (juga saat
    * WebView dibekukan di latar belakang); event `advanced` membawa `reason: "idx:<indeks antrean>"`. Kosong = tidak pindah sendiri.
    * `currentIndex` = indeks antrean lagu yang sedang diputar menurut JS (daftar usang diabaikan native).
+   * `previous` (opsional, urut dari yang terlama; yang terakhir = lagu tepat sebelum lagu aktif): bekal tombol Sebelumnya saat JS beku,
+   * supaya native bisa kembali ke lagu sebelumnya walau riwayat native kosong. APK lama mengabaikannya.
    */
-  engineSetUpcoming(options: { currentIndex: number; items: NativeUpcomingItem[]; radio?: NativeRadioTail }): Promise<void>
+  engineSetUpcoming(options: { currentIndex: number; items: NativeUpcomingItem[]; radio?: NativeRadioTail; previous?: NativeUpcomingItem[] }): Promise<void>
   /** Tambahan radio yang dicari native saat JS beku (urut indeks). APK lama: UNIMPLEMENTED (diabaikan). */
   radioExtrasRead(): Promise<{ items: NativeRadioExtra[] }>
   /** Kosongkan daftar tambahan radio setelah masuk antrean JS. */

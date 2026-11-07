@@ -16,6 +16,10 @@ type FrameListener = (progress: number) => void
 const OMEGA = 16
 /** Batas aman: animasi dipaksa selesai (mis. tab di latar belakang sehingga rAF berhenti). */
 const MAX_SECONDS = 1.6
+/** Selisih antar frame (ms) di awal gerakan yang dianggap macet (bukan frame biasa 16-33 ms). */
+const FIRST_FRAME_STALL_MS = 40
+/** Berapa frame pertama yang diawasi untuk macet awal. */
+const WARM_FRAMES = 4
 
 const frameListeners = new Set<FrameListener>()
 const holdListeners = new Set<() => void>()
@@ -31,6 +35,9 @@ interface Spring {
   from: number
   velocity: number
   startedAt: number
+  /** Timestamp frame sebelumnya dan sisa frame awal yang diawasi (lihat `tick`). */
+  last: number
+  warm: number
   done: Array<() => void>
 }
 let spring: Spring | null = null
@@ -60,7 +67,15 @@ function finish() {
 function tick(now: number) {
   const current = spring
   if (!current) return
-  if (current.startedAt < 0) current.startedAt = now
+  if (current.startedAt < 0) {
+    current.startedAt = now
+  } else if (current.warm > 0) {
+    current.warm -= 1
+    // Frame awal yang sangat lama (komponen berat baru dipasang / gambar didekode): jam dimulai ulang. Tanpa ini pegas
+    // yang berbasis waktu melompati bagian awal gerakan dan terlihat patah-patah tepat saat mulai.
+    if (now - current.last > FIRST_FRAME_STALL_MS) current.startedAt = now
+  }
+  current.last = now
   const t = Math.min((now - current.startedAt) / 1000, MAX_SECONDS)
   // Pegas teredam kritis, bentuk tertutup: stabil di frame rate berapa pun dan tidak bergantung pada jumlah frame yang terlewat.
   const a = current.from - current.target
@@ -139,11 +154,11 @@ export function animateSheet(target: 0 | 1, velocity?: number, onSettled?: () =>
   stopSheetAnimation()
   const done = onSettled ? [onSettled] : []
   if (reducedMotion() || (Math.abs(progress - target) < 0.0015 && Math.abs(velocity ?? 0) < 0.03)) {
-    spring = { target, from: progress, velocity: 0, startedAt: 0, done }
+    spring = { target, from: progress, velocity: 0, startedAt: 0, last: 0, warm: 0, done }
     finish()
     return
   }
-  spring = { target, from: progress, velocity: velocity ?? 0, startedAt: -1, done }
+  spring = { target, from: progress, velocity: velocity ?? 0, startedAt: -1, last: 0, warm: WARM_FRAMES, done }
   raf = window.requestAnimationFrame(tick)
   // rAF berhenti di tab latar belakang: pengaman supaya penutup tetap melepas komponen.
   safetyTimer = window.setTimeout(finish, MAX_SECONDS * 1000 + 200)

@@ -2,8 +2,11 @@ import { ListMusic, Search, SearchX, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
+import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useOfflineBlock } from '../../hooks/useOfflineBlock'
 import { useTrackSwipe } from '../../hooks/useTrackSwipe'
+import { buildPlaylistMembership } from '../../utils/playlistMembership'
+import { makeSongMatcher, type SongRef } from '../../utils/sameSong'
 import { buildSearchIndex, filterSearchIndex } from '../../utils/trackSearch'
 import EmptyState from '../ui/EmptyState'
 import TrackRow, { TRACK_GRID } from './TrackRow'
@@ -13,8 +16,8 @@ interface TrackListProps {
   tracks: PlaylistTrack[]
   /** Menerima lagu dan posisi aslinya di `tracks` (aman dipakai sebagai indeks queue). */
   onPlay: PlayTrackHandler
-  /** ID lagu yang sedang aktif di pemutar (atau null). */
-  playingTrackId?: string | null
+  /** Lagu yang sedang aktif di pemutar (atau null). Dikenali juga bila lagu yang sama datang dari daftar/sumber lain. */
+  playingTrack?: SongRef | null
   /** Status playback untuk lagu aktif tersebut. */
   playbackActivity?: RowActivity
   /**
@@ -41,7 +44,7 @@ interface TrackListProps {
 export default function TrackList({
   tracks,
   onPlay,
-  playingTrackId = null,
+  playingTrack = null,
   playbackActivity = 'none',
   query: controlledQuery,
   onQueryChange,
@@ -58,6 +61,10 @@ export default function TrackList({
     [controlled, onQueryChange],
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const isPlayingRow = useMemo(() => makeSongMatcher(tracks, playingTrack), [tracks, playingTrack])
+  // "Sudah ada di playlist ..." untuk semua daftar (Cari, album, lagu artis, playlist): ikut berubah saat playlist diubah / diganti nama.
+  const { playlists: myPlaylists } = useMyPlaylists()
+  const playlistsOf = useMemo(() => buildPlaylistMembership(myPlaylists), [myPlaylists])
 
   // Simpan callback terbaru di ref agar baris tidak dirender ulang tiap parent render.
   const onPlayRef = useRef(onPlay)
@@ -162,12 +169,13 @@ export default function TrackList({
                 track={track}
                 index={index}
                 selected={track.id === selectedId}
-                activity={track.id === playingTrackId ? playbackActivity : 'none'}
+                activity={isPlayingRow(track) ? playbackActivity : 'none'}
                 onSelect={setSelectedId}
                 onPlay={handlePlay}
                 fromSearch={searchable}
                 locked={isLocked?.(track) ?? false}
                 offlineBlocked={offlineBlocked(track)}
+                playlistNames={playlistsOf(track).join('\u0001')}
               />
             ))}
           </ul>

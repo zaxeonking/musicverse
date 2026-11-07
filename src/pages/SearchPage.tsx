@@ -101,7 +101,7 @@ export default function SearchPage() {
           emptyState={emptyState}
           searchable
           onPlay={player.selectTrack}
-          playingTrackId={player.currentTrack?.id ?? null}
+          playingTrack={player.currentTrack}
           playbackActivity={getRowActivity(player.status)}
         />
       </section>

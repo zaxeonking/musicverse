@@ -1,5 +1,5 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
-import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Maximize2, Mic2, Minimize2, MoreVertical } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
@@ -145,6 +145,12 @@ export default function FullPlayer({
   const [bgFailed, setBgFailed] = useState(false)
   // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
   const [showLyrics, setShowLyrics] = useState(false)
+  // Lirik layar penuh: header, tombol transport, dan bar antrean disembunyikan; tersisa judul ringkas + bilah posisi.
+  const [lyricsFull, setLyricsFull] = useState(false)
+  const lyricsFullActive = showLyrics && lyricsFull
+  useEffect(() => {
+    if (!showLyrics) setLyricsFull(false)
+  }, [showLyrics])
   // Ukuran sampul diukur dari ruang yang tersisa di slot tengah supaya seluruh pemutar muat satu layar tanpa scroll.
   const slotRef = useRef<HTMLDivElement>(null)
   const hasTrack = Boolean(now && currentTrack)
@@ -225,8 +231,9 @@ export default function FullPlayer({
     if (!dialog) return
     const y = (1 - p) * getSheetTravel()
     dialog.style.transform = p >= 1 ? '' : `translate3d(0, ${y}px, 0)`
-    // Sudut atas membulat selama lapisan bergerak, menyatu ke persegi penuh saat tiba di atas.
-    const radius = p >= 1 ? 0 : Math.round(SHEET_RADIUS * clamp01((1 - p) * 8))
+    // Sudut atas membulat selama lapisan bergerak dan baru mengecil di 3% terakhir. Radius yang berubah tiap frame pada lapisan
+    // layar penuh (overflow-hidden) memaksa topeng digambar ulang terus; dibuat tetap supaya hanya transform yang bergerak.
+    const radius = p >= 1 ? 0 : p >= 0.97 ? Math.round((SHEET_RADIUS * (1 - p)) / 0.03) : SHEET_RADIUS
     dialog.style.borderRadius = radius > 0 ? `${radius}px ${radius}px 0 0` : ''
     if (bgRef.current) bgRef.current.style.opacity = p >= BG_FADE ? '' : String(p / BG_FADE)
 
@@ -247,8 +254,8 @@ export default function FullPlayer({
       const top = mini.top + (full.top - mini.top) * p
       // Posisi layar yang diinginkan dikurangi posisi layar akibat dialog yang bergeser = transform lokal sampul.
       cover.style.transform = p >= 1 ? '' : `translate3d(${left - full.left}px, ${top - (full.top + y)}px, 0) scale(${scale})`
-      // Skala ikut mengecilkan sudut, jadi radius dibagi skala supaya TAMPAK berubah mulus dari kecil ke besar.
-      cover.style.borderRadius = p >= 1 ? '' : `${(geo.rMini + (geo.rFull - geo.rMini) * p) / scale}px`
+      // Radius tetap (kelas bawaan): mengubahnya tiap frame menggambar ulang sampul + bayangan besar. Sudut tampak ikut
+      // membesar bersama skala, cukup dekat dengan sudut sampul mini.
       cover.style.opacity = geo.fade && p < BG_FADE ? String(p / BG_FADE) : ''
       if (slotRef.current) slotRef.current.style.opacity = ''
     } else if (slotRef.current) {
@@ -505,8 +512,10 @@ export default function FullPlayer({
             src={now.coverSrc}
             alt=""
             onError={() => setBgFailed(true)}
-            className="absolute inset-0 h-full w-full scale-150 object-cover opacity-60"
-            style={{ filter: 'blur(36px) saturate(1.3)' }}
+            // Diburamkan pada seperempat ukuran lalu diperbesar 6x (efek sama, ~16x lebih sedikit piksel yang diburamkan):
+            // blur layar penuh adalah pekerjaan GPU terberat saat pemutar penuh baru terpasang.
+            className="absolute -left-1/4 -top-1/4 h-1/4 w-1/4 origin-top-left object-cover opacity-60"
+            style={{ transform: 'scale(6)', filter: 'blur(9px) saturate(1.3)' }}
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/55 to-[#0b080c]" />
@@ -516,7 +525,8 @@ export default function FullPlayer({
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
-      <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pb-2 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'pb-2'} pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]`}>
+        {!lyricsFullActive && (
         <header className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
@@ -541,6 +551,7 @@ export default function FullPlayer({
             <MoreVertical className="h-6 w-6" aria-hidden="true" />
           </button>
         </header>
+        )}
 
         {/* Slot tengah: sampul, atau (saat lirik dibuka) lirik tanpa latar, lebih lebar dan tinggi. */}
         <div ref={slotRef} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="flex min-h-0 flex-1 items-center justify-center py-2">
@@ -563,11 +574,23 @@ export default function FullPlayer({
         <div className="space-y-3">
           <div className="fp-item flex items-start gap-3">
             <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
-              <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
+              <h2 title={now.title} className={`break-words font-display font-bold leading-tight text-ink ${lyricsFullActive ? 'line-clamp-1 text-lg' : 'line-clamp-2 text-[1.65rem]'}`}>
                 {now.title}
               </h2>
-              <MarqueeText text={now.artists} className="mt-1 text-base font-medium uppercase tracking-wide text-ink-muted" />
+              <MarqueeText text={now.artists} className={`font-medium uppercase tracking-wide text-ink-muted ${lyricsFullActive ? 'mt-0.5 text-xs' : 'mt-1 text-base'}`} />
             </div>
+            {showLyrics && (
+              <button
+                type="button"
+                onClick={() => setLyricsFull((value) => !value)}
+                aria-pressed={lyricsFull}
+                aria-label={lyricsFull ? 'Keluar dari lirik layar penuh' : 'Lirik layar penuh'}
+                title={lyricsFull ? 'Keluar dari layar penuh' : 'Lirik layar penuh'}
+                className={`${iconBtn} text-ink hover:text-accent`}
+              >
+                {lyricsFull ? <Minimize2 className="h-6 w-6" aria-hidden="true" /> : <Maximize2 className="h-6 w-6" aria-hidden="true" />}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -598,6 +621,7 @@ export default function FullPlayer({
           </div>
 
           {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
+          {!lyricsFullActive && (
           <div className="fp-item">
             <TransportControls
               size="xl"
@@ -610,9 +634,11 @@ export default function FullPlayer({
               trailing={<ShuffleButton size="lg" className="flex" />}
             />
           </div>
+          )}
 
           {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
               putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
+          {!lyricsFullActive && (
           <div className="fp-item">
           {(() => {
             const lyricsBtn = (
@@ -652,6 +678,7 @@ export default function FullPlayer({
             )
           })()}
           </div>
+          )}
           {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
           {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
 
@@ -665,7 +692,7 @@ export default function FullPlayer({
             </div>
           )}
 
-          {mismatch && playbackInfo && (
+          {mismatch && playbackInfo && !lyricsFullActive && (
             <p className="text-center text-xs text-ink-muted">
               {playbackInfo.manualPick ? 'Memutar pilihan manualmu' : 'Audio yang ditemukan server berbeda dari lagu yang dipilih'}: {playbackInfo.title}
               {playbackInfo.artist ? ` — ${playbackInfo.artist}` : ''}.
@@ -675,6 +702,7 @@ export default function FullPlayer({
       </div>
 
       {/* Bar "Berikutnya": membuka antrean (seperti handle sheet di pemutar referensi). */}
+      {!lyricsFullActive && (
       <button
         type="button"
         data-tour="queue-bar"
@@ -686,6 +714,7 @@ export default function FullPlayer({
         Berikutnya
         <ChevronUp className="h-5 w-5" aria-hidden="true" />
       </button>
+      )}
     </div>
   )
 }
