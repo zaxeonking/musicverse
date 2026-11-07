@@ -362,6 +362,7 @@ export async function resolveViaPluginsDetailed(
               probedDuration: actual,
               directUrl: stream.url,
               directUserAgent: stream.headers?.['User-Agent'],
+              loudnessDb: stream.loudnessDb,
             }
             if (strict) {
               const problem = strictProblem(wanted, info, actual, expected)
@@ -535,6 +536,7 @@ export async function resolveManualPick(
         probedDuration: actual ?? undefined,
         directUrl: stream.url,
         directUserAgent: stream.headers?.['User-Agent'],
+        loudnessDb: stream.loudnessDb,
         manualPick: true,
       }
       // Durasi tidak dibandingkan dengan apa pun: terbaca = langsung dipakai.

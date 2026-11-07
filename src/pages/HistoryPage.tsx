@@ -1,4 +1,4 @@
-import { ArrowLeft, History, Play } from 'lucide-react'
+import { ArrowLeft, BarChart3, History, Play } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
@@ -75,6 +75,12 @@ export default function HistoryPage() {
         <p className="mt-1 text-sm text-ink-muted">
           {stats.total} putaran · {stats.unique} lagu berbeda
         </p>
+        {log.length > 0 && (
+          <Link to="/history/recap" className="btn-secondary mt-3 inline-flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            Rangkuman
+          </Link>
+        )}
       </header>
 
       {log.length === 0 ? (

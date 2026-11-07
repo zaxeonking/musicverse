@@ -1,6 +1,6 @@
-import { ChevronRight, CircleHelp, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Award, ChevronRight, CircleHelp, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
-import { startTour } from '../tour/tourStore'
+import { isQuizPassed, startTour } from '../tour/tourStore'
 import { isNativeApp } from '../native/platform'
 
 interface Category {
@@ -32,9 +32,12 @@ export default function SettingsPage() {
   return (
     <section aria-label="Pengaturan" className="px-4 pb-8 pt-2">
       <h1 className="mb-4 text-3xl font-extrabold text-ink">Pengaturan</h1>
-      <CategoryList items={CATEGORIES} />
+      <div data-tour="settings-list">
+        <CategoryList items={CATEGORIES} />
+      </div>
       <button
         type="button"
+        data-tour="tutorial-btn"
         onClick={startTour}
         className="mt-2 flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 text-left text-ink focus-ring"
       >
@@ -42,6 +45,12 @@ export default function SettingsPage() {
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">Tutorial</span>
           <span className="block text-xs text-ink-muted">Ulangi panduan penggunaan aplikasi</span>
+          {isQuizPassed() && (
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
+              <Award className="h-3.5 w-3.5" aria-hidden="true" />
+              Lulus tutorial
+            </span>
+          )}
         </span>
         <ChevronRight className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
       </button>

@@ -108,6 +108,8 @@ export interface PlaybackInfo {
    */
   directUrl?: string
   directUserAgent?: string
+  /** Kekerasan lagu (dB relatif acuan YouTube, positif = lebih keras). Dipakai normalisasi volume; kosong = tidak diketahui. */
+  loudnessDb?: number
   /** Durasi (detik) yang terbaca dari metadata audio sebelum diunduh/diputar; dipakai mencocokkan ulang dengan berkas hasil unduhan. */
   probedDuration?: number
   /**

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { LyricsState } from '../../hooks/useLyrics'
 import type { LyricsResult } from '../../services/lyricsApi'
-import { estimateActive, useLyricTiming, type LyricItem as Item } from '../../hooks/useLyricTiming'
+import { estimateActive, LEAD_S, useLyricTiming, type LyricItem as Item } from '../../hooks/useLyricTiming'
+import { audioEngine } from '../../services/audioEngine'
 import { useLongPress } from '../../hooks/useLongPress'
 import { removeKey, writeJson } from '../../utils/safeStorage'
 
@@ -57,8 +58,85 @@ export default function LyricsPanel({ state, onRetry, trackKey }: LyricsPanelPro
   return <SyncedLyrics result={result} trackKey={trackKey} />
 }
 
+/** Info untuk efek karaoke (isi per baris): cara mengubah waktu audio menjadi waktu lirik. */
+interface FillTiming {
+  mode: 'exact' | 'scaled' | 'estimated'
+  ratio: number
+  offset: number
+}
+
+/** Baris isi terlama dianggap sepanjang ini bila baris berikutnya jauh (jeda instrumental). */
+const FILL_MAX_S = 7
+const FILL_MIN_S = 0.6
+
+/**
+ * Teks baris aktif yang "terisi" dari kiri ke kanan mengikuti lagu. Lebar isi dihitung dari posisi audio langsung
+ * tiap frame dan ditulis lewat variabel CSS, tanpa render ulang React. Mati bila gerak dikurangi atau waktu hanya perkiraan.
+ */
+function FilledText({ text, start, end, timing }: { text: string; start: number; end: number; timing: FillTiming }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const { status } = useAudioPlayer()
+  const playing = status === 'playing'
+  const animate = timing.mode !== 'estimated' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const span = Math.min(FILL_MAX_S, Math.max(FILL_MIN_S, end - start))
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return undefined
+    if (!animate) {
+      node.style.setProperty('--fill', '100%')
+      return undefined
+    }
+    const paint = () => {
+      const live = audioEngine.getLiveTime()
+      if (live === null) return
+      const lyricTime = (timing.mode === 'scaled' ? live / timing.ratio : live) + timing.offset + LEAD_S
+      const p = Math.min(1, Math.max(0, (lyricTime - start) / span))
+      node.style.setProperty('--fill', `${(p * 100).toFixed(1)}%`)
+    }
+    paint()
+    if (!playing) return undefined
+    let frame = 0
+    const tick = () => {
+      paint()
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [animate, playing, start, span, timing.mode, timing.ratio, timing.offset])
+
+  return (
+    <span
+      ref={ref}
+      style={{
+        backgroundImage: 'linear-gradient(90deg, #fff var(--fill, 0%), rgba(255,255,255,0.45) var(--fill, 0%))',
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+      }}
+    >
+      {text}
+    </span>
+  )
+}
+
 /** Satu baris lirik. Tahan lama = "baris ini yang sedang dinyanyikan sekarang" (penyelarasan manual). */
-function Row({ item, state, onSeek, onCalibrate, index }: { item: Item; state: 'active' | 'past' | 'next'; onSeek?: (time: number) => void; onCalibrate?: (item: Item) => void; index: number }) {
+function Row({
+  item,
+  state,
+  onSeek,
+  onCalibrate,
+  index,
+  fill,
+}: {
+  item: Item
+  state: 'active' | 'past' | 'next'
+  onSeek?: (time: number) => void
+  onCalibrate?: (item: Item) => void
+  index: number
+  /** Hanya untuk baris aktif bertext pada lirik berwaktu: isi karaoke. */
+  fill?: { start: number; end: number; timing: FillTiming }
+}) {
   const handlers = useLongPress(() => {
     if (onCalibrate && item.time !== undefined) onCalibrate(item)
   })
@@ -66,6 +144,7 @@ function Row({ item, state, onSeek, onCalibrate, index }: { item: Item; state: '
     state === 'active' ? 'scale-105 text-ink' : state === 'past' ? 'text-white/30' : 'text-white/50'
   }`
   const text = item.text || '♪'
+  const content = fill && state === 'active' && item.text ? <FilledText text={text} start={fill.start} end={fill.end} timing={fill.timing} /> : text
   const common = {
     'data-line': index,
     'aria-current': state === 'active' ? ('true' as const) : undefined,
@@ -73,11 +152,11 @@ function Row({ item, state, onSeek, onCalibrate, index }: { item: Item; state: '
   }
   return onSeek && item.time !== undefined ? (
     <button type="button" {...common} onClick={() => onSeek(item.time as number)} className={`${className} focus-ring`}>
-      {text}
+      {content}
     </button>
   ) : (
     <p {...common} className={className}>
-      {text}
+      {content}
     </p>
   )
 }
@@ -89,12 +168,14 @@ function LineList({
   onSeek,
   onCalibrate,
   header,
+  timing,
 }: {
   items: Item[]
   active: number
   onSeek?: (time: number) => void
   onCalibrate?: (item: Item) => void
   header?: ReactNode
+  timing?: FillTiming
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -119,7 +200,19 @@ function LineList({
         className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-[18dvh] text-center [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, i) => (
-          <Row key={i} index={i} item={item} state={i === active ? 'active' : i < active ? 'past' : 'next'} onSeek={onSeek} onCalibrate={onCalibrate} />
+          <Row
+            key={i}
+            index={i}
+            item={item}
+            state={i === active ? 'active' : i < active ? 'past' : 'next'}
+            onSeek={onSeek}
+            onCalibrate={onCalibrate}
+            fill={
+              timing && i === active && item.time !== undefined
+                ? { start: item.time, end: items[i + 1]?.time ?? item.time + FILL_MAX_S, timing }
+                : undefined
+            }
+          />
         ))}
         <p className="pt-6 text-[11px] text-ink-faint">Lirik dari LRCLIB / NetEase</p>
       </div>
@@ -181,5 +274,5 @@ function SyncedLyrics({ result, trackKey }: { result: Extract<LyricsResult, { ki
   // Loncat ke baris hanya akurat pada mode berwaktu; waktu lirik dikonversi balik ke waktu audio.
   const onSeek = seekable && mode !== 'estimated' ? (time: number) => seekTo(Math.max(0, (time - offset) * (mode === 'scaled' ? ratio : 1))) : undefined
 
-  return <LineList items={items} active={active} onSeek={onSeek} onCalibrate={onCalibrate} header={header} />
+  return <LineList items={items} active={active} onSeek={onSeek} onCalibrate={onCalibrate} header={header} timing={{ mode, ratio, offset }} />
 }

@@ -139,3 +139,16 @@ export function useCoverGlow(src: string | undefined, fallbackHex?: string): str
 
   return color.join(',')
 }
+
+/**
+ * Versi non-hook dari `useCoverGlow` ("r,g,b"): dipakai di luar komponen, mis. kartu bagikan.
+ * Memakai cache yang sama; gagal baca sampul = warna gradien bawaan, lalu hijau aplikasi.
+ */
+export async function resolveCoverGlow(src: string | undefined, fallbackHex?: string): Promise<string> {
+  const fallback = vivid(hexToRgb(fallbackHex) ?? ACCENT_RGB)
+  if (!src || !isSafeHttpUrl(src)) return fallback.join(',')
+  const cached = cache.get(src)
+  if (cached) return cached.join(',')
+  const picked = await readCoverColor(src)
+  return (picked ? vivid(picked) : fallback).join(',')
+}

@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, History, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, Gauge, History, Radio, Share2, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { writeClipboardText } from '../../native/clipboard'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
@@ -24,6 +24,10 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import PlaylistTransferPanel from '../library/PlaylistTransferPanel'
 import AddToPlaylistPicker from './AddToPlaylistPicker'
 import Action from './SheetAction'
+import SpeedSheet from './SpeedSheet'
+import { beginRadio, markRadioTracks } from '../../services/radio'
+import { shareNowPlayingCard } from '../../utils/shareCard'
+import { speedLabel, usePlaybackSpeed } from '../../services/playbackSpeed'
 import OverlayPortal from '../ui/OverlayPortal'
 
 const FOCUS = 'focus-ring'
@@ -58,6 +62,9 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   useOverlayHistory(true, onClose)
   const sheetRef = useRef<HTMLDivElement>(null)
   const [picking, setPicking] = useState(false)
+  const [speedOpen, setSpeedOpen] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const speed = usePlaybackSpeed()
   // Lagu ini pernah dipilih sumbernya secara manual (Cari manual): tampilkan opsi untuk melepasnya.
   const [pinned] = useState(() => getManualPin(track) !== null)
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
@@ -300,6 +307,43 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                   onClick={releaseManualPin}
                 />
               )}
+              <Action
+                icon={Radio}
+                label="Mulai radio dari lagu ini"
+                hint="Lagu ini diputar, lalu dilanjut lagu mirip (artis sama dan serupa). Antrean diganti."
+                onClick={() => {
+                  // Lagu mirip ditambahkan oleh AutoRadioSync begitu lagu ini mulai diputar (antrean hanya berisi lagu ini).
+                  beginRadio(track)
+                  markRadioTracks([track])
+                  player.playAll([track])
+                  onToast('Radio dimulai, mencari lagu mirip…')
+                  onClose()
+                }}
+              />
+              {place === 'player' && (
+                <Action
+                  icon={Share2}
+                  label={sharing ? 'Membuat kartu…' : 'Bagikan kartu lagu'}
+                  hint="Gambar sampul, judul, dan warna aksen untuk status atau story"
+                  disabled={sharing}
+                  onClick={() => {
+                    setSharing(true)
+                    void shareNowPlayingCard(track).then((result) => {
+                      setSharing(false)
+                      if (result.message) onToast(result.message)
+                      if (result.ok) onClose()
+                    })
+                  }}
+                />
+              )}
+              {place === 'player' && (
+                <Action
+                  icon={Gauge}
+                  label={`Kecepatan putar (${speedLabel(speed)})`}
+                  hint="Nada tetap, berlaku untuk semua lagu"
+                  onClick={() => setSpeedOpen(true)}
+                />
+              )}
               {place === 'history' && historyAt !== undefined && (
                 <Action icon={History} label="Hapus dari riwayat" hint="Hanya entri putar ini" onClick={removeFromHistory} danger />
               )}
@@ -341,6 +385,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
           </>
         )}
       </div>
+      {speedOpen && <SpeedSheet onClose={() => setSpeedOpen(false)} />}
     </OverlayPortal>
   )
 }

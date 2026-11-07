@@ -278,14 +278,14 @@ export default function DownloadsSection() {
 
   return (
     <section aria-label="Unduhan">
-      <header className="mb-4">
+      <header data-tour="downloads-header" className="mb-4">
         <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Unduhan</h1>
         <p className="mt-1 text-ink-muted">
           {items.length > 0 ? `${items.length} lagu · ${formatBytes(totalBytes(items))} · bisa diputar offline` : 'Lagu yang disimpan untuk diputar offline'}
         </p>
       </header>
 
-      <Link to="/settings/downloads" className="mb-3 flex items-center gap-2 rounded-lg bg-card px-4 py-2.5 text-xs text-ink-muted focus-ring">
+      <Link to="/settings/downloads" data-tour="downloads-settings" className="mb-3 flex items-center gap-2 rounded-lg bg-card px-4 py-2.5 text-xs text-ink-muted focus-ring">
         <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">
           Pengaturan unduhan: {wifiOnly || chargingOnly ? [wifiOnly && 'hanya Wi-Fi', chargingOnly && 'hanya saat dicas'].filter(Boolean).join(', ') : 'tanpa syarat'}

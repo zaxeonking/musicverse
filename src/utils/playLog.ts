@@ -8,7 +8,7 @@ import { readJson, removeKey, writeJson } from './safeStorage'
  */
 
 const KEY = 'musicverse:play-log:v1'
-export const MAX_LOG = 500
+export const MAX_LOG = 1500
 /** Entri yang sama berturut-turut dalam rentang ini dianggap satu pemutaran (mis. lanjut setelah jeda). */
 const DEDUPE_MS = 30_000
 

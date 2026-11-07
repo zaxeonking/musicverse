@@ -15,3 +15,20 @@
 ## Rilis otomatis: deskripsi dari CHANGES
 - `.github/workflows/apk.yml`: deskripsi GitHub Release sekarang diambil dari `CHANGES-<versi>.md` versi saat ini (versi dari `appVersion`, mis. `CHANGES-0.5.38.5.md` untuk tag `v0.5.38.5`). Sebelumnya rilis dibuat dengan catatan kosong. Bila rilis sudah ada (build ulang tag yang sama), APK diganti dan deskripsinya ikut diperbarui. Bila berkasnya tidak ada, rilis tetap dibuat tanpa deskripsi dan ada peringatan di log. Penamaan berkas harus persis `CHANGES-<appVersion>.md`.
 - Halaman Pembaruan di app menampilkan deskripsi itu apa adanya (teks mentah, tanda `#` dan `**` ikut terlihat); di GitHub tampil terformat.
+## Pembaruan tutorial (perbaikan + langkah baru)
+- **Perbaikan:** mengetuk tab yang disorot (mis. Playlist) tidak sampai ke tab karena wadah tutorial menangkap semua sentuhan. Wadah luar sekarang `pointer-events-none`; hanya penghalang, lubang sorotan, dan kartu yang menangkap sentuhan.
+- **Langkah baru (tutorial utama jadi 18 langkah, 15 di web; lihat bagian berikutnya untuk jumlah terbaru):** Cari lagu atau artis (chip Lagu/Artis), Simpan ke playlist (latihan tahan baris lalu pilih playlist), Sukai lagu (latihan ketuk hati), Salin/pindah/perbarui playlist, Pengaturan (ketuk gerigi) dan isi Pengaturan (APK), Sleep timer, Lirik, dan Antrean (pemutar penuh dibuka otomatis bila ada lagu diputar, ditutup lagi oleh tutorial; tanpa lagu tampil kartu penjelasan di tengah).
+- **Lanjut dari langkah terakhir:** bila aplikasi ditutup di tengah tutorial, saat dibuka lagi tutorial lanjut dari langkah itu. Tombol Tutorial di Pengaturan/sidebar tetap mulai dari awal. Lewati = tidak muncul lagi.
+- **Tur kecil per halaman:** Playlist dan Unduhan (APK) masing-masing 2 langkah, muncul sekali saat halamannya pertama dibuka, hanya bila tutorial utama sudah selesai atau dilewati dan halaman itu belum dikunjungi lewat tutorial utama.
+- **Konfeti** di langkah Selesai (dimatikan bila pengguna memilih kurangi gerakan).
+- Versi penanda dinaikkan ke `mv:tour:v2`, jadi semua pengguna melihat tutorial baru sekali.
+- `data-tour` baru: `search-mode`, `settings-btn` (berbagi dengan `tour-restart`, penyorot kini mencocokkan nama per kata), `settings-list`, `sleep-timer`, `lyrics-btn`, `queue-bar`, `downloads-header`, `downloads-settings`.
+- Belum dibuild atau diuji di perangkat (dependensi tidak terpasang di sini); hanya dicek sintaksnya.
+## Tutorial: latihan pilih banyak lagu, kuis, dan tur "Yang baru"
+- **Latihan pilih banyak lagu** (langkah baru setelah geser playlist): baris contoh dengan tombol Pilih lagu, centang beberapa lagu, Pilih semua / Batal pilih, lalu Salin atau Pindahkan (contoh, data tidak berubah). Hapus menjelaskan bahwa selalu ada konfirmasi.
+- **Kuis kilat** (sebelum Selesai): 3 pertanyaan pilihan ganda tentang gestur dan lokasi Lagu Disukai. Jawaban salah boleh dicoba lagi. Lulus menyimpan lencana (`mv:tour:v2:quiz`) yang tampil sebagai **Lulus tutorial** di kartu Tutorial pada Pengaturan. Melewati kuis lewat Lanjut tetap menamatkan tutorial tanpa lencana.
+- **Tur "Yang baru"** (`WHATS_NEW` di `tour/steps.ts`): 1 sampai 2 langkah per rilis, muncul sekali di Beranda sekitar 2 detik setelah dibuka, hanya untuk pengguna yang tutorial utamanya sudah selesai atau dilewati di sesi sebelumnya. Penanda per rilis: `mv:tour:whatsnew:<id>`. Menambah fitur baru cukup menambah satu entri di akhir daftar, tanpa menaikkan versi tutorial utama. Rilis yang terlewat digabung (paling banyak 4 langkah terbaru).
+- Pengguna yang menamatkan tutorial utama sampai **Selesai** dianggap sudah melihat semua entri "Yang baru". Yang menekan **Lewati** tidak: "Yang baru" muncul di pembukaan berikutnya, tidak langsung di sesi yang sama.
+- Tutorial utama sekarang 20 langkah (17 di web).
+- `data-tour` baru: `tutorial-btn` (tombol Tutorial di Pengaturan).
+- Belum dibuild atau diuji di perangkat; hanya dicek sintaksnya.

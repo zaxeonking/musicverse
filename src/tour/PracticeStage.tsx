@@ -1,10 +1,11 @@
-import { Check, Download, FolderPlus, ListEnd } from 'lucide-react'
+import { ArrowRightLeft, Check, Copy, Download, FolderPlus, Heart, ListEnd, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import CoverArt from '../components/ui/CoverArt'
 import { useLongPress } from '../hooks/useLongPress'
 import { useSwipeSelect, type SwipeHint } from '../hooks/useSwipeSelect'
 import { fallbackCover } from '../utils/fallbackCover'
 import type { PracticeKind } from './steps'
+import { markQuizPassed } from './tourStore'
 
 interface PracticeStageProps {
   kind: PracticeKind
@@ -176,9 +177,332 @@ function SwipePlaylistPractice({ onComplete }: { onComplete: () => void }) {
   )
 }
 
+/** Tahan baris contoh, pilih "Simpan ke playlist saya", lalu pilih playlist tujuan: alur yang sama dengan menu lagu asli. */
+function SaveTrackPractice({ onComplete }: { onComplete: () => void }) {
+  const [stage, setStage] = useState<'idle' | 'menu' | 'picker' | 'saved'>('idle')
+  const complete = useLatest(onComplete)
+  const press = useLongPress(() => setStage((prev) => (prev === 'idle' ? 'menu' : prev)))
+
+  function save() {
+    setStage('saved')
+    complete.current()
+  }
+
+  return (
+    <div className="mt-3">
+      <ul>
+        <li
+          {...press}
+          className="flex select-none items-center gap-3 rounded-xl bg-raised px-2 py-2 [-webkit-touch-callout:none] active:bg-card"
+        >
+          <Cover name={SAMPLE} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-ink">{SAMPLE}</span>
+            <span className="block truncate text-xs text-ink-muted">Artis Contoh</span>
+          </span>
+        </li>
+      </ul>
+      {stage === 'menu' && (
+        <ul className="mt-2 animate-fade-in space-y-0.5 rounded-xl bg-bg px-2 py-2 text-sm text-ink">
+          <li className="flex items-center gap-3 px-2 py-1.5 text-ink-muted">
+            <ListEnd className="h-4 w-4" aria-hidden="true" />
+            Putar berikutnya
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => setStage('picker')}
+              className="flex w-full items-center gap-3 rounded-lg bg-accent/15 px-2 py-1.5 text-left font-semibold text-accent"
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden="true" />
+              Simpan ke playlist saya
+            </button>
+          </li>
+          <li className="flex items-center gap-3 px-2 py-1.5 text-ink-muted">
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Unduh untuk offline
+          </li>
+        </ul>
+      )}
+      {stage === 'picker' && (
+        <div className="mt-2 animate-fade-in rounded-xl bg-bg px-2 py-2 text-sm text-ink">
+          <p className="px-2 pb-1 text-xs font-semibold text-ink-muted">Simpan ke…</p>
+          <button
+            type="button"
+            onClick={save}
+            className="flex w-full items-center gap-3 rounded-lg bg-accent/15 px-2 py-1.5 text-left font-semibold text-accent"
+          >
+            <FolderPlus className="h-4 w-4" aria-hidden="true" />
+            Playlist Contoh · 12 lagu
+          </button>
+        </div>
+      )}
+      <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-ink-muted">
+        {stage === 'saved' ? 'Tersimpan ke Playlist Contoh (contoh)' : stage === 'idle' ? 'Tahan baris contoh sampai menu muncul.' : ''}
+      </p>
+    </div>
+  )
+}
+
+/** Ketuk hati pada pemutar contoh: lagu masuk ke Lagu Disukai (contoh, data asli tidak berubah). */
+function LikeTrackPractice({ onComplete }: { onComplete: () => void }) {
+  const [liked, setLiked] = useState(false)
+  const complete = useLatest(onComplete)
+
+  return (
+    <div className="mt-3">
+      <div className="flex select-none items-center gap-3 rounded-xl bg-raised px-2 py-2">
+        <Cover name={SAMPLE} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-ink">{SAMPLE}</span>
+          <span className="block truncate text-xs text-ink-muted">Artis Contoh</span>
+        </span>
+        <button
+          type="button"
+          aria-pressed={liked}
+          aria-label={liked ? 'Hapus dari Lagu Disukai (contoh)' : 'Sukai lagu contoh'}
+          onClick={() => {
+            const next = !liked
+            setLiked(next)
+            if (next) complete.current()
+          }}
+          className={`flex h-11 w-11 items-center justify-center rounded-full active:bg-white/10 ${liked ? 'text-accent' : 'text-ink'}`}
+        >
+          <Heart className={`h-6 w-6 transition-transform duration-200 ${liked ? 'scale-110' : ''}`} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
+        </button>
+      </div>
+      <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-ink-muted">
+        {liked ? 'Ditambahkan ke Lagu Disukai (contoh)' : ''}
+      </p>
+    </div>
+  )
+}
+
+const SELECT_SAMPLES = [
+  { title: 'Lagu Contoh 1', artist: 'Artis Contoh' },
+  { title: 'Lagu Contoh 2', artist: 'Artis Contoh' },
+  { title: 'Lagu Contoh 3', artist: 'Artis Lain' },
+] as const
+
+/** Mode pilih banyak lagu seperti di dalam playlist: tombol Pilih lagu, centang beberapa, lalu Salin / Pindahkan / Hapus (contoh). */
+function SelectTracksPractice({ onComplete }: { onComplete: () => void }) {
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<number>>(new Set<number>())
+  const [message, setMessage] = useState('')
+  const complete = useLatest(onComplete)
+  const count = selected.size
+  const allSelected = count === SELECT_SAMPLES.length
+
+  function toggle(index: number) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  function act(text: string, finish: boolean) {
+    setMessage(text)
+    if (finish) complete.current()
+  }
+
+  return (
+    <div className="mt-3">
+      {selecting ? (
+        <div role="region" aria-label="Mode pilih lagu (contoh)" className="rounded-lg bg-bg px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p role="status" className="min-w-0 flex-1 basis-20 text-sm font-semibold text-ink">
+              {count === 0 ? 'Pilih lagu' : `${count} dipilih`}
+            </p>
+            <button
+              type="button"
+              onClick={() => setSelected(allSelected ? new Set<number>() : new Set<number>(SELECT_SAMPLES.map((_, i) => i)))}
+              className="btn-secondary h-9 px-3 text-xs"
+            >
+              {allSelected ? 'Batal pilih' : 'Pilih semua'}
+            </button>
+            <div className="flex basis-full items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={count === 0}
+                onClick={() => act(`${count} lagu disalin (contoh)`, true)}
+                aria-label="Salin ke playlist lain"
+                className="icon-btn h-10 w-10 bg-raised disabled:opacity-40"
+              >
+                <Copy className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                disabled={count === 0}
+                onClick={() => act(`${count} lagu dipindahkan (contoh)`, true)}
+                aria-label="Pindahkan ke playlist lain"
+                className="icon-btn h-10 w-10 bg-raised disabled:opacity-40"
+              >
+                <ArrowRightLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                disabled={count === 0}
+                onClick={() => act('Menghapus selalu minta konfirmasi dulu, jadi aman.', false)}
+                aria-label="Hapus dari playlist"
+                className="icon-btn h-10 w-10 bg-raised text-danger disabled:opacity-40"
+              >
+                <Trash2 className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setSelecting(true)} className="btn-secondary h-10 px-4 text-sm">
+          Pilih lagu
+        </button>
+      )}
+      <ul className="mt-2 space-y-1">
+        {SELECT_SAMPLES.map((item, index) => {
+          const on = selected.has(index)
+          return (
+            <li key={item.title}>
+              <button
+                type="button"
+                disabled={!selecting}
+                aria-pressed={selecting ? on : undefined}
+                onClick={() => toggle(index)}
+                className={`flex w-full select-none items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors ${on ? 'bg-accent/10 ring-2 ring-accent' : 'bg-raised'}`}
+              >
+                {selecting && (
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                      on ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
+                    }`}
+                  >
+                    <Check className="h-4 w-4" strokeWidth={3} />
+                  </span>
+                )}
+                <Cover name={item.title} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-ink">{item.title}</span>
+                  <span className="block truncate text-xs text-ink-muted">{item.artist}</span>
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-ink-muted">
+        {message || (selecting ? 'Ketuk lagu untuk mencentang.' : 'Ketuk Pilih lagu untuk mulai.')}
+      </p>
+    </div>
+  )
+}
+
+interface QuizQuestion {
+  question: string
+  options: readonly string[]
+  /** Indeks jawaban benar. */
+  answer: number
+  /** Penjelasan singkat setelah dijawab benar. */
+  explain: string
+}
+
+const QUIZ: readonly QuizQuestion[] = [
+  {
+    question: 'Menggeser lagu ke kanan artinya?',
+    options: ['Tambah ke antrean', 'Sukai lagu', 'Hapus lagu'],
+    answer: 0,
+    explain: 'Kanan untuk antrean, kiri untuk suka.',
+  },
+  {
+    question: 'Bagaimana membuka menu sebuah lagu?',
+    options: ['Ketuk sekali', 'Tahan lama', 'Geser ke atas'],
+    answer: 1,
+    explain: 'Menahan lagu membuka menu di mana pun lagunya muncul.',
+  },
+  {
+    question: 'Lagu yang kamu sukai tersimpan di mana?',
+    options: ['Tab Unduhan', 'Riwayat putar', 'Lagu Disukai, di tab Playlist'],
+    answer: 2,
+    explain: 'Lagu Disukai selalu jadi kartu pertama di tab Playlist.',
+  },
+]
+
+/** Tiga pertanyaan pilihan ganda. Jawaban salah boleh dicoba lagi; lulus = lencana di Pengaturan. */
+function QuizPractice({ onComplete }: { onComplete: () => void }) {
+  const [step, setStep] = useState(0)
+  const [wrong, setWrong] = useState<ReadonlySet<number>>(new Set<number>())
+  const [correct, setCorrect] = useState(false)
+  const complete = useLatest(onComplete)
+  const timer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current)
+    },
+    [],
+  )
+  const item = QUIZ[Math.min(step, QUIZ.length - 1)]
+
+  function choose(index: number) {
+    if (correct) return
+    if (index !== item.answer) {
+      setWrong((prev) => new Set(prev).add(index))
+      return
+    }
+    setCorrect(true)
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      if (step + 1 < QUIZ.length) {
+        setStep(step + 1)
+        setWrong(new Set<number>())
+        setCorrect(false)
+      } else {
+        markQuizPassed()
+        complete.current()
+      }
+    }, 1100)
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="text-xs font-semibold text-ink-muted">
+        Pertanyaan {Math.min(step + 1, QUIZ.length)} / {QUIZ.length}
+      </p>
+      <p className="mt-1 text-sm font-semibold text-ink">{item.question}</p>
+      <ul className="mt-2 space-y-1.5">
+        {item.options.map((option, index) => {
+          const isWrong = wrong.has(index)
+          const isRight = correct && index === item.answer
+          return (
+            <li key={option}>
+              <button
+                type="button"
+                disabled={isWrong || correct}
+                onClick={() => choose(index)}
+                className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${
+                  isRight ? 'bg-accent/15 text-accent' : isWrong ? 'bg-raised text-ink-faint line-through' : 'bg-raised text-ink active:bg-card'
+                }`}
+              >
+                {isRight && <Check className="h-4 w-4 animate-pop" strokeWidth={3} aria-hidden="true" />}
+                {option}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-ink-muted">
+        {correct ? `Benar! ${item.explain}` : wrong.size > 0 ? 'Belum tepat, coba pilihan lain.' : ''}
+      </p>
+    </div>
+  )
+}
+
 /** Area latihan di dalam kartu tutorial: baris contoh yang benar-benar bisa digeser / ditahan (data pengguna tidak tersentuh). */
 export default function PracticeStage({ kind, onComplete }: PracticeStageProps) {
   if (kind === 'swipe-track') return <SwipeTrackPractice onComplete={onComplete} />
   if (kind === 'press-track') return <PressTrackPractice onComplete={onComplete} />
+  if (kind === 'save-track') return <SaveTrackPractice onComplete={onComplete} />
+  if (kind === 'like-track') return <LikeTrackPractice onComplete={onComplete} />
+  if (kind === 'select-tracks') return <SelectTracksPractice onComplete={onComplete} />
+  if (kind === 'quiz') return <QuizPractice onComplete={onComplete} />
   return <SwipePlaylistPractice onComplete={onComplete} />
 }

@@ -37,6 +37,7 @@ import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
+import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DefaultDataSource;
@@ -135,6 +136,38 @@ public class PlaybackService extends Service {
     else context.startService(intent);
   }
 
+  /** True bila service hidup dan belum dimatikan. Dipakai MediaSessionHolder / widget. */
+  static boolean isRunning() {
+    PlaybackService running = instance;
+    return running != null && !running.stopped;
+  }
+
+  /**
+   * Perintah dari widget: "previous" | "toggle" | "next" | "play" | "pause". Jalan di proses yang sama dengan service,
+   * jadi tanpa Intent. False = tidak ada service yang berjalan (pemanggil harus membuka aplikasi).
+   */
+  static boolean dispatch(String command) {
+    PlaybackService running = instance;
+    if (running == null || running.stopped) return false;
+    running.handler.post(() -> {
+      if (running.stopped) return;
+      String action = command;
+      if (action.equals("toggle")) action = running.current.playing ? "pause" : "play";
+      running.handleAction(action);
+    });
+    return true;
+  }
+
+  /** Widget baru ditambahkan saat memutar: dorong ulang keadaan sekarang. */
+  static void refreshWidget() {
+    PlaybackService running = instance;
+    if (running == null) return;
+    running.handler.post(() -> {
+      running.widgetKey = "";
+      running.notifyWidget();
+    });
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Mesin audio (ExoPlayer): API statis dipanggil plugin (thread lain); semuanya dilempar ke thread utama.
   // ---------------------------------------------------------------------------------------------
@@ -160,6 +193,8 @@ public class PlaybackService extends Service {
   private static volatile EngineListener engineListener;
   private static LoadRequest pendingLoad;
   private static volatile float engineVolume = 1f;
+  /** Kecepatan putar (nada tetap). Berlaku untuk pemutar aktif, cadangan, dan yang baru dibuat. */
+  private static volatile float engineSpeed = 1f;
   private static volatile boolean autoAdvance = false;
   /** Mode langsung (ExoPlayer ambil dari sumber tanpa proxy). Dari pengaturan; mati = selalu lewat StreamProxy. */
   private static volatile boolean directEnabled = false;
@@ -224,6 +259,19 @@ public class PlaybackService extends Service {
     engineVolume = Math.max(0f, Math.min(1f, volume));
     PlaybackService running = instance;
     if (running != null) running.handler.post(running::applyVolumes);
+  }
+
+  public static void engineSetSpeed(float speed) {
+    engineSpeed = Math.max(0.5f, Math.min(2f, speed));
+    PlaybackService running = instance;
+    if (running != null) running.handler.post(running::applySpeed);
+  }
+
+  void applySpeed() {
+    PlaybackParameters params = new PlaybackParameters(engineSpeed, 1f);
+    if (player != null) player.setPlaybackParameters(params);
+    if (standby != null) standby.setPlaybackParameters(params);
+    if (fading != null) fading.setPlaybackParameters(params);
   }
 
   /** Memuat lagu berikutnya di pemutar cadangan (tanpa memutar, senyap). Event `standby_ready` / `standby_error` ke JS. */
@@ -838,6 +886,7 @@ public class PlaybackService extends Service {
         .setHandleAudioBecomingNoisy(handleFocus)
         .setWakeMode(C.WAKE_MODE_NETWORK)
         .build();
+    p.setPlaybackParameters(new PlaybackParameters(engineSpeed, 1f));
     p.setSeekParameters(SeekParameters.CLOSEST_SYNC); // loncat ke titik sinkron terdekat: lebih cepat tanpa membaca mundur
     p.setTrackSelectionParameters(p.getTrackSelectionParameters().buildUpon()
         .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build());
@@ -978,6 +1027,9 @@ public class PlaybackService extends Service {
   private String metaKey = "";
   private Bitmap metaArt = null;
   private boolean foreground = false;
+  /** Sidik jari keadaan yang terakhir didorong ke widget layar utama; didorong ulang hanya bila berubah. */
+  private String widgetKey = "";
+  private Bitmap widgetCover = null;
   /** True setelah shutdown(): semua pembaruan yang masih antre (dari JS / ticker) diabaikan supaya notifikasi tidak muncul lagi. */
   private boolean stopped = false;
   /** True saat wake lock yang dipegang adalah yang berbatas waktu (menunggu putar-ulang setelah gangguan). */
@@ -1062,8 +1114,9 @@ public class PlaybackService extends Service {
               }
             });
     resumer.setEnabled(autoResumeEnabled);
-    session = new MediaSession(this, "MusicVerse");
-    session.setCallback(new MediaSession.Callback() {
+    // Sesi dipegang MediaSessionHolder (bersama AutoBrowserService / Android Auto). Callback bawaannya juga menangani
+    // putar-dari-id-lagu dan pencarian suara; di sini hanya tombol transport yang diganti dengan logika service.
+    session = MediaSessionHolder.attach(this, new MediaSessionHolder.BaseCallback(this) {
       @Override public void onPlay() { handleAction("play"); }
       @Override public void onPause() { handleAction("pause"); }
       @Override public void onStop() { emit("stop", -1); }
@@ -1071,7 +1124,6 @@ public class PlaybackService extends Service {
       @Override public void onSkipToPrevious() { handleAction("previous"); }
       @Override public void onSeekTo(long pos) { emit("seek", pos); }
     });
-    session.setActive(true);
     PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
     if (pm != null) {
       wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MusicVerse:playback");
@@ -1381,10 +1433,11 @@ public class PlaybackService extends Service {
     if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     releasePlayer();
     if (session != null) {
-      session.setActive(false);
-      session.release();
+      // Sesi tidak dilepas (milik MediaSessionHolder): kembali ke keadaan siap untuk Android Auto.
+      MediaSessionHolder.detach(this);
       session = null;
     }
+    MusicVerseWidget.pushIdle(this);
     super.onDestroy();
   }
 
@@ -1422,6 +1475,7 @@ public class PlaybackService extends Service {
     if (next.cover != null) current.cover = next.cover;
 
     updateSession();
+    notifyWidget();
     handler.removeCallbacks(ticker);
     if (current.playing) handler.postDelayed(ticker, 1000);
     Notification notification = buildNotification();
@@ -1492,6 +1546,8 @@ public class PlaybackService extends Service {
     foreground = false;
     NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     if (nm != null) nm.cancel(NOTIFICATION_ID);
+    widgetKey = "";
+    MusicVerseWidget.pushIdle(this);
     stopSelf();
   }
 
@@ -1513,6 +1569,18 @@ public class PlaybackService extends Service {
       defaultCover = BitmapFactory.decodeResource(getResources(), R.drawable.notif_default_cover, options);
     }
     return defaultCover;
+  }
+
+  /** Dorong keadaan ke widget layar utama, hanya bila ada yang berubah (applyInternal dipanggil tiap ~2 dtk saat memutar). */
+  private void notifyWidget() {
+    if (stopped) return;
+    String key = current.title + "\u0001" + current.artist + "\u0001" + current.playing + current.loading
+        + current.hasNext + current.hasPrevious;
+    if (key.equals(widgetKey) && current.cover == widgetCover) return;
+    widgetKey = key;
+    widgetCover = current.cover;
+    MusicVerseWidget.push(this, current.title, current.artist, current.playing, current.loading,
+        current.hasNext, current.hasPrevious, current.cover);
   }
 
   private void updateSession() {
@@ -1553,7 +1621,8 @@ public class PlaybackService extends Service {
 
   private void pushPlaybackState() {
     if (session == null) return;
-    long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP;
+    long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP
+        | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID | PlaybackState.ACTION_PLAY_FROM_SEARCH;
     if (current.durationMs > 0) actions |= PlaybackState.ACTION_SEEK_TO;
     if (current.hasNext) actions |= PlaybackState.ACTION_SKIP_TO_NEXT;
     if (current.hasPrevious) actions |= PlaybackState.ACTION_SKIP_TO_PREVIOUS;

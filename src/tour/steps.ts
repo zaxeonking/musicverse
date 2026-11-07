@@ -1,7 +1,7 @@
 export type TourAnimation = 'swipe' | 'press' | 'tap'
 
 /** Latihan langsung di dalam kartu (baris contoh yang asli bisa digeser / ditahan, tanpa mengubah data pengguna). */
-export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist'
+export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist' | 'save-track' | 'like-track' | 'select-tracks' | 'quiz'
 
 export interface TourStep {
   id: string
@@ -23,8 +23,20 @@ export interface TourStep {
   practice?: PracticeKind
   /** Perintah singkat yang diminta dari pengguna (tampil sebagai label aksen di kartu). */
   task?: string
+  /** Buka pemutar penuh untuk langkah ini (bila ada lagu yang sedang diputar); ditutup lagi saat langkah berikutnya tidak memerlukannya. */
+  openPlayer?: boolean
   /** Hanya di APK. */
   nativeOnly?: boolean
+}
+
+export type TourId = 'main' | 'library' | 'downloads' | 'whatsnew'
+export type PageTourId = Exclude<TourId, 'main' | 'whatsnew'>
+
+export interface PageTour {
+  /** Halaman tempat tur kecil ini muncul otomatis sekali (setelah tutorial utama selesai atau dilewati). */
+  route: string
+  nativeOnly?: boolean
+  steps: readonly TourStep[]
 }
 
 /** Nama `data-tour` untuk tab navigasi, mis. "/library" -> "nav-library", "/" -> "nav-home". */
@@ -38,7 +50,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: 'welcome',
     route: '/',
     title: 'Selamat datang di MusicVerse 👋',
-    body: 'Tur singkat ini menunjukkan gestur dan fitur utamanya langsung di layar. Sekitar satu menit, dan bisa diulang kapan saja.',
+    body: 'Tur singkat ini menunjukkan gestur dan fitur utamanya langsung di layar. Sekitar dua menit, dan bisa diulang kapan saja.',
   },
   {
     id: 'import',
@@ -46,6 +58,13 @@ export const TOUR_STEPS: readonly TourStep[] = [
     target: 'import-input',
     title: 'Mulai dari sini',
     body: 'Tempel tautan playlist Spotify, atau ketik judul lagu atau nama artis lalu tekan Enter.',
+  },
+  {
+    id: 'search-mode',
+    route: '/',
+    target: 'search-mode',
+    title: 'Cari lagu atau artis',
+    body: 'Pilih Lagu untuk mencari judul atau menempel tautan. Pilih Artis untuk melihat artis dan lagu-lagunya. Hasil artis muncul sambil kamu mengetik.',
   },
   {
     id: 'track-swipe',
@@ -64,6 +83,22 @@ export const TOUR_STEPS: readonly TourStep[] = [
     task: 'Tahan baris contoh sampai menu muncul',
   },
   {
+    id: 'save-playlist',
+    route: '/',
+    practice: 'save-track',
+    title: 'Simpan ke playlist',
+    body: 'Dari menu lagu, pilih Simpan ke playlist saya, lalu tentukan playlist tujuannya. Kamu juga bisa membuat playlist baru dari sana.',
+    task: 'Tahan baris, lalu pilih Simpan ke playlist saya',
+  },
+  {
+    id: 'like',
+    route: '/',
+    practice: 'like-track',
+    title: 'Sukai lagu',
+    body: 'Ketuk hati di pemutar penuh, atau geser lagu ke kiri. Semua lagu yang kamu sukai terkumpul di playlist Lagu Disukai.',
+    task: 'Ketuk ikon hati',
+  },
+  {
     id: 'library-tab',
     route: '/',
     target: 'nav-library',
@@ -78,8 +113,25 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/library',
     practice: 'swipe-playlist',
     title: 'Pilih banyak sekaligus',
-    body: 'Di daftar playlist, geser kartu ke kanan atau kiri untuk mulai memilih banyak. Di dalam playlist, tombol Pilih lagu membuka mode pilih untuk salin, pindah, atau hapus.',
+    body: 'Di daftar playlist, geser kartu ke kanan atau kiri untuk mulai memilih beberapa playlist sekaligus.',
     task: 'Geser kartu contoh untuk memilihnya',
+  },
+  {
+    id: 'select-tracks',
+    route: '/library',
+    practice: 'select-tracks',
+    title: 'Pilih banyak lagu',
+    body: 'Di dalam playlist, tombol Pilih lagu membuka mode pilih. Centang beberapa lagu, lalu salin, pindahkan, atau hapus sekaligus.',
+    task: 'Pilih lagu, lalu ketuk Salin atau Pindahkan',
+  },
+  {
+    id: 'playlist-manage',
+    route: '/library',
+    target: 'playlist-list',
+    pickChild: 0,
+    title: 'Salin, pindah, perbarui',
+    body: 'Buka opsi di kartu playlist untuk ganti nama, sematkan di atas, salin atau pindahkan semua lagu ke playlist lain. Di playlist Spotify yang tersimpan, tombol Perbarui memuat lagu baru, dan bisa sekaligus mengunduhnya.',
+    missing: 'Setelah ada playlist, buka opsi di kartunya untuk ganti nama, sematkan, salin atau pindahkan semua lagu. Di playlist Spotify yang tersimpan, tombol Perbarui memuat lagu baru, dan bisa sekaligus mengunduhnya.',
   },
   {
     id: 'downloads',
@@ -88,6 +140,25 @@ export const TOUR_STEPS: readonly TourStep[] = [
     nativeOnly: true,
     title: 'Unduh untuk offline',
     body: 'Lagu yang diunduh bisa diputar tanpa internet. Saat offline, lagu yang belum diunduh dikunci dan tampil redup.',
+  },
+  {
+    id: 'settings',
+    route: '/',
+    target: 'settings-btn',
+    animate: 'tap',
+    advanceOnTargetClick: true,
+    nativeOnly: true,
+    title: 'Pengaturan',
+    body: 'Semua pengaturan aplikasi ada di balik ikon gerigi ini.',
+    task: 'Ketuk ikon gerigi',
+  },
+  {
+    id: 'settings-list',
+    route: '/settings',
+    target: 'settings-list',
+    nativeOnly: true,
+    title: 'Atur sesukamu',
+    body: 'Atur syarat unduhan, mode pemutaran, equalizer 10 band, cadangan dan pemulihan data, sampai cek pembaruan. Tombol Tutorial di bawahnya mengulang panduan ini.',
   },
   {
     id: 'player',
@@ -99,10 +170,125 @@ export const TOUR_STEPS: readonly TourStep[] = [
     missing: 'Saat lagu diputar, pemutar mini muncul di bawah. Ketuk untuk membuka pemutar penuh: lirik, antrean, dan sleep timer.',
   },
   {
+    id: 'player-timer',
+    route: '/',
+    openPlayer: true,
+    target: 'sleep-timer',
+    title: 'Sleep timer',
+    body: 'Mau tidur sambil dengar musik? Atur timer supaya pemutaran berhenti sendiri setelah beberapa menit atau di akhir lagu.',
+    missing: 'Di pemutar penuh ada tombol sleep timer: musik berhenti sendiri setelah beberapa menit atau di akhir lagu. Putar lagu dulu untuk melihatnya.',
+  },
+  {
+    id: 'player-lyrics',
+    route: '/',
+    openPlayer: true,
+    target: 'lyrics-btn',
+    title: 'Lirik',
+    body: 'Ketuk ikon mik untuk mengganti sampul dengan lirik lagu yang sedang diputar. Ketuk lagi untuk kembali.',
+    missing: 'Di pemutar penuh, ikon mik menampilkan lirik lagu yang sedang diputar. Putar lagu dulu untuk mencobanya.',
+  },
+  {
+    id: 'player-queue',
+    route: '/',
+    openPlayer: true,
+    target: 'queue-bar',
+    title: 'Antrean',
+    body: 'Ketuk bar Berikutnya untuk melihat antrean. Di sana lagu bisa diketuk untuk diputar, ditahan untuk menu, dan diseret untuk diurutkan ulang.',
+    missing: 'Antrean ada di bar Berikutnya pada pemutar penuh: ketuk lagu untuk memutar, tahan untuk menu, seret untuk mengurutkan ulang.',
+  },
+  {
+    id: 'quiz',
+    route: '/',
+    practice: 'quiz',
+    title: 'Kuis kilat',
+    body: 'Tiga pertanyaan untuk mengecek apa yang barusan kamu pelajari. Lulus, dan kamu dapat lencana di Pengaturan.',
+    task: 'Jawab 3 pertanyaan',
+  },
+  {
     id: 'finish',
     route: '/',
     target: 'tour-restart',
     title: 'Selesai 🎉',
     body: 'Tutorial bisa diulang kapan saja lewat Pengaturan (ikon gerigi, menu Tutorial) atau tombol Tutorial di menu samping.',
+  },
+]
+
+/** Tur kecil per halaman: muncul sekali saat halamannya pertama dibuka, kalau tutorial utama sudah selesai atau dilewati. */
+export const PAGE_TOURS: Record<PageTourId, PageTour> = {
+  library: {
+    route: '/library',
+    steps: [
+      {
+        id: 'pt-library-list',
+        route: '/library',
+        target: 'playlist-list',
+        pickChild: 0,
+        title: 'Lagu Disukai ada di sini',
+        body: 'Kartu pertama selalu Lagu Disukai, diikuti playlist yang disematkan. Ketuk untuk membuka, geser untuk memilih banyak sekaligus.',
+        missing: 'Playlist yang kamu buat atau simpan tampil di sini, dengan Lagu Disukai selalu di urutan pertama. Ketuk untuk membuka, geser untuk memilih banyak sekaligus.',
+      },
+      {
+        id: 'pt-library-menu',
+        route: '/library',
+        title: 'Opsi playlist',
+        body: 'Buka opsi di kartu playlist untuk ganti nama, sematkan, salin atau pindahkan semua lagu, atau hapus daftarnya.',
+      },
+    ],
+  },
+  downloads: {
+    route: '/downloads',
+    nativeOnly: true,
+    steps: [
+      {
+        id: 'pt-downloads-header',
+        route: '/downloads',
+        target: 'downloads-header',
+        title: 'Lagu offline-mu',
+        body: 'Semua lagu yang diunduh ada di sini, lengkap dengan ukuran dan progres unduhan yang sedang berjalan. Bisa diputar tanpa internet.',
+      },
+      {
+        id: 'pt-downloads-settings',
+        route: '/downloads',
+        target: 'downloads-settings',
+        title: 'Atur syarat unduhan',
+        body: 'Pilih unduh hanya lewat Wi-Fi atau saat dicas supaya kuota dan baterai aman.',
+        missing: 'Syarat unduhan, seperti hanya lewat Wi-Fi atau saat dicas, diatur lewat Pengaturan, menu Unduhan.',
+      },
+    ],
+  },
+}
+
+export interface WhatsNewEntry {
+  /** Pengenal rilis (bebas, asal unik dan tidak diubah sesudah dirilis), mis. nomor versi. */
+  id: string
+  steps: readonly TourStep[]
+}
+
+/**
+ * Tur "Yang baru": 1 sampai 2 langkah per rilis, muncul sekali di Beranda untuk pengguna yang sudah pernah menyelesaikan tutorial utama.
+ * Menambah fitur baru = menambah satu entri di akhir daftar ini (tutorial utama tidak perlu diubah atau dinaikkan versinya).
+ * Pengguna yang baru menamatkan tutorial utama dianggap sudah melihat semua entri yang ada.
+ */
+export const WHATS_NEW: readonly WhatsNewEntry[] = [
+  {
+    id: '0.5.38.6',
+    steps: [
+      {
+        id: 'wn-select-tracks',
+        route: '/',
+        practice: 'select-tracks',
+        title: 'Baru: pilih banyak lagu',
+        body: 'Di dalam playlist, tombol Pilih lagu membuka mode pilih untuk menyalin, memindahkan, atau menghapus banyak lagu sekaligus.',
+        task: 'Pilih lagu, lalu ketuk Salin atau Pindahkan',
+      },
+      {
+        id: 'wn-quiz',
+        route: '/settings',
+        target: 'tutorial-btn',
+        nativeOnly: true,
+        title: 'Baru: kuis tutorial',
+        body: 'Ulangi Tutorial dari sini dan selesaikan kuis kilat di akhirnya untuk mendapat lencana Lulus tutorial.',
+      },
+    ],
   },
 ]

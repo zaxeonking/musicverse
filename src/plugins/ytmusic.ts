@@ -221,6 +221,7 @@ async function playerStreams(client: PlayerClient, id: string, visitor: string |
 
   const formats: any[] = [...(data.streamingData?.adaptiveFormats ?? []), ...(data.streamingData?.formats ?? [])]
   const streams: StreamSource[] = []
+  const configLoud = Number(data?.playerConfig?.audioConfig?.loudnessDb)
   for (const f of formats) {
     const mime = String(f.mimeType ?? '')
     // Hanya audio dengan URL langsung (tanpa signatureCipher).
@@ -232,7 +233,9 @@ async function playerStreams(client: PlayerClient, id: string, visitor: string |
     } catch {
       /* URL tak terbaca: biarkan null */
     }
-    streams.push({ url: f.url, bitrate: Number(f.bitrate) || 0, mime, headers: { 'User-Agent': client.ua }, expiresAt })
+    const formatLoud = Number(f.loudnessDb)
+    const loudnessDb = Number.isFinite(configLoud) ? configLoud : Number.isFinite(formatLoud) ? formatLoud : undefined
+    streams.push({ url: f.url, bitrate: Number(f.bitrate) || 0, mime, headers: { 'User-Agent': client.ua }, expiresAt, loudnessDb })
   }
   // MP4/AAC dulu (seek paling andal di WebView), lalu bitrate tertinggi.
   streams.sort((a, b) => Number(b.mime.includes('mp4')) - Number(a.mime.includes('mp4')) || b.bitrate - a.bitrate)

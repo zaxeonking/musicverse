@@ -1,5 +1,6 @@
 import { isNativeApp } from '../native/platform'
 import { bindEqElement, getEqState, isCorsSafe, isEqBound, subscribeEq } from './equalizer'
+import { getPlaybackSpeed, subscribeSpeed } from './playbackSpeed'
 import { MusicVerseNative, type NativeEngineEvent } from '../native/musicVerseNative'
 import { getAutoResume, getDirectMode } from '../native/engineSettings'
 import type { PlayerErrorCode } from '../types/player'
@@ -247,6 +248,8 @@ class AudioEngine {
   // Volume akhir elemen = master × trackEnd × gain elemen. Semuanya 0..1.
   private masterGain = 1
   private trackEndGain = 1
+  /** Normalisasi volume: pengali 0.25..1 untuk lagu yang sedang aktif (hanya meredam lagu keras; tidak menaikkan). */
+  private normGain = 1
   private readonly elementGain = new Map<HTMLAudioElement, number>()
   private ramps: Ramp[] = []
   private rampTimer: ReturnType<typeof setInterval> | null = null
@@ -282,6 +285,8 @@ class AudioEngine {
     if (this.nativeListenerReady) return this.nativeListenerReady
     const ready = MusicVerseNative.addListener('engineEvent', (event) => this.handleNativeEvent(event)).then(() => {
       subscribeEq(() => this.pushNativeEq())
+      this.hookSpeed()
+      if (getPlaybackSpeed() !== 1) this.pushNativeSpeed()
     })
     this.nativeListenerReady = ready
     // Gagal mendaftar: izinkan percobaan ulang pada pemuatan berikutnya.
@@ -384,7 +389,7 @@ class AudioEngine {
 
   /** Kirim volume akhir (master x akhir-lagu) ke ExoPlayer; perubahan kecil dilewati agar fade tidak membanjiri jembatan. */
   private applyNativeVolume(force = false): void {
-    const value = Math.min(1, Math.max(0, this.masterGain * this.trackEndGain))
+    const value = Math.min(1, Math.max(0, this.masterGain * this.trackEndGain * this.normGain))
     if (!force && Math.abs(value - this.nativeVolumeSent) < 0.01 && !(value === 0 || value === 1)) return
     if (value === this.nativeVolumeSent) return
     this.nativeVolumeSent = value
@@ -423,9 +428,44 @@ class AudioEngine {
     for (const listener of [...this.listeners]) listener(event)
   }
 
+  /** Kecepatan putar (nada tetap). `defaultPlaybackRate` ikut diisi karena load() mengembalikan playbackRate ke default. */
+  private applySpeedTo(audio: HTMLAudioElement): void {
+    const rate = getPlaybackSpeed()
+    try {
+      audio.defaultPlaybackRate = rate
+      audio.playbackRate = rate
+      audio.preservesPitch = true
+    } catch {
+      // elemen belum siap / browser tidak mendukung: abaikan
+    }
+  }
+
+  private speedHooked = false
+
+  /** Dipanggil sekali: meneruskan perubahan kecepatan ke semua elemen audio dan ke ExoPlayer. */
+  private hookSpeed(): void {
+    if (this.speedHooked) return
+    this.speedHooked = true
+    subscribeSpeed(() => {
+      for (const audio of this.elementGain.keys()) this.applySpeedTo(audio)
+      if (this.isNative()) {
+        // Jam tiruan (mirror) harus maju dengan kecepatan baru mulai sekarang, bukan mundur ke posisi lama.
+        this.mirror.pos = this.getLiveTime() ?? this.mirror.pos
+        this.mirror.at = this.nativeNow()
+        this.pushNativeSpeed()
+      }
+    })
+  }
+
+  private pushNativeSpeed(): void {
+    void MusicVerseNative.engineSetSpeed({ speed: getPlaybackSpeed() }).catch(() => {})
+  }
+
   private createElement(): HTMLAudioElement {
     const audio = new Audio()
     audio.preload = 'auto'
+    this.applySpeedTo(audio)
+    this.hookSpeed()
     for (const type of EVENT_TYPES) audio.addEventListener(type, this.handleDomEvent)
     this.elementGain.set(audio, 1)
     return audio
@@ -518,8 +558,19 @@ class AudioEngine {
   // ---- Volume & fade ------------------------------------------------------------------------
 
   private applyVolume(audio: HTMLAudioElement) {
-    const value = this.masterGain * this.trackEndGain * (this.elementGain.get(audio) ?? 1)
+    const value = this.masterGain * this.trackEndGain * this.normGain * (this.elementGain.get(audio) ?? 1)
     audio.volume = Math.min(1, Math.max(0, value))
+  }
+
+  /**
+   * Menyamakan keras antar lagu: `loudnessDb` (dB relatif acuan; positif = lebih keras) menjadi redaman sebesar itu, paling
+   * banyak 12 dB. Lagu yang lebih pelan dari acuan tidak dinaikkan. `null` = mati / tidak diketahui (volume normal).
+   */
+  setNormalizationDb(loudnessDb: number | null): void {
+    const next = loudnessDb !== null && Number.isFinite(loudnessDb) && loudnessDb > 0 ? Math.max(0.25, Math.pow(10, -loudnessDb / 20)) : 1
+    if (Math.abs(next - this.normGain) < 0.005) return
+    this.normGain = next
+    this.applyAllVolumes()
   }
 
   private applyAllVolumes() {
@@ -976,7 +1027,7 @@ class AudioEngine {
     if (this.isNative()) {
       if (this.activeSource === null) return null
       const m = this.mirror
-      let t = m.pos + (m.playing ? this.nativeNow() - m.at : 0)
+      let t = m.pos + (m.playing ? (this.nativeNow() - m.at) * getPlaybackSpeed() : 0)
       if (m.duration !== null) t = Math.min(t, m.duration)
       return Math.max(0, t)
     }

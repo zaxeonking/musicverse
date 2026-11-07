@@ -56,6 +56,17 @@ export interface NativeEngineEvent {
   reason?: string
 }
 
+/**
+ * Permintaan putar dari Android Auto / Asisten (APK dengan AutoBrowserService).
+ *  - media: `payload` = id item telusur yang dikirim JS lewat `setAutoBrowse` (`recent:<id>` | `queue:<indeks>:<id>`).
+ *  - search: `payload` = kata kunci pencarian suara; kosong = "putar musik".
+ * `kind` kosong = tidak ada permintaan.
+ */
+export interface NativeAutoRequest {
+  kind?: 'media' | 'search'
+  payload?: string
+}
+
 export interface UpdateProgressEvent {
   status: 'downloading' | 'paused' | 'ready' | 'failed'
   downloaded: number
@@ -299,7 +310,8 @@ export interface MusicVerseNativePlugin {
   installUpdate(): Promise<void>
   getUpdateState(): Promise<{ downloading: boolean; ready: boolean }>
   /** Membagikan berkas di `files/` aplikasi (mis. `backup/x.json`) lewat lembar bagikan sistem. Butuh APK baru. */
-  shareFile(options: { path: string; title?: string }): Promise<void>
+  /** `mimeType` default application/json (APK lama selalu json); gambar: image/png. */
+  shareFile(options: { path: string; title?: string; mimeType?: string }): Promise<void>
   addListener(
     eventName: 'updateProgress',
     listener: (event: UpdateProgressEvent) => void,
@@ -335,6 +347,8 @@ export interface MusicVerseNativePlugin {
   engineCrossfade(options: { durationMs: number }): Promise<{ switched: boolean }>
   /** 10 pita (EQ_FREQS), dB. Memakai Equalizer bawaan Android pada sesi audio ExoPlayer. */
   engineSetEq(options: { enabled: boolean; gains: number[] }): Promise<void>
+  /** Kecepatan putar 0.5..2 (nada tetap). Butuh APK dengan `engineSetSpeed`; APK lama melempar UNIMPLEMENTED (diabaikan). */
+  engineSetSpeed(options: { speed: number }): Promise<void>
   addListener(eventName: 'engineEvent', listener: (event: NativeEngineEvent) => void): Promise<PluginListenerHandle>
   /** Memulai/memperbarui foreground service + notifikasi media. */
   updateNowPlaying(options: NowPlayingUpdate): Promise<void>
@@ -358,6 +372,14 @@ export interface MusicVerseNativePlugin {
     eventName: 'mediaAction',
     listener: (event: NativeMediaActionEvent) => void,
   ): Promise<PluginListenerHandle>
+  /**
+   * Android Auto: daftar telusur (string JSON `{recent: [{id,title,artist}], queue: [...]}`). Disimpan native supaya
+   * bisa ditelusuri walau aplikasi belum dibuka. Butuh APK v0.5.39.5+ (APK lama melempar UNIMPLEMENTED: diabaikan).
+   */
+  setAutoBrowse(options: { json: string }): Promise<void>
+  /** Mengambil permintaan putar dari Android Auto yang menunggu (sekali pakai). Objek kosong = tidak ada. Butuh APK v0.5.39.5+. */
+  consumeAutoRequest(): Promise<NativeAutoRequest>
+  addListener(eventName: 'autoRequest', listener: (event: NativeAutoRequest) => void): Promise<PluginListenerHandle>
 }
 
 export const MusicVerseNative = registerPlugin<MusicVerseNativePlugin>('MusicVerseNative')

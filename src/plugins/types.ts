@@ -13,6 +13,8 @@ export interface StreamSource {
   headers?: Record<string, string>
   /** Epoch ms kapan URL kedaluwarsa, atau null jika tidak diketahui. */
   expiresAt: number | null
+  /** Kekerasan lagu relatif terhadap acuan (dB; positif = lebih keras). Dari YouTube `audioConfig.loudnessDb`; kosong bila tidak diketahui. */
+  loudnessDb?: number
 }
 
 export interface PluginTrackHit {

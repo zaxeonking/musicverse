@@ -10,7 +10,8 @@ export default {
         card: '#181818',
         raised: { DEFAULT: '#242424', hover: '#2e2e2e' },
         accent: {
-          DEFAULT: '#1DB954',
+          // Bisa ditimpa per area lewat variabel CSS --mv-accent ("r g b"), mis. pemutar penuh memakai warna sampul.
+          DEFAULT: 'rgb(var(--mv-accent, 29 185 84) / <alpha-value>)',
           soft: '#1ed760',
           deep: '#169c46',
         },

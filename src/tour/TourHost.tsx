@@ -2,10 +2,24 @@ import { Check, ChevronLeft, Hand } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { usePlayerUi } from '../context/PlayerUiContext'
+import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { isNativeApp } from '../native/platform'
 import PracticeStage from './PracticeStage'
-import { TOUR_STEPS, type TourStep } from './steps'
-import { endTour, goToTourStep, isTourDone, startTour, useTourState } from './tourStore'
+import { PAGE_TOURS, TOUR_STEPS, type PageTour, type PageTourId, type TourStep } from './steps'
+import {
+  autoStartTour,
+  endTour,
+  goToTourStep,
+  isPageTourSeen,
+  isTourDone,
+  markPageTourSeen,
+  startPageTour,
+  startWhatsNew,
+  unseenWhatsNewSteps,
+  useTourState,
+  whatsNewReady,
+} from './tourStore'
 
 const PAD = 6
 const MARGIN = 12
@@ -13,6 +27,11 @@ const CARD_MAX_W = 352
 const FIND_TIMEOUT_MS = 1600
 const AUTO_START_DELAY_MS = 1500
 const ACCENT = '29, 185, 84'
+const PAGE_TOUR_DELAY_MS = 900
+const WHATS_NEW_DELAY_MS = 2000
+const PLAYER_CLOSE_MS = 350
+const CONFETTI_COLORS = ['#1db954', '#ffffff', '#f5c542', '#ff6b81', '#5ac8fa']
+const CONFETTI_COUNT = 28
 
 interface Rect {
   x: number
@@ -26,7 +45,7 @@ const reducedMotion = () => typeof window.matchMedia === 'function' && window.ma
 /** Elemen pertama dengan atribut `data-tour` itu yang benar-benar tampil (tab bawah dan sidebar sama-sama ada di DOM, satu disembunyikan). */
 function findTarget(step: TourStep): HTMLElement | null {
   if (!step.target) return null
-  const all = document.querySelectorAll<HTMLElement>(`[data-tour="${step.target}"]`)
+  const all = document.querySelectorAll<HTMLElement>(`[data-tour~="${step.target}"]`)
   for (const el of all) {
     const rect = el.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) continue
@@ -46,10 +65,21 @@ function findTarget(step: TourStep): HTMLElement | null {
  * Dirender di dalam router (AppShell). Mulai otomatis sekali saat pertama dibuka; bisa diulang lewat `startTour()`.
  */
 export default function TourHost() {
-  const { active, index } = useTourState()
+  const { active, index, tour } = useTourState()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const steps = useMemo(() => TOUR_STEPS.filter((item) => !item.nativeOnly || isNativeApp()), [])
+  const steps = useMemo(
+    () => (tour === 'main' ? TOUR_STEPS : tour === 'whatsnew' ? unseenWhatsNewSteps() : PAGE_TOURS[tour].steps).filter((item) => !item.nativeOnly || isNativeApp()),
+    [tour],
+  )
+  const { fullPlayerOpen, openFullPlayer, closeFullPlayer } = usePlayerUi()
+  const { status, currentTrack } = useAudioPlayer()
+  const playerActive = status !== 'idle' && currentTrack !== null
+  const playerRef = useRef({ open: fullPlayerOpen, active: playerActive, openFullPlayer, closeFullPlayer })
+  playerRef.current = { open: fullPlayerOpen, active: playerActive, openFullPlayer, closeFullPlayer }
+  /** Pemutar penuh dibuka oleh tutorial (bukan oleh pengguna), jadi tutorial juga yang menutupnya. */
+  const openedByTour = useRef(false)
+  const confettiRef = useRef<HTMLDivElement>(null)
   const step: TourStep | undefined = active ? steps[index] : undefined
   const pathRef = useRef(pathname)
   pathRef.current = pathname
@@ -63,21 +93,65 @@ export default function TourHost() {
   const nextRef = useRef<HTMLButtonElement>(null)
   const dotRef = useRef<HTMLSpanElement>(null)
 
-  // Mulai otomatis sekali, di Beranda, setelah layar tenang sebentar.
+  // Mulai otomatis sekali, di Beranda, setelah layar tenang sebentar. Kalau sempat terhenti di tengah, lanjut dari langkah terakhir.
   useEffect(() => {
     if (active || pathname !== '/' || isTourDone()) return
-    const timer = window.setTimeout(startTour, AUTO_START_DELAY_MS)
+    const timer = window.setTimeout(autoStartTour, AUTO_START_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [active, pathname])
+
+  // "Yang baru": sekali di Beranda untuk pengguna yang sudah menamatkan (atau melewati, di sesi sebelumnya) tutorial utama.
+  useEffect(() => {
+    if (active || pathname !== '/' || !isTourDone() || !whatsNewReady()) return
+    const timer = window.setTimeout(() => {
+      if (unseenWhatsNewSteps().some((item) => !item.nativeOnly || isNativeApp())) startWhatsNew()
+    }, WHATS_NEW_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [active, pathname])
+
+  // Tur kecil per halaman: sekali saja saat halamannya pertama dibuka, setelah tutorial utama selesai atau dilewati.
+  useEffect(() => {
+    if (active || !isTourDone()) return
+    const entry = (Object.entries(PAGE_TOURS) as [PageTourId, PageTour][]).find(([, item]) => item.route === pathname)
+    if (!entry) return
+    const [id, item] = entry
+    if ((item.nativeOnly && !isNativeApp()) || isPageTourSeen(id)) return
+    const timer = window.setTimeout(() => startPageTour(id), PAGE_TOUR_DELAY_MS)
     return () => window.clearTimeout(timer)
   }, [active, pathname])
 
   // Pindah ke halaman langkah ini, lalu tunggu elemen targetnya muncul (halaman baru butuh waktu merender).
   const stepId = step?.id
   useEffect(() => {
+    // Pemutar penuh: dibuka untuk langkah yang memerlukannya, ditutup lagi (oleh tutorial) saat tidak diperlukan.
+    let delay = 0
+    const player = playerRef.current
+    if (step?.openPlayer) {
+      if (player.active && !player.open) {
+        player.openFullPlayer()
+        openedByTour.current = true
+      }
+    } else if (openedByTour.current) {
+      openedByTour.current = false
+      if (player.open) {
+        player.closeFullPlayer()
+        delay = PLAYER_CLOSE_MS
+      }
+    }
     setDone(false)
     setTarget(null)
     setRect(null)
     if (!step) return
-    if (step.route && pathRef.current !== step.route) navigate(step.route)
+    // Menyelesaikan kunjungan ke halaman ini lewat tutorial utama = tur kecil halamannya tidak perlu muncul lagi.
+    if (tour === 'main' && step.route) {
+      const seen = (Object.entries(PAGE_TOURS) as [PageTourId, PageTour][]).find(([, item]) => item.route === step.route)
+      if (seen) markPageTourSeen(seen[0])
+    }
+    const needsRoute = step.route !== undefined && pathRef.current !== step.route
+    // Pindah halaman menunggu pemutar penuh selesai menutup, supaya riwayat tidak kacau.
+    const routeTimer = window.setTimeout(() => {
+      if (step.route && pathRef.current !== step.route) navigate(step.route)
+    }, delay)
     let cancelled = false
     let tries = 0
     setSearching(step.target !== undefined)
@@ -97,13 +171,14 @@ export default function TourHost() {
       }
       window.setTimeout(tick, 100)
     }
-    const timer = window.setTimeout(tick, step.route && pathRef.current !== step.route ? 250 : 0)
+    const timer = window.setTimeout(tick, delay + (needsRoute ? 250 : 0))
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      window.clearTimeout(routeTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepId, navigate])
+  }, [stepId, tour, navigate])
 
   // Ikuti posisi elemen (scroll, perubahan ukuran, animasi halaman) selama langkah berjalan.
   useEffect(() => {
@@ -132,14 +207,14 @@ export default function TourHost() {
   // Latihan selesai: tampilkan "Berhasil" sebentar, lalu lanjut otomatis ke langkah berikutnya.
   useEffect(() => {
     if (!done) return
-    const timer = window.setTimeout(() => (index + 1 < steps.length ? goToTourStep(index + 1) : endTour()), 1100)
+    const timer = window.setTimeout(() => (index + 1 < steps.length ? goToTourStep(index + 1) : endTour(true)), 1100)
     return () => window.clearTimeout(timer)
   }, [done, index, steps.length])
 
   // Mengetuk elemen yang disorot (langkah tab) = lanjut otomatis.
   useEffect(() => {
     if (!target || !step?.advanceOnTargetClick) return
-    const onClick = () => window.setTimeout(() => (index + 1 < steps.length ? goToTourStep(index + 1) : endTour()), 250)
+    const onClick = () => window.setTimeout(() => (index + 1 < steps.length ? goToTourStep(index + 1) : endTour(true)), 250)
     target.addEventListener('click', onClick, { capture: true })
     return () => target.removeEventListener('click', onClick, { capture: true })
   }, [target, step, index, steps.length])
@@ -188,6 +263,25 @@ export default function TourHost() {
     return () => animation.cancel()
   }, [rect, step])
 
+  // Langkah terakhir: konfeti kecil yang jatuh dari atas layar.
+  useEffect(() => {
+    const box = confettiRef.current
+    if (!box || reducedMotion()) return
+    const animations = Array.from(box.children).map((piece, i) => {
+      const drift = (Math.random() - 0.5) * 160
+      const spin = (Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 540)
+      return (piece as HTMLElement).animate(
+        [
+          { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+          { transform: `translate(${drift}px, ${window.innerHeight * 0.9}px) rotate(${spin}deg)`, opacity: 0.9, offset: 0.8 },
+          { transform: `translate(${drift * 1.2}px, ${window.innerHeight}px) rotate(${spin * 1.1}deg)`, opacity: 0 },
+        ],
+        { duration: 1800 + Math.random() * 1400, delay: i * 40, easing: 'ease-in', fill: 'forwards' },
+      )
+    })
+    return () => animations.forEach((animation) => animation.cancel())
+  }, [stepId])
+
   if (!step) return null
 
   const last = index >= steps.length - 1
@@ -213,17 +307,17 @@ export default function TourHost() {
   const move = reducedMotion() ? 'none' : 'top 260ms ease, left 260ms ease, width 260ms ease, height 260ms ease'
 
   return createPortal(
-    <div className="fixed inset-0 z-[100]" role="presentation">
+    <div className="pointer-events-none fixed inset-0 z-[100]" role="presentation">
       {/* Penghalang sentuhan: seluruh layar, atau empat potongan di sekeliling lubang bila elemen boleh diketuk. */}
       {hole && interactive ? (
         <>
-          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: Math.max(0, hole.y) }} />
-          <div style={{ position: 'fixed', left: 0, top: hole.y + hole.h, width: '100%', bottom: 0 }} />
-          <div style={{ position: 'fixed', left: 0, top: hole.y, width: Math.max(0, hole.x), height: hole.h }} />
-          <div style={{ position: 'fixed', left: hole.x + hole.w, top: hole.y, right: 0, height: hole.h }} />
+          <div style={{ position: 'fixed', left: 0, top: 0, width: '100%', height: Math.max(0, hole.y), pointerEvents: 'auto' }} />
+          <div style={{ position: 'fixed', left: 0, top: hole.y + hole.h, width: '100%', bottom: 0, pointerEvents: 'auto' }} />
+          <div style={{ position: 'fixed', left: 0, top: hole.y, width: Math.max(0, hole.x), height: hole.h, pointerEvents: 'auto' }} />
+          <div style={{ position: 'fixed', left: hole.x + hole.w, top: hole.y, right: 0, height: hole.h, pointerEvents: 'auto' }} />
         </>
       ) : (
-        <div className="absolute inset-0" />
+        <div className="pointer-events-auto absolute inset-0" />
       )}
 
       {hole ? (
@@ -264,6 +358,26 @@ export default function TourHost() {
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black/75" />
       )}
 
+      {step.id === 'finish' && (
+        <div ref={confettiRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+          {Array.from({ length: CONFETTI_COUNT }, (_, i) => (
+            <span
+              key={i}
+              style={{
+                position: 'absolute',
+                top: -16,
+                left: `${(i * 37 + 7) % 100}%`,
+                width: 8,
+                height: 12,
+                borderRadius: 2,
+                background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+                opacity: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       <div
         ref={cardRef}
         role="dialog"
@@ -271,7 +385,7 @@ export default function TourHost() {
         aria-live="polite"
         aria-label={`Tutorial, langkah ${index + 1} dari ${steps.length}: ${step.title}`}
         style={{ ...cardStyle, transition: move }}
-        className="rounded-2xl border border-line bg-card p-4 shadow-2xl shadow-black/60"
+        className="pointer-events-auto rounded-2xl border border-line bg-card p-4 shadow-2xl shadow-black/60"
       >
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold text-ink-muted">
@@ -302,7 +416,7 @@ export default function TourHost() {
           {last ? (
             <span className="flex-1" />
           ) : (
-            <button type="button" onClick={endTour} className="btn-secondary h-10 flex-1 px-3 text-sm">
+            <button type="button" onClick={() => endTour()} className="btn-secondary h-10 flex-1 px-3 text-sm">
               Lewati
             </button>
           )}
@@ -311,8 +425,8 @@ export default function TourHost() {
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
           )}
-          <button ref={nextRef} type="button" onClick={() => (last ? endTour() : goToTourStep(index + 1))} className="btn-primary h-10 flex-1 px-4 text-sm">
-            {last ? 'Selesai' : index === 0 ? 'Mulai' : 'Lanjut'}
+          <button ref={nextRef} type="button" onClick={() => (last ? endTour(true) : goToTourStep(index + 1))} className="btn-primary h-10 flex-1 px-4 text-sm">
+            {last ? 'Selesai' : index === 0 && tour === 'main' ? 'Mulai' : 'Lanjut'}
           </button>
         </div>
       </div>

@@ -229,7 +229,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
           </button>
         </div>
       </div>
-      <div className="flex gap-2" role="group" aria-label="Jenis pencarian">
+      <div data-tour="search-mode" className="flex gap-2" role="group" aria-label="Jenis pencarian">
         <Chip active={mode === 'track'} onClick={() => onModeChange('track')}>
           Lagu
         </Chip>

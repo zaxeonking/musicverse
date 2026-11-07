@@ -1,10 +1,11 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { useCoverGlow } from '../../hooks/useCoverGlow'
 import { useLongPress } from '../../hooks/useLongPress'
 import { useLyrics } from '../../hooks/useLyrics'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
@@ -31,6 +32,8 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const { notice, dismissNotice } = useLibrary()
   const { openTrackMenu, showToast } = useTrackMenu()
   const { isLiked, toggleLike } = useMyPlaylists()
+  // Warna aksen dari sampul lagu ("r,g,b"); dipakai untuk latar dan semua elemen `accent` di dalam pemutar penuh.
+  const coverColor = useCoverGlow(now?.coverSrc, now?.cover.from)
   // Tahan lama pada sampul atau judul = menu lagu yang sedang diputar.
   const press = useLongPress(() => {
     if (currentTrack) openTrackMenu(currentTrack, { place: 'player' })
@@ -266,7 +269,13 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
       className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-hidden bg-bg"
-      style={{ backgroundImage: `linear-gradient(180deg, ${now.cover.from}55 0%, #0b080c 62%, #0b080c 100%)` }}
+      style={
+        {
+          '--mv-accent': coverColor.replace(/,/g, ' '),
+          backgroundImage: `linear-gradient(180deg, rgba(${coverColor},0.38) 0%, #0b080c 62%, #0b080c 100%)`,
+          transition: 'background-image 400ms ease',
+        } as CSSProperties
+      }
     >
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
       <span
@@ -355,7 +364,11 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
           <TransportControls
             size="xl"
             className="!justify-between"
-            leading={<SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />}
+            leading={
+              <span data-tour="sleep-timer" className="flex">
+                <SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />
+              </span>
+            }
             trailing={<ShuffleButton size="lg" className="flex" />}
           />
 
@@ -364,6 +377,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
           {(() => {
             const lyricsBtn = (
               <button
+                data-tour="lyrics-btn"
                 type="button"
                 onClick={() => setShowLyrics((value) => !value)}
                 aria-pressed={showLyrics}
@@ -422,6 +436,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
       {/* Bar "Berikutnya": membuka antrean (seperti handle sheet di pemutar referensi). */}
       <button
         type="button"
+        data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
         className="mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"

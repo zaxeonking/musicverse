@@ -115,8 +115,7 @@ export async function searchArtists(query: string, signal?: AbortSignal): Promis
   return out.sort((a, b) => b.fans - a.fans)
 }
 
-async function deezerTopSongs(artistId: string, signal?: AbortSignal): Promise<PlaylistTrack[]> {
-  const rows = await getList<DeezerTrack>(`${DEEZER}/artist/${encodeURIComponent(artistId)}/top?limit=100`, 'data', signal)
+function mapDeezerRows(rows: readonly DeezerTrack[]): PlaylistTrack[] {
   const out: PlaylistTrack[] = []
   for (const row of rows) {
     if (!row.title) continue
@@ -132,6 +131,20 @@ async function deezerTopSongs(artistId: string, signal?: AbortSignal): Promise<P
     })
   }
   return out
+}
+
+async function deezerTopSongs(artistId: string, signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const rows = await getList<DeezerTrack>(`${DEEZER}/artist/${encodeURIComponent(artistId)}/top?limit=100`, 'data', signal)
+  return mapDeezerRows(rows)
+}
+
+/**
+ * Radio artis Deezer: campuran lagu artis itu dan artis-artis yang mirip (dipilih Deezer). Dipakai radio otomatis.
+ * Hanya jalan di APK (pluginFetch, bebas CORS), sama seperti pencarian artis.
+ */
+export async function fetchArtistRadio(artistId: string, limit = 40, signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const rows = await getList<DeezerTrack>(`${DEEZER}/artist/${encodeURIComponent(artistId)}/radio?limit=${limit}`, 'data', signal)
+  return mapDeezerRows(rows)
 }
 
 /** Profil iTunes yang namanya sama persis dengan artis Deezer (huruf besar/kecil diabaikan). */

@@ -10,6 +10,7 @@
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
 //  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
 //  4. Menambah izin + <service> + usesCleartextTraffic ke AndroidManifest.xml
+//     (termasuk receiver widget layar utama dan AutoBrowserService + penanda aplikasi media untuk Android Auto)
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -136,6 +137,45 @@ if (!manifest.includes('.UpdateFileProvider')) {
     '                android:resource="@xml/update_file_paths" />\n' +
     '        </provider>\n'
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${provider}$1</application>`)
+}
+
+// Widget layar utama (4x1): receiver yang menerima pembaruan dari PlaybackService dan ketukan tombol.
+if (!manifest.includes('.MusicVerseWidget')) {
+  const receiver =
+    '        <receiver\n' +
+    '            android:name=".MusicVerseWidget"\n' +
+    '            android:exported="false"\n' +
+    '            android:label="MusicVerse">\n' +
+    '            <intent-filter>\n' +
+    '                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n' +
+    '            </intent-filter>\n' +
+    '            <meta-data\n' +
+    '                android:name="android.appwidget.provider"\n' +
+    '                android:resource="@xml/widget_player_info" />\n' +
+    '        </receiver>\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${receiver}$1</application>`)
+}
+
+// Android Auto: pintu telusur media (exported wajib true agar Android Auto / Asisten Google bisa menyambung).
+if (!manifest.includes('.AutoBrowserService')) {
+  const service =
+    '        <service\n' +
+    '            android:name=".AutoBrowserService"\n' +
+    '            android:exported="true">\n' +
+    '            <intent-filter>\n' +
+    '                <action android:name="android.media.browse.MediaBrowserService" />\n' +
+    '            </intent-filter>\n' +
+    '        </service>\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${service}$1</application>`)
+}
+
+// Android Auto: tandai aplikasi sebagai aplikasi media.
+if (!manifest.includes('com.google.android.gms.car.application')) {
+  const meta =
+    '        <meta-data\n' +
+    '            android:name="com.google.android.gms.car.application"\n' +
+    '            android:resource="@xml/automotive_app_desc" />\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${meta}$1</application>`)
 }
 
 // Audio dari API bisa http://. WebView sudah diizinkan lewat allowMixedContent; ini untuk unduhan native.

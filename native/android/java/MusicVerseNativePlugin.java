@@ -118,12 +118,21 @@ public class MusicVerseNativePlugin extends Plugin {
       event.put("reason", reason);
       notifyListeners("engineEvent", event);
     });
+    // Android Auto: JS hanya perlu tahu "ada permintaan"; isinya diambil lewat consumeAutoRequest() (sekali pakai),
+    // jadi event yang hilang karena JS belum memasang pendengar tidak membuat permintaan hilang.
+    AutoBridge.setListener((kind, payload) -> {
+      JSObject event = new JSObject();
+      event.put("kind", kind);
+      event.put("payload", payload);
+      notifyListeners("autoRequest", event);
+    });
   }
 
   @Override
   protected void handleOnDestroy() {
     PlaybackService.setListener(null);
     PlaybackService.setEngineListener(null);
+    AutoBridge.setListener(null);
     DownloadService.setListener(null);
     // WebView mati: antrean native jalan terus dan memegang notifikasinya sendiri.
     DownloadQueue.setListener(null);
@@ -339,6 +348,8 @@ public class MusicVerseNativePlugin extends Plugin {
   /** Membagikan berkas di folder files/ aplikasi (mis. cadangan data) lewat lembar bagikan sistem. */
   @PluginMethod
   public void shareFile(PluginCall call) {
+    String mime = call.getString("mimeType", "application/json");
+    if (mime == null || !mime.matches("[a-z]+/[a-z0-9.+-]+")) mime = "application/json";
     String rel = call.getString("path");
     String title = call.getString("title", "Bagikan berkas");
     if (rel == null || rel.contains("..") || rel.startsWith("/")) {
@@ -354,7 +365,7 @@ public class MusicVerseNativePlugin extends Plugin {
     try {
       Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".updatefileprovider", file);
       Intent send = new Intent(Intent.ACTION_SEND);
-      send.setType("application/json");
+      send.setType(mime);
       send.putExtra(Intent.EXTRA_STREAM, uri);
       send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
       Intent chooser = Intent.createChooser(send, title);
@@ -1000,6 +1011,13 @@ public class MusicVerseNativePlugin extends Plugin {
   }
 
   @PluginMethod
+  public void engineSetSpeed(PluginCall call) {
+    Double speed = call.getDouble("speed", 1.0);
+    PlaybackService.engineSetSpeed(speed == null ? 1f : speed.floatValue());
+    call.resolve();
+  }
+
+  @PluginMethod
   public void engineSetEq(PluginCall call) {
     boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", false));
     double[] gains = null;
@@ -1010,6 +1028,27 @@ public class MusicVerseNativePlugin extends Plugin {
     }
     PlaybackService.engineSetEq(enabled, gains);
     call.resolve();
+  }
+
+  // ---- Android Auto ----
+
+  /** Daftar telusur untuk Android Auto (JSON). Disimpan native supaya bisa ditelusuri walau WebView belum hidup. */
+  @PluginMethod
+  public void setAutoBrowse(PluginCall call) {
+    AutoBridge.setBrowse(getContext(), call.getString("json", ""));
+    call.resolve();
+  }
+
+  /** Permintaan putar dari Android Auto yang menunggu (sekali pakai). Objek kosong = tidak ada. */
+  @PluginMethod
+  public void consumeAutoRequest(PluginCall call) {
+    JSObject result = new JSObject();
+    String[] request = AutoBridge.consume();
+    if (request != null) {
+      result.put("kind", request[0]);
+      result.put("payload", request[1]);
+    }
+    call.resolve(result);
   }
 
   @PluginMethod
