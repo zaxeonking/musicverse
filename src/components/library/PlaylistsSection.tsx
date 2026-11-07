@@ -97,7 +97,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
  */
 export default function PlaylistsSection() {
   const navigate = useNavigate()
-  const { playlist: active, restorePlaylist } = usePlaylist()
+  const { playlist: active, restorePlaylist: restoreActivePlaylist } = usePlaylist()
   const { saved, prefs, removePlaylist, removePlaylists, savePlaylist, setPrefs } = useLibrary()
   const { playlists: mine, createPlaylist, deletePlaylists, restorePlaylist } = useMyPlaylists()
   const { showToast } = useTrackMenu()
@@ -133,10 +133,10 @@ export default function PlaylistsSection() {
   /** Membuka playlist tersimpan di Beranda. Playlist yang sudah aktif dan playback-nya tidak disentuh. */
   const handleOpen = useCallback(
     (playlist: SavedPlaylist) => {
-      restorePlaylist(toPlaylistDetail(playlist))
+      restoreActivePlaylist(toPlaylistDetail(playlist))
       navigate('/')
     },
-    [restorePlaylist, navigate],
+    [restoreActivePlaylist, navigate],
   )
 
   /** Hanya menghapus dari daftar; playlist aktif dan pemutaran yang berjalan tidak ikut berhenti. */

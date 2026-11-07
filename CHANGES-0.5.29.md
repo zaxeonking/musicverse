@@ -9,3 +9,5 @@
 - Hanya jalan di APK (HTTP native, seperti saran pencarian). Di browser biasa pencarian artis gagal CORS.
 - Batas 200 lagu dari iTunes dan hanya yang ada di katalog Apple Music. Foto artis tidak tersedia: daftar memakai gradien `fallbackCover`, detail memakai cover lagu pertama.
 - Lagu dari artis berisi tautan Apple Music (bukan Spotify), jadi "Buka di Spotify" tersembunyi untuk lagu ini.
+## Perbaikan build
+- `PlaylistsSection.tsx`: `restorePlaylist` dari `usePlaylist()` dan dari `useMyPlaylists()` dideklarasikan dua kali (TS2451, memicu TS2345/TS2339 di tombol "Urungkan"). Yang dari `usePlaylist()` diganti nama jadi `restoreActivePlaylist`; "Urungkan" kini memakai `restorePlaylist` milik `useMyPlaylists()` (yang mengembalikan `{ ok }`).
