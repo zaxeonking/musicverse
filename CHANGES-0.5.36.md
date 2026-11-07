@@ -1,4 +1,4 @@
-# 0.5.35 — Cari artis dari luar di Beranda (mode Lagu | Artis)
+# 0.5.36 — Cari artis dari luar di Beranda (mode Lagu | Artis)
 ## Perubahan
 - `PlaylistImportForm.tsx`: dua chip **Lagu | Artis** di bawah kolom cari. Mode Artis: placeholder "Nama artis", tombol "Cari artis", saran judul dimatikan. Menempel tautan Spotify saat mode Artis otomatis kembali ke mode Lagu (alur lama). Prop baru `mode`, `onModeChange`, `onArtistSearch`; tipe `SearchMode` diekspor.
 - `services/artistApi.ts` (baru): `searchArtists` (nama -> daftar artis) dan `fetchArtistSongs` (artis -> lagu gabungan, satu per judul). Profil iTunes hanya dipakai kalau ada lagunya yang juga ada di daftar Deezer, supaya tidak tercampur artis lain yang namanya sama hybrid lewat `pluginFetch`: artis + foto profil + jumlah penggemar dari Deezer; lagu = 100 terpopuler Deezer di urutan atas, dilengkapi lagu dari iTunes (sampai 200 per profil, maks 3 profil bernama sama). Lagu dibentuk sebagai `PlaylistTrack` biasa; audio tetap dicari lewat plugin (judul + artis) seperti lagu lain.
@@ -13,6 +13,8 @@
 - **Tab Lagu | Album di halaman artis:** diskografi dari Deezer (terbaru dulu, satu entri per judul, tahun + jenis). Ketuk album untuk lagunya sesuai urutan album, dengan tombol Putar semua / Acak / Tambah ke playlist / Buat playlist sendiri (playlist bernama "Album – Artis"). Back Android: album -> halaman artis -> daftar artis.
 - **Blok Artis di tab Cari:** `ArtistMatches.tsx`. Mengetik nama artis di tab Cari menampilkan sampai 3 baris artis (foto bulat) di atas hasil lagu; ketuk membuka halaman artis di Beranda. Online (hanya APK); kalau gagal/kosong blok tidak tampil. Memakai cache yang sama dengan Beranda.
 - Refactor: `ArtistList.tsx` (daftar artis bersama), `ArtistPlaylistSheet` menerima artis atau album.
+- **Urutan hasil artis:** penggemar terbanyak di paling atas (di Beranda dan blok Artis tab Cari). Foto bawaan Deezer berupa siluet abu-abu (artis tanpa foto) kini dianggap kosong dan diganti gradien app.
+- **Perbaikan tab Album kosong:** (1) galat Deezer (HTTP 200 + `{ error }`, mis. kuota habis) kini dianggap gagal ("Gagal memuat" + Coba lagi), bukan "tidak ada hasil". (2) Kalau daftar album Deezer kosong atau gagal, album disusun dari lagu yang sudah dimuat (dikelompokkan menurut nama album, subtitle "N lagu"); ketuk album menampilkan lagunya tanpa request baru.
 ## Catatan
 - Hanya JS (OTA). Belum dibuild/diuji di perangkat; pengecekan tipe penuh belum dijalankan (dependensi tidak terpasang).
 - Hanya jalan di APK (HTTP native, seperti saran pencarian). Di browser biasa pencarian artis gagal CORS.

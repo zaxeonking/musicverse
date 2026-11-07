@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { fetchAlbumSongs, fetchArtistAlbums, fetchArtistSongs, searchArtists, type AlbumHit, type ArtistHit } from '../services/artistApi'
+import { albumsFromSongs, fetchAlbumSongs, fetchArtistAlbums, fetchArtistSongs, searchArtists, type AlbumHit, type ArtistHit } from '../services/artistApi'
 import type { PlaylistTrack } from '../types/spotify'
 import { normalizeSearchText } from './trackSearch'
 
@@ -229,6 +229,7 @@ export const artistSearch = {
         if (ctl.signal.aborted) return
         if (found.length > 0) cachePut(songsCache, artist.id, found)
         set({ songs: found, phase: 'songs' })
+        if (state.tab === 'albums' && state.albums.length === 0 && state.albumsPhase !== 'loading') artistSearch.loadAlbums()
       })
       .catch(() => {
         if (!ctl.signal.aborted) set({ phase: 'error' })
@@ -254,14 +255,21 @@ export const artistSearch = {
     const ctl = new AbortController()
     albumsCtl = ctl
     set({ albumsPhase: 'loading' })
+    /** Daftar album Deezer kosong atau gagal: susun dari lagu yang sudah dimuat supaya tab Album tidak kosong. */
+    const fallback = (failed: boolean) => {
+      const derived = albumsFromSongs(state.songs)
+      if (derived.length > 0) set({ albums: derived, albumsPhase: 'ready' })
+      else set({ albums: [], albumsPhase: failed ? 'error' : 'ready' })
+    }
     fetchArtistAlbums(artist.id, ctl.signal)
       .then((found) => {
         if (ctl.signal.aborted) return
-        if (found.length > 0) cachePut(albumsCache, artist.id, found)
+        if (found.length === 0) return fallback(false)
+        cachePut(albumsCache, artist.id, found)
         set({ albums: found, albumsPhase: 'ready' })
       })
       .catch(() => {
-        if (!ctl.signal.aborted) set({ albumsPhase: 'error' })
+        if (!ctl.signal.aborted) fallback(true)
       })
   },
 
@@ -270,6 +278,12 @@ export const artistSearch = {
     const artist = state.selected
     if (!artist) return
     albumCtl?.abort()
+    if (album.local) {
+      albumCtl = null
+      const key = normalizeSearchText(album.title)
+      set({ album, albumSongs: state.songs.filter((song) => normalizeSearchText(song.album) === key), albumPhase: 'ready' })
+      return
+    }
     const cached = cacheGet(albumSongsCache, album.id)
     if (cached) {
       albumCtl = null

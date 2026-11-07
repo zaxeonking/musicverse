@@ -43,6 +43,8 @@ export interface AlbumHit {
   year: string
   /** Album, Single, EP, dst. */
   kind: string
+  /** Disusun dari lagu yang sudah dimuat (cadangan bila daftar album Deezer kosong/gagal), bukan dari API album. */
+  local?: boolean
 }
 
 interface DeezerAlbum {
@@ -76,19 +78,24 @@ interface ItunesRow {
 
 async function getJson(url: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const response = await pluginFetch(url, { headers: { Accept: 'application/json' }, timeoutMs: 10_000, signal })
-  return JSON.parse(await response.text()) as Record<string, unknown>
+  const body = JSON.parse(await response.text()) as Record<string, unknown>
+  // Deezer membalas galat (mis. kuota habis) dengan HTTP 200 dan { error }. Itu kegagalan, bukan "tidak ada hasil".
+  if (body.error) throw new Error(`Deezer: ${JSON.stringify(body.error).slice(0, 120)}`)
+  return body
 }
 
 async function getList<T>(url: string, key: 'data' | 'results', signal?: AbortSignal): Promise<T[]> {
-  // Deezer membalas galat dengan HTTP 200 dan { error }, jadi daftarnya bisa tidak ada.
   const body = await getJson(url, signal)
   return Array.isArray(body[key]) ? (body[key] as T[]) : []
 }
 
-/** Gambar bawaan Deezer untuk artis tanpa foto berupa berkas tanpa nama (…/artist//…): anggap kosong. */
+/**
+ * Gambar bawaan Deezer untuk artis tanpa foto (siluet abu-abu) dianggap kosong, supaya tampil gradien app.
+ * Cirinya: alamat tanpa kode gambar (…/artist//…) atau kode md5 string kosong (d41d8cd9…).
+ */
 function pictureOf(row: DeezerArtist): string {
   const url = row.picture_big || row.picture_medium || ''
-  return /\/artist\/\/|\/images\/artist\/\//.test(url) ? '' : url
+  return /\/artist\/\/|d41d8cd98f00b204e9800998ecf8427e/.test(url) ? '' : url
 }
 
 export async function searchArtists(query: string, signal?: AbortSignal): Promise<ArtistHit[]> {
@@ -104,7 +111,8 @@ export async function searchArtists(query: string, signal?: AbortSignal): Promis
     seen.add(id)
     out.push({ id, name: row.name, picture: pictureOf(row), fans: row.nb_fan ?? 0 })
   }
-  return out
+  // Penggemar terbanyak di atas (sort stabil: yang sama banyak tetap urutan relevansi Deezer).
+  return out.sort((a, b) => b.fans - a.fans)
 }
 
 async function deezerTopSongs(artistId: string, signal?: AbortSignal): Promise<PlaylistTrack[]> {
@@ -242,4 +250,29 @@ export async function fetchAlbumSongs(album: AlbumHit, artistName: string, signa
     })
   }
   return out
+}
+
+/** Cadangan: kelompokkan lagu yang sudah dimuat berdasarkan nama albumnya (lagu Deezer dan iTunes sama-sama membawa nama album). */
+export function albumsFromSongs(songs: readonly PlaylistTrack[]): AlbumHit[] {
+  const groups = new Map<string, { title: string; cover: string; count: number }>()
+  for (const song of songs) {
+    const title = song.album.trim()
+    if (!title) continue
+    const key = normalizeSearchText(title)
+    const group = groups.get(key)
+    if (group) {
+      group.count += 1
+      if (!group.cover && song.cover) group.cover = song.cover
+    } else {
+      groups.set(key, { title, cover: song.cover, count: 1 })
+    }
+  }
+  return [...groups.entries()].map(([key, group]) => ({
+    id: `local:${key}`,
+    title: group.title,
+    cover: group.cover,
+    year: '',
+    kind: `${group.count} lagu`,
+    local: true,
+  }))
 }
