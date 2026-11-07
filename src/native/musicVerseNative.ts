@@ -1,7 +1,7 @@
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 
 /** Aksi dari tombol notifikasi / layar kunci / headset. */
-export type NativeMediaAction = 'play' | 'pause' | 'next' | 'previous' | 'seek' | 'stop'
+export type NativeMediaAction = 'play' | 'pause' | 'next' | 'previous' | 'seek' | 'stop' | 'like'
 
 export interface NativeMediaActionEvent {
   action: NativeMediaAction
@@ -439,6 +439,8 @@ export interface MusicVerseNativePlugin {
   updateNowPlaying(options: NowPlayingUpdate): Promise<void>
   /** Menghentikan foreground service dan menghapus notifikasi. */
   stopPlayback(): Promise<void>
+  /** Memberi tahu widget layar utama apakah lagu aktif sudah disukai (hati terisi / kosong). */
+  setWidgetLiked(options: { title: string; liked: boolean }): Promise<void>
   /** Android 13+: minta izin notifikasi. Di versi lain langsung 'granted'. */
   requestNotificationPermission(): Promise<{ granted: boolean }>
   /** True jika aplikasi dikecualikan dari penghemat baterai. */

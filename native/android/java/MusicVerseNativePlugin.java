@@ -1164,6 +1164,13 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve();
   }
 
+  /** JS -> widget: lagu aktif sedang disukai atau tidak (hati terisi di widget). */
+  @PluginMethod
+  public void setWidgetLiked(PluginCall call) {
+    PlaybackService.setWidgetLiked(getContext(), call.getString("title", ""), Boolean.TRUE.equals(call.getBoolean("liked", false)));
+    call.resolve();
+  }
+
   @PluginMethod
   public void stopPlayback(PluginCall call) {
     PlaybackService.stop(getContext());

@@ -25,7 +25,8 @@
             android:layout_width="52dp"
             android:layout_height="52dp"
             android:contentDescription="Sampul"
-            android:scaleType="fitCenter" />
+            android:scaleType="fitCenter" 
+        android:src="@drawable/notif_default_cover" />
     <LinearLayout
         android:id="@+id/widget_text"
         android:layout_width="0dp"

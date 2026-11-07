@@ -7,24 +7,45 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application>
 
-    <!-- Widget layar utama: Standar 4×1 -->
+    <!-- Penerima perintah tombol widget (Sebelumnya / Putar / Berikutnya). Bukan widget di daftar peluncur (dulu "Standar 4×1",
+         kembar dengan Strip 4×1), jadi tanpa intent-filter APPWIDGET_UPDATE dan tanpa meta-data penyedia. -->
     <receiver
         android:name=".MusicVerseWidget"
+        android:exported="false" />
+
+    <!-- Daftar widget diurutkan dari yang terkecil. Awalan angka pada label memaksa peluncur yang mengurutkan menurut abjad
+         tetap menampilkan urutan ini. -->
+    <!-- Widget layar utama: Mini 1×1 -->
+    <receiver
+        android:name=".MusicVerseWidgetTiny"
         android:exported="false"
-        android:label="MusicVerse · Standar 4×1">
+        android:label="1 · Mini 1×1">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>
       <meta-data
           android:name="android.appwidget.provider"
-          android:resource="@xml/widget_player_info" />
+          android:resource="@xml/widget_tiny_info" />
+    </receiver>
+
+    <!-- Widget layar utama: Strip 4×1 -->
+    <receiver
+        android:name=".MusicVerseWidgetStrip"
+        android:exported="false"
+        android:label="2 · Strip 4×1">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/widget_strip_info" />
     </receiver>
 
     <!-- Widget layar utama: Kotak 2×2 -->
     <receiver
         android:name=".MusicVerseWidgetSquare"
         android:exported="false"
-        android:label="MusicVerse · Kotak 2×2">
+        android:label="3 · Kotak 2×2">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>
@@ -37,7 +58,7 @@
     <receiver
         android:name=".MusicVerseWidgetTall"
         android:exported="false"
-        android:label="MusicVerse · Tinggi 2×3">
+        android:label="4 · Tinggi 2×3">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>
@@ -50,39 +71,13 @@
     <receiver
         android:name=".MusicVerseWidgetLarge"
         android:exported="false"
-        android:label="MusicVerse · Besar 4×2">
+        android:label="5 · Besar 4×2">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>
       <meta-data
           android:name="android.appwidget.provider"
           android:resource="@xml/widget_large_info" />
-    </receiver>
-
-    <!-- Widget layar utama: Strip 4×1 -->
-    <receiver
-        android:name=".MusicVerseWidgetStrip"
-        android:exported="false"
-        android:label="MusicVerse · Strip 4×1">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data
-          android:name="android.appwidget.provider"
-          android:resource="@xml/widget_strip_info" />
-    </receiver>
-
-    <!-- Widget layar utama: Mini 1×1 -->
-    <receiver
-        android:name=".MusicVerseWidgetTiny"
-        android:exported="false"
-        android:label="MusicVerse · Mini 1×1">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data
-          android:name="android.appwidget.provider"
-          android:resource="@xml/widget_tiny_info" />
     </receiver>
 
     <!-- Layar atur widget (exported wajib true: dibuka oleh peluncur layar utama) -->

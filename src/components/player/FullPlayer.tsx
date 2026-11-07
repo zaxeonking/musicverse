@@ -1,6 +1,6 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
@@ -18,22 +18,21 @@ import LyricsPanel from './LyricsPanel'
 import SeekBar from './SeekBar'
 import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
 import { isNativeApp } from '../../native/platform'
-import { takeFlyOrigin } from '../../services/flyOrigin'
+import {
+  animateSheet,
+  fingerToProgressVelocity,
+  getSheetHold,
+  getSheetProgress,
+  getSheetTravel,
+  measureSheetTravel,
+  projectSheet,
+  setSheetProgress,
+  stopSheetAnimation,
+  subscribeSheet,
+  subscribeSheetHold,
+} from '../../services/playerSheet'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
-/** Durasi & easing gerakan pemutar penuh <-> mini player (satu animasi berkelanjutan). */
-const OPEN_MS = 560
-const CLOSE_MS = 380
-const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
-const EASE_HERO = 'cubic-bezier(0.45, 0, 0.15, 1)'
-/** Buka: melesat dulu lalu mengendap pelan di posisi akhir (ease-out kuat), seperti sampul "ditarik" ke atas. */
-const EASE_OPEN = 'cubic-bezier(0.22, 1, 0.36, 1)'
-/** Tutup setelah diseret: gerak langsung cepat (melanjutkan seretan jari), lalu mengendap. */
-const EASE_DRAG_CLOSE = 'cubic-bezier(0.32, 0.72, 0, 1)'
-
-const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-/** Jeda masuk bertahap (ms) untuk elemen pemutar penuh. */
-const delay = (ms: number) => ({ '--fp-delay': `${ms}ms` }) as CSSProperties
 /** Sampul kecil di mini player: titik awal/akhir terbang sampul. */
 const miniCoverRect = () => {
   const rect = document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect()
@@ -48,33 +47,30 @@ const miniCoverRadius = (width: number) => {
   return Math.min(Number.isFinite(r) ? r : 8, width / 2)
 }
 
-const FLY_STEPS = 10
-/** Kotak minimal yang dibutuhkan flyKeyframes (DOMRect atau hasil konversi koordinat). */
+/** Kotak minimal untuk menghitung posisi sampul (koordinat layar). */
 type Box = Pick<DOMRect, 'left' | 'top' | 'width'>
 
-/**
- * Keyframe sampul terbang antara kotak kecil `from` dan kotak besar `to` (FLIP, asal sudut kiri atas).
- * Skala murni ikut mengecilkan radius sudut (28px x 0,15 ~ 4px), jadi sudut tampak melompat. Di sini radius tiap
- * langkah dihitung ulang supaya radius TAMPAK berubah mulus dari `rFrom` ke `rTo`. Bayangan sengaja TIDAK dianimasikan:
- * box-shadow besar digambar ulang tiap frame dan membuat gerak tersendat; bayangan statis di kelas sampul ikut diskalakan.
- * `reverse` = dari besar ke kecil (menutup); offset tetap menaik, hanya isinya yang dibalik.
- */
-function flyKeyframes(from: Box, to: Box, rFrom: number, rTo: number, reverse = false): Keyframe[] {
-  const s0 = from.width / to.width
-  const frames: Keyframe[] = []
-  for (let i = 0; i <= FLY_STEPS; i += 1) {
-    const offset = i / FLY_STEPS
-    const p = reverse ? 1 - offset : offset
-    const scale = s0 + (1 - s0) * p
-    const visual = rFrom + (rTo - rFrom) * p
-    frames.push({
-      offset,
-      transform: `translate3d(${(from.left - to.left) * (1 - p)}px, ${(from.top - to.top) * (1 - p)}px, 0) scale(${scale})`,
-      borderRadius: `${visual / scale}px`,
-    })
-  }
-  return frames
+/** Ukuran dan posisi sampul di dua ujung gerakan: kecil (di mini player) dan besar (di pemutar penuh). */
+interface CoverGeometry {
+  mini: Box
+  /** Sampul besar pada posisi alaminya (tanpa transform), relatif terhadap dialog yang memenuhi layar. */
+  full: Box
+  rMini: number
+  rFull: number
+  /** Tidak ada sampul mini sebagai titik awal (gelembung / belum ada): sampul membesar sambil memudar. */
+  fade: boolean
 }
+
+const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value)
+/** Awal (progress) dan lebar tiap tahap kemunculan elemen pemutar penuh: bergantian satu per satu seiring lapisan naik. */
+const ITEM_START = 0.3
+const ITEM_STEP = 0.05
+const ITEM_SPAN = 0.4
+/** Jarak progress latar memudar penuh; sampul tanpa titik awal memudar dalam jarak yang sama. */
+const BG_FADE = 0.18
+/** Proyeksi progress (posisi + momentum) di bawah ini saat dilepas = tutup. Cukup ~20% jarak atau lemparan ringan. */
+const CLOSE_PROJECTION = 0.8
+const SHEET_RADIUS = 28
 
 /** Ikon hati: outline <-> terisi berganti halus, plus membal kecil saat baru disukai. */
 function LikeHeart({ liked }: { liked: boolean }) {
@@ -142,7 +138,10 @@ export default function FullPlayer({
   const closeRef = useRef<HTMLButtonElement>(null)
   const coverRef = useRef<HTMLDivElement>(null)
   const bgRef = useRef<HTMLDivElement>(null)
-  const openedRef = useRef(false)
+  const geoRef = useRef<CoverGeometry | null>(null)
+  const itemsRef = useRef<HTMLElement[]>([])
+  // Lapisan dipasang karena seretan dari mini player dan belum resmi terbuka: tidak interaktif.
+  const dragHold = useSyncExternalStore(subscribeSheetHold, getSheetHold, () => false)
   const [bgFailed, setBgFailed] = useState(false)
   // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
   const [showLyrics, setShowLyrics] = useState(false)
@@ -175,35 +174,6 @@ export default function FullPlayer({
     return () => document.documentElement.removeAttribute('data-fp-open')
   }, [])
 
-  // Buka: sampul membesar bertahap dari posisi sampul di mini player (FLIP). Dijalankan sekali, setelah ukuran sampul diukur.
-  useLayoutEffect(() => {
-    const el = coverRef.current
-    if (!el || openedRef.current || coverSize === 0) return
-    openedRef.current = true
-    if (prefersReducedMotion()) return
-    const to = el.getBoundingClientRect()
-    // Asal terbang: posisi sampul mini TEPAT saat dilepas (dicatat MiniPlayer), bukan posisi saat kartunya bergerak kembali.
-    const from = takeFlyOrigin() ?? miniCoverRect()
-    if (from && to.width > 0) {
-      el.style.transformOrigin = 'top left'
-      el.style.willChange = 'transform'
-      const rTo = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 28
-      const anim = el.animate(flyKeyframes(from, to, miniCoverRadius(from.width), rTo), { duration: OPEN_MS, easing: EASE_OPEN })
-      anim.onfinish = () => {
-        el.style.willChange = ''
-      }
-    } else {
-      // Mini player berupa gelembung / belum ada: sampul naik pelan dari bawah.
-      el.animate(
-        [
-          { opacity: 0, transform: 'translate3d(0, 36px, 0) scale(0.9)' },
-          { opacity: 1, transform: 'none' },
-        ],
-        { duration: OPEN_MS, easing: EASE },
-      )
-    }
-  }, [coverSize])
-
   const onSwipeStart = (event: TouchEvent) => {
     const t = event.touches[0]
     swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null
@@ -235,81 +205,136 @@ export default function FullPlayer({
     onClosedRef.current = onClosed
   }, [onClosed])
   const closingRef = useRef(false)
-  // Seretan turun yang sedang berlangsung (px turun + skala kartu): dipakai animasi tutup agar melanjutkan dari posisi jari.
-  const dragRef = useRef({ pull: 0, scale: 1 })
   const animateClose = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
     onCloseRef.current()
   }, [])
+  const ready = now !== null && currentTrack !== null
 
-  // Tutup: animasi berjalan terbalik. Sampul mengecil kembali ke posisi mini player, info & kontrol memudar,
-  // lalu latar memudar membuka Beranda (yang tidak pernah dilepas, jadi posisi scroll-nya tetap).
-  useEffect(() => {
-    if (!closing) return
-    closingRef.current = true
-    const el = dialogRef.current
-    if (!el) {
-      onClosedRef.current?.()
+  /**
+   * Terjemahkan progress (0 = mini, 1 = penuh) ke tampilan. Hanya transform dan opacity (jalur compositor), ditulis langsung
+   * ke DOM tanpa render ulang React, jadi aman dipanggil tiap frame saat jari menyeret maupun saat pegas berjalan.
+   *  - dialog: naik dari tepi atas kartu mini (jarak tempuh) ke posisi penuh, mengikuti jari 1:1;
+   *  - latar: memudar masuk cepat di awal supaya lapisan "keluar" dari kartu mini;
+   *  - sampul: terbang menyatu dari sampul mini ke ukuran penuh (posisi, skala, radius diinterpolasi dengan progress yang sama);
+   *  - elemen lain: muncul bergantian setelah lapisan naik separuh jalan.
+   */
+  const renderSheet = useCallback((p: number) => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    const y = (1 - p) * getSheetTravel()
+    dialog.style.transform = p >= 1 ? '' : `translate3d(0, ${y}px, 0)`
+    // Sudut atas membulat selama lapisan bergerak, menyatu ke persegi penuh saat tiba di atas.
+    const radius = p >= 1 ? 0 : Math.round(SHEET_RADIUS * clamp01((1 - p) * 8))
+    dialog.style.borderRadius = radius > 0 ? `${radius}px ${radius}px 0 0` : ''
+    if (bgRef.current) bgRef.current.style.opacity = p >= BG_FADE ? '' : String(p / BG_FADE)
+
+    const items = itemsRef.current
+    for (let i = 0; i < items.length; i += 1) {
+      const t = clamp01((p - (ITEM_START + i * ITEM_STEP)) / ITEM_SPAN)
+      items[i].style.opacity = t >= 1 ? '' : String(t)
+      items[i].style.transform = t >= 1 ? '' : `translate3d(0, ${(1 - t) * 16}px, 0)`
+    }
+
+    const cover = coverRef.current
+    const geo = geoRef.current
+    if (cover && geo) {
+      const { mini, full } = geo
+      const s0 = mini.width / full.width
+      const scale = s0 + (1 - s0) * p
+      const left = mini.left + (full.left - mini.left) * p
+      const top = mini.top + (full.top - mini.top) * p
+      // Posisi layar yang diinginkan dikurangi posisi layar akibat dialog yang bergeser = transform lokal sampul.
+      cover.style.transform = p >= 1 ? '' : `translate3d(${left - full.left}px, ${top - (full.top + y)}px, 0) scale(${scale})`
+      // Skala ikut mengecilkan sudut, jadi radius dibagi skala supaya TAMPAK berubah mulus dari kecil ke besar.
+      cover.style.borderRadius = p >= 1 ? '' : `${(geo.rMini + (geo.rFull - geo.rMini) * p) / scale}px`
+      cover.style.opacity = geo.fade && p < BG_FADE ? String(p / BG_FADE) : ''
+      if (slotRef.current) slotRef.current.style.opacity = ''
+    } else if (slotRef.current) {
+      // Lirik terbuka (tidak ada sampul): seluruh slot memudar masuk bersama elemen lain.
+      const t = clamp01((p - ITEM_START) / ITEM_SPAN)
+      slotRef.current.style.opacity = t >= 1 ? '' : String(t)
+    }
+  }, [])
+
+  /** Ukur titik awal/akhir sampul. Sampul besar diukur dari layout (offset), jadi tidak terpengaruh transform yang sedang berjalan. */
+  const measureGeometry = useCallback(() => {
+    const dialog = dialogRef.current
+    const cover = coverRef.current
+    itemsRef.current = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('.fp-item')) : []
+    if (!cover || coverSize <= 0) {
+      geoRef.current = null
       return
     }
-    el.dataset.closing = 'true'
-    const ms = prefersReducedMotion() ? 0 : CLOSE_MS
-    const cover = coverRef.current
-    const mini = miniCoverRect()
-    // Setelah diseret, kartu masih turun + mengecil (sisa seretan). JANGAN dikembalikan ke posisi penuh (itu yang dulu membuat
-    // kartu "membalik" naik lalu menghilang): kartu dibiarkan di tempatnya dan hanya memudar, sementara sampul terbang dari
-    // posisi tampaknya sekarang ke sampul mini. Koordinat target dikonversi ke ruang lokal kartu (kebalikan dari transformnya).
-    const { pull, scale: s } = dragRef.current
-    const dragged = pull > 0
-    let natural = cover?.getBoundingClientRect() ?? null
-    if (dragged && cover) {
-      const keep = el.style.transform
-      el.style.transition = 'none'
-      el.style.transform = ''
-      natural = cover.getBoundingClientRect() // posisi alami (kartu memenuhi layar, jadi sama dengan koordinat lokal)
-      el.style.transform = keep
-    }
-    const cx = el.clientWidth / 2
-    const toLocal = (r: DOMRect): Box & { height: number } =>
-      dragged
-        ? { left: cx + (r.left - cx) / s, top: (r.top - pull) / s, width: r.width / s, height: r.height / s }
-        : r
-    if (cover && natural) {
-      cover.style.transformOrigin = 'top left'
-      cover.style.willChange = 'transform'
-      const rFull = parseFloat(getComputedStyle(cover).borderTopLeftRadius) || 28
-      const target: Keyframe[] =
-        mini && natural.width > 0
-          ? flyKeyframes(toLocal(mini), natural, miniCoverRadius(mini.width) / (dragged ? s : 1), rFull, true)
-          : [
-              { opacity: 1, transform: 'none' },
-              { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.92)' },
-            ]
-      cover.animate(target, { duration: ms, easing: dragged ? EASE_DRAG_CLOSE : EASE_HERO, fill: 'forwards' })
+    // Dialog memenuhi layar dan menjadi offsetParent sampul, jadi offset = koordinat layar saat tidak bergeser.
+    const full: Box = { left: cover.offsetLeft, top: cover.offsetTop, width: coverSize }
+    const rFull = parseFloat(getComputedStyle(cover).borderTopLeftRadius) || SHEET_RADIUS
+    const miniRect = miniCoverRect()
+    if (miniRect) {
+      geoRef.current = { mini: miniRect, full, rMini: miniCoverRadius(miniRect.width), rFull, fade: false }
     } else {
-      slotRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.5, easing: EASE, fill: 'forwards' })
+      // Mini player berupa gelembung / belum ada: sampul membesar dari dekat dasar layar sambil memudar.
+      const mini: Box = { left: window.innerWidth / 2 - 22, top: getSheetTravel() - 56, width: 44 }
+      geoRef.current = { mini, full, rMini: 22, rFull, fade: true }
     }
-    // Latar memudar searah sampul; setelah diseret mulai lebih awal karena kartu sudah bergerak.
-    bgRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: ms * (dragged ? 0.8 : 0.75),
-      delay: ms * (dragged ? 0.1 : 0.3),
-      easing: EASE,
-      fill: 'forwards',
-    })
-    const timer = window.setTimeout(() => onClosedRef.current?.(), ms + 40)
-    return () => window.clearTimeout(timer)
+  }, [coverSize])
+
+  // Dibuka lewat ketukan (bukan seretan): ukur jarak tempuh dari mini player yang sedang diam dan mulai dari progress 0.
+  useLayoutEffect(() => {
+    if (getSheetHold()) return
+    measureSheetTravel()
+    setSheetProgress(0)
+  }, [])
+
+  // Tata ulang tampilan tiap kali geometri berubah, SEBELUM digambar: tidak ada frame di posisi mentah.
+  useLayoutEffect(() => {
+    measureGeometry()
+    renderSheet(getSheetProgress())
+  }, [ready, coverSize, showLyrics, measureGeometry, renderSheet])
+  useLayoutEffect(() => {
+    const onResize = () => {
+      measureGeometry()
+      renderSheet(getSheetProgress())
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [measureGeometry, renderSheet])
+
+  // Ikuti progress: seretan jari dan pegas sama-sama lewat sini.
+  useLayoutEffect(() => subscribeSheet(renderSheet), [renderSheet])
+
+  // Lapisan dilepas: pastikan pegas berhenti dan progress kembali ke mini untuk pembukaan berikutnya.
+  useEffect(
+    () => () => {
+      stopSheetAnimation()
+      setSheetProgress(0)
+    },
+    [],
+  )
+
+  // Buka = pegas ke 1 (dari 0 saat diketuk, atau dari posisi sekarang bila dibuka ulang di tengah animasi tutup).
+  // Tutup (riwayat mundur: tombol turun, seret, Esc, tombol Kembali Android) = pegas ke 0 yang melanjutkan kecepatan seretan, lalu lepas komponen.
+  // Dibuka lewat seretan dari mini player: seretan itu sendiri yang menggerakkan progress, jadi tidak ada pegas di sini.
+  useEffect(() => {
+    if (closing) {
+      closingRef.current = true
+      animateSheet(0, undefined, () => onClosedRef.current?.())
+      return
+    }
+    closingRef.current = false
+    if (!getSheetHold()) animateSheet(1)
   }, [closing])
 
-  // Seret ke bawah dari mana saja (selama konten di posisi paling atas) = tutup. Pakai event sentuh
-  // native karena touchmove harus bisa di-preventDefault agar halaman tidak ikut tergulung.
-  const ready = now !== null && currentTrack !== null
+  // Seret ke bawah dari mana saja (selama konten di posisi paling atas) = lapisan ikut turun mengikuti jari 1:1,
+  // dilepas dengan kecepatan jari. Pakai event sentuh native karena touchmove harus bisa di-preventDefault agar halaman tidak ikut tergulung.
   useEffect(() => {
     const el = dialogRef.current
     if (!el) return
-    const CLOSE_PX = 120
     let startX = 0
     let startY = 0
+    let claimY = 0
+    let base = 1
     let lastY = 0
     let lastT = 0
     let velocity = 0
@@ -333,14 +358,6 @@ export default function FullPlayer({
         node = node.parentElement
       }
       return false
-    }
-
-    const springBack = () => {
-      dragRef.current = { pull: 0, scale: 1 }
-      el.style.transition = 'transform 380ms cubic-bezier(0.34,1.56,0.64,1), border-radius 380ms, opacity 200ms'
-      el.style.transform = ''
-      el.style.borderRadius = ''
-      el.style.opacity = ''
     }
 
     const onStart = (event: globalThis.TouchEvent) => {
@@ -369,22 +386,22 @@ export default function FullPlayer({
           return
         }
         dragging = true
-        el.style.animation = 'none'
-        el.style.transformOrigin = 'top center'
+        // Tangkap lapisan di posisinya sekarang (bisa saja masih di tengah animasi buka). Titik klaim = nol, jadi tidak ada lompatan.
+        stopSheetAnimation()
+        base = getSheetProgress()
+        claimY = t.clientY
+        lastY = t.clientY
+        lastT = event.timeStamp
+        velocity = 0
       }
       if (event.cancelable) event.preventDefault()
       const dt = event.timeStamp - lastT
-      if (dt > 0) velocity = (t.clientY - lastY) / dt
+      // Kecepatan dihaluskan supaya lemparan akhir tidak ditentukan satu event yang berisik.
+      if (dt > 0) velocity = velocity * 0.5 + ((t.clientY - lastY) / dt) * 0.5
       lastY = t.clientY
       lastT = event.timeStamp
-      const pull = Math.max(0, dy - 8)
-      const p = Math.min(pull / 320, 1)
-      el.style.transition = 'none'
-      const scale = 1 - p * 0.07
-      dragRef.current = { pull, scale }
-      el.style.transform = `translate3d(0, ${pull}px, 0) scale(${scale})`
-      el.style.borderRadius = `${Math.min(pull / 4, 28)}px`
-      const over = pull > CLOSE_PX
+      setSheetProgress(base - (t.clientY - claimY) / getSheetTravel())
+      const over = projectSheet(getSheetProgress(), fingerToProgressVelocity(velocity)) < CLOSE_PROJECTION
       if (over !== crossed) {
         crossed = over
         if (over) navigator.vibrate?.(10)
@@ -398,10 +415,16 @@ export default function FullPlayer({
       }
       tracking = false
       dragging = false
-      const t = event.changedTouches[0]
-      const pull = t ? t.clientY - startY - 8 : 0
-      if (!cancelled && (pull > CLOSE_PX || (velocity > 0.7 && pull > 40))) animateClose()
-      else springBack()
+      // Jari diam sebelum dilepas = tidak ada momentum.
+      const pv = cancelled || event.timeStamp - lastT > 90 ? 0 : fingerToProgressVelocity(velocity)
+      const close = !cancelled && projectSheet(getSheetProgress(), pv) < CLOSE_PROJECTION
+      if (close) {
+        // Pegas langsung dilanjutkan dari jari; efek `closing` (setelah riwayat mundur) hanya menambahkan pelepasan komponen.
+        animateSheet(0, pv)
+        animateClose()
+      } else {
+        animateSheet(1, pv)
+      }
     }
     const onTouchEnd = (event: globalThis.TouchEvent) => onEnd(event, false)
     const onTouchCancel = (event: globalThis.TouchEvent) => onEnd(event, true)
@@ -423,7 +446,8 @@ export default function FullPlayer({
     const previous = document.activeElement as HTMLElement | null
     const { overflow } = document.body.style
     document.body.style.overflow = 'hidden'
-    closeRef.current?.focus()
+    // preventScroll: dialog bisa sedang bergeser di bawah layar saat fokus masuk; jangan sampai browser menggulung apa pun.
+    closeRef.current?.focus({ preventScroll: true })
     return () => {
       document.body.style.overflow = overflow
       previous?.focus?.()
@@ -464,7 +488,7 @@ export default function FullPlayer({
       aria-modal="true"
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
-      className={`fixed inset-0 z-50 isolate flex flex-col overflow-hidden ${closing ? 'pointer-events-none' : ''}`}
+      className={`fixed inset-0 z-50 isolate flex flex-col overflow-hidden will-change-transform ${closing || dragHold ? 'pointer-events-none' : ''}`}
       style={{ '--mv-accent': coverColor.replace(/,/g, ' ') } as CSSProperties}
     >
       {/* Latar: artwork diburamkan + gradient gelap. Memudar masuk/keluar sebagai satu lapisan (di atas Beranda). */}
@@ -493,7 +517,7 @@ export default function FullPlayer({
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
       <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pb-2 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <header style={delay(60)} className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
+        <header className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
             type="button"
@@ -529,7 +553,7 @@ export default function FullPlayer({
               ref={coverRef}
               {...press}
               style={{ width: coverSize, height: coverSize }}
-              className="shrink-0 select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
+              className="shrink-0 origin-top-left select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 will-change-transform [-webkit-touch-callout:none]"
             >
               <CoverArt cover={now.cover} src={now.coverSrc} />
             </div>
@@ -537,7 +561,7 @@ export default function FullPlayer({
         </div>
 
         <div className="space-y-3">
-          <div style={delay(240)} className="fp-item flex items-start gap-3">
+          <div className="fp-item flex items-start gap-3">
             <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
               <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
                 {now.title}
@@ -560,7 +584,7 @@ export default function FullPlayer({
             </button>
           </div>
 
-          <div style={delay(290)} className="fp-item">
+          <div className="fp-item">
             {isError ? (
               <PlayerError />
             ) : (
@@ -574,7 +598,7 @@ export default function FullPlayer({
           </div>
 
           {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
-          <div style={delay(340)} className="fp-item">
+          <div className="fp-item">
             <TransportControls
               size="xl"
               className="!justify-between"
@@ -589,7 +613,7 @@ export default function FullPlayer({
 
           {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
               putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
-          <div style={delay(390)} className="fp-item">
+          <div className="fp-item">
           {(() => {
             const lyricsBtn = (
               <button
@@ -656,8 +680,7 @@ export default function FullPlayer({
         data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        style={delay(430)}
-        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
+        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-white/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya

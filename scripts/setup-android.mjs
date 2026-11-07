@@ -5,7 +5,7 @@
 //
 // Yang dilakukan:
 //  0. Menambah dependency androidx.media3 (ExoPlayer) ke app/build.gradle (langkah 3)
-//  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity, widget (6 bentuk + layar atur) ke android/app/src/main/java/<appId>/
+//  1. Menyalin PlaybackService, DownloadService, MusicVerseNativePlugin, MainActivity, widget (5 bentuk + layar atur) ke android/app/src/main/java/<appId>/
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
 //  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
@@ -177,17 +177,38 @@ if (!manifest.includes('.UpdateFileProvider')) {
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${provider}$1</application>`)
 }
 
-// Widget layar utama: 6 bentuk (Standar 4x1, Kotak 2x2, Tinggi 2x3, Besar 4x2, Strip 4x1 tipis, Mini 1x1). Tiap bentuk satu receiver
-// (semuanya menerima pembaruan dari PlaybackService dan ketukan tombol), ditambah layar atur per widget.
-// Dicek satu per satu supaya manifest dari versi lama (hanya widget Standar) ikut mendapat yang baru.
+// Widget layar utama: 5 bentuk di daftar peluncur, diurutkan dari terkecil (Mini 1x1, Strip 4x1, Kotak 2x2, Tinggi 2x3, Besar 4x2).
+// Tiap bentuk satu receiver (semuanya menerima pembaruan dari PlaybackService), ditambah layar atur per widget. Awalan angka pada
+// label memaksa peluncur yang mengurutkan menurut abjad tetap menampilkan urutan terkecil dulu.
+// Kelas dasar MusicVerseWidget (dulu "Standar 4x1", kembar dengan Strip 4x1) tetap terdaftar HANYA sebagai penerima perintah
+// tombol (tanpa intent-filter / meta-data penyedia), supaya tidak muncul dua kali di daftar.
+// Dicek satu per satu supaya manifest dari versi lama ikut mendapat yang baru.
 const widgetReceivers = [
-  ['MusicVerseWidget', 'MusicVerse · Standar 4×1', 'widget_player_info'],
-  ['MusicVerseWidgetSquare', 'MusicVerse · Kotak 2×2', 'widget_square_info'],
-  ['MusicVerseWidgetTall', 'MusicVerse · Tinggi 2×3', 'widget_tall_info'],
-  ['MusicVerseWidgetLarge', 'MusicVerse · Besar 4×2', 'widget_large_info'],
-  ['MusicVerseWidgetStrip', 'MusicVerse · Strip 4×1', 'widget_strip_info'],
-  ['MusicVerseWidgetTiny', 'MusicVerse · Mini 1×1', 'widget_tiny_info'],
+  ['MusicVerseWidgetTiny', '1 · Mini 1×1', 'widget_tiny_info'],
+  ['MusicVerseWidgetStrip', '2 · Strip 4×1', 'widget_strip_info'],
+  ['MusicVerseWidgetSquare', '3 · Kotak 2×2', 'widget_square_info'],
+  ['MusicVerseWidgetTall', '4 · Tinggi 2×3', 'widget_tall_info'],
+  ['MusicVerseWidgetLarge', '5 · Besar 4×2', 'widget_large_info'],
 ]
+// Migrasi manifest lama: buang receiver Standar lama (yang jadi penyedia widget) lalu daftarkan ulang sebagai penerima perintah saja.
+manifest = manifest.replace(
+  /\s*<receiver\b(?:(?!<\/receiver>)[\s\S])*?android:name="\.MusicVerseWidget"(?:(?!<\/receiver>)[\s\S])*?widget_player_info[\s\S]*?<\/receiver>/,
+  '',
+)
+if (!/android:name="\.MusicVerseWidget"/.test(manifest)) {
+  const base =
+    '        <receiver\n' +
+    '            android:name=".MusicVerseWidget"\n' +
+    '            android:exported="false" />\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${base}$1</application>`)
+}
+// Label lama (tanpa awalan angka) diganti supaya urutannya benar di peluncur.
+for (const [cls, label] of widgetReceivers) {
+  manifest = manifest.replace(
+    new RegExp(`(android:name="\\.${cls}"[\\s\\S]*?android:label=")[^"]*(")`),
+    `$1${label}$2`,
+  )
+}
 for (const [cls, label, info] of widgetReceivers) {
   if (manifest.includes(`android:name=".${cls}"`)) continue
   const receiver =

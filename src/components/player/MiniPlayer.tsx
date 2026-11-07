@@ -4,7 +4,18 @@ import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useCoverGlow } from '../../hooks/useCoverGlow'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useLongPress } from '../../hooks/useLongPress'
-import { setFlyOrigin } from '../../services/flyOrigin'
+import {
+  animateSheet,
+  fingerToProgressVelocity,
+  getSheetHold,
+  getSheetProgress,
+  getSheetTravel,
+  holdSheet,
+  measureSheetTravel,
+  projectSheet,
+  setSheetProgress,
+  stopSheetAnimation,
+} from '../../services/playerSheet'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useNowPlaying } from '../../hooks/useNowPlaying'
 import { STATUS_TEXT } from '../../utils/playerStatus'
@@ -19,8 +30,10 @@ import SeekBar from './SeekBar'
 
 /** Jarak seret ke bawah (px) yang cukup untuk memperkecil, dan awal gerakan dianggap seretan. */
 const SHRINK_DISTANCE = 70
-/** Jarak seret ke atas (px) yang membuka pemutar penuh. */
-const OPEN_DISTANCE = 60
+/** Proyeksi progress (posisi + momentum) di atas ini saat dilepas = buka pemutar penuh. Cukup ~15% jarak atau lemparan ringan. */
+const OPEN_PROJECTION = 0.2
+/** Getar kecil saat progress melewati titik "lepas sekarang = terbuka". */
+const OPEN_HAPTIC_AT = 0.2
 const DRAG_START_PX = 8
 /** Lama kartu tenggelam ke belakang nav lalu hilang (ms). */
 const LEAVE_MS = 440
@@ -64,7 +77,19 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const [dockWidth, setDockWidth] = useState(0)
   // Dari sisi mana kartu baru saja membesar (untuk animasi keluar dari gelembung).
   const [growFrom, setGrowFrom] = useState<'left' | 'right' | null>(null)
-  const drag = useRef({ id: -1, x: 0, y: 0, active: false, crossed: false, lastY: 0, lastT: 0, velocity: 0 })
+  const drag = useRef({
+    id: -1,
+    x: 0,
+    y: 0,
+    active: false,
+    crossed: false,
+    lastY: 0,
+    lastT: 0,
+    velocity: 0,
+    // Seretan ke atas yang menggerakkan lapisan pemutar penuh (bukan kartu), dan progress awalnya (bila lapisan "ditangkap" di tengah gerakan).
+    sheet: false,
+    base: 0,
+  })
   const swallowClick = useRef(false)
   // Tahan lama pada info lagu = menu lagu yang sedang diputar. Tidak jalan bila sedang menyeret kartu.
   const press = useLongPress(() => {
@@ -97,6 +122,13 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       window.clearTimeout(kbTimer.current)
       cancelSettle.current?.()
       pinStop.current?.()
+      // Mini player hilang di tengah seretan ke atas: jangan tinggalkan lapisan pemutar penuh menggantung.
+      if (drag.current.sheet) {
+        drag.current.sheet = false
+        stopSheetAnimation()
+        setSheetProgress(0)
+        holdSheet(false)
+      }
     },
     [],
   )
@@ -169,25 +201,19 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (wrapRef.current) wrapRef.current.style.zIndex = on ? '20' : ''
   }
 
-  /** Posisikan kartu mengikuti jari: ke bawah = turun + mengecil + memudar; ke atas = naik + sedikit membesar. */
+  /** Posisikan kartu mengikuti jari saat diseret ke BAWAH: turun + mengecil + memudar. (Seret ke atas menggerakkan lapisan pemutar penuh, lihat playerSheet.) */
   const applyDrag = (dy: number, animate: boolean) => {
     const el = cardRef.current
     if (!el) return
     el.style.transition = animate ? 'transform 320ms cubic-bezier(0.34,1.56,0.64,1), opacity 200ms' : 'none'
-    if (dy === 0) {
+    if (dy <= 0) {
       el.style.transform = ''
       el.style.opacity = ''
       return
     }
-    if (dy > 0) {
-      const p = Math.min(dy / (SHRINK_DISTANCE * 1.6), 1)
-      el.style.transform = `translate3d(0, ${dy}px, 0) scale(${1 - p * 0.14})`
-      el.style.opacity = String(1 - p * 0.35)
-    } else {
-      const p = Math.min(-dy / (OPEN_DISTANCE * 1.6), 1)
-      el.style.transform = `translate3d(0, ${dy * 0.7}px, 0) scale(${1 + p * 0.05})`
-      el.style.opacity = ''
-    }
+    const p = Math.min(dy / (SHRINK_DISTANCE * 1.6), 1)
+    el.style.transform = `translate3d(0, ${dy}px, 0) scale(${1 - p * 0.14})`
+    el.style.opacity = String(1 - p * 0.35)
   }
 
   const springBack = () => {
@@ -329,26 +355,19 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   })
 
   /**
-   * Buka pemutar penuh: kartu tetap di tempat (sampulnya "terbang" membesar jadi pemutar penuh, lihat FullPlayer).
-   * Bila dibuka lewat seretan ke atas, kartu kembali halus ke posisinya selagi pemutar penuh memudar masuk.
+   * Lepas seretan ke atas: lapisan pemutar penuh dilanjutkan pegas dengan kecepatan jari. Entri riwayat baru dibuat
+   * di sini (bukan di awal seretan) supaya seretan yang dibatalkan tidak meninggalkan jejak di tombol Kembali.
    */
-  const openFull = () => {
-    // Catat posisi sampul TEPAT saat dilepas (termasuk geseran ke atas): sampul pemutar penuh terbang dari sini.
-    setFlyOrigin(document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect())
-    settleAfterOpen()
-    onOpen()
-  }
-
-  /** Kartu kembali ke tempatnya selagi pemutar penuh memudar masuk: meluncur halus tanpa membal (membal akan terlihat menembus). */
-  const settleAfterOpen = () => {
-    const el = cardRef.current
-    if (!el) return
-    el.style.transition = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms'
-    el.style.transform = ''
-    el.style.opacity = ''
-    window.setTimeout(() => {
-      if (cardRef.current) cardRef.current.style.transition = ''
-    }, 380)
+  const finishSheetDrag = (open: boolean, velocity: number) => {
+    if (open) {
+      onOpen()
+      animateSheet(1, velocity, () => holdSheet(false))
+    } else {
+      animateSheet(0, velocity, () => {
+        holdSheet(false)
+        setSheetProgress(0)
+      })
+    }
   }
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -364,6 +383,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     d.lastY = event.clientY
     d.lastT = event.timeStamp
     d.velocity = 0
+    d.sheet = false
   }
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -382,16 +402,47 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       event.currentTarget.setPointerCapture(event.pointerId)
     }
     const dt = event.timeStamp - d.lastT
-    if (dt > 0) d.velocity = (event.clientY - d.lastY) / dt
+    // Kecepatan dihaluskan (rata-rata bergerak) supaya lemparan akhir tidak ditentukan satu event yang berisik.
+    if (dt > 0) d.velocity = d.velocity * 0.5 + ((event.clientY - d.lastY) / dt) * 0.5
     d.lastY = event.clientY
     d.lastT = event.timeStamp
+
+    if (dy < -DRAG_START_PX) {
+      // Seret ke ATAS: pemutar penuh ikut naik 1:1 mengikuti jari (progress 0..1), bukan animasi setelah dilepas.
+      if (!d.sheet) {
+        d.sheet = true
+        // Bila lapisan masih bergerak (mis. baru dibatalkan), tangkap di posisinya sekarang.
+        stopSheetAnimation()
+        d.base = getSheetHold() ? getSheetProgress() : 0
+        if (!getSheetHold()) {
+          measureSheetTravel()
+          setSheetProgress(0)
+        }
+        holdSheet(true)
+        applyDrag(0, false)
+        behindNav(false)
+      }
+      const progress = d.base + (-dy - DRAG_START_PX) / getSheetTravel()
+      setSheetProgress(progress)
+      const crossed = projectSheet(getSheetProgress(), fingerToProgressVelocity(d.velocity)) > OPEN_HAPTIC_AT
+      if (crossed !== d.crossed) {
+        d.crossed = crossed
+        if (crossed) navigator.vibrate?.(10)
+      }
+      return
+    }
+
+    if (d.sheet) {
+      // Jari kembali melewati titik awal: lapisan menutup lagi, seretan berlanjut sebagai seretan ke bawah.
+      setSheetProgress(d.base)
+    }
     // Getar kecil saat melewati titik "lepas sekarang = mengecil".
-    const crossed = dy > SHRINK_DISTANCE || dy < -OPEN_DISTANCE
+    const crossed = dy > SHRINK_DISTANCE
     if (crossed !== d.crossed) {
       d.crossed = crossed
       if (crossed) navigator.vibrate?.(10)
     }
-    // Diseret ke bawah: kartu turun ke BELAKANG nav, bukan menimpanya. Ke atas: kembali di depan.
+    // Diseret ke bawah: kartu turun ke BELAKANG nav, bukan menimpanya.
     behindNav(dy > 0)
     applyDrag(dy, false)
   }
@@ -409,8 +460,24 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       swallowClick.current = false
     }, 120)
     const dy = event.clientY - d.y
-    if (!cancelled && (dy > SHRINK_DISTANCE || (d.velocity > 0.6 && dy > 24))) shrink()
-    else if (!cancelled && (dy < -OPEN_DISTANCE || (d.velocity < -0.6 && dy < -24))) openFull()
+    // Jari diam sebelum dilepas = tidak ada momentum.
+    const fresh = event.timeStamp - d.lastT < 90
+    const velocity = fresh ? d.velocity : 0
+    if (d.sheet) {
+      d.sheet = false
+      if (dy >= -DRAG_START_PX) {
+        // Berakhir di titik awal / di bawahnya: lapisan menutup, lalu dilanjutkan sebagai seretan ke bawah bila cukup jauh.
+        finishSheetDrag(false, 0)
+        if (!cancelled && (dy > SHRINK_DISTANCE || (velocity > 0.6 && dy > 24))) shrink()
+        else springBack()
+        return
+      }
+      const pv = cancelled ? 0 : fingerToProgressVelocity(velocity)
+      const open = !cancelled && projectSheet(getSheetProgress(), pv) > OPEN_PROJECTION
+      finishSheetDrag(open, pv)
+      return
+    }
+    if (!cancelled && (dy > SHRINK_DISTANCE || (velocity > 0.6 && dy > 24))) shrink()
     else springBack()
   }
 
@@ -429,7 +496,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
 
   return (
     <div ref={wrapRef} className="pointer-events-none relative z-40 h-0 shrink-0">
-    <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
+    <div ref={dockRef} data-mini-dock="" className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
     {showBubble && (
       <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} riseFrom={riseFrom} morph={leaving} />
     )}
@@ -453,6 +520,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     />
     <div
       ref={regionRef}
+      data-mini-card=""
       role="region"
       data-tour="mini-player"
       aria-label="Pemutar musik"

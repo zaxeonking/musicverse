@@ -123,17 +123,11 @@
     transform: scale(0.9);
   }
 
-  /* Pemutar penuh: elemen masuk bertahap (fade + naik sedikit); keluar lebih cepat, tanpa jeda. */
-  .fp-item {
-    animation: fp-rise 380ms var(--ease) both;
-    animation-delay: var(--fp-delay, 0ms);
-  }
-  [data-closing='true'] .fp-item {
-    animation: fp-out 160ms var(--ease) both;
-    animation-delay: 0ms;
-  }
+  /* Pemutar penuh: kemunculan elemen (opacity + naik sedikit) dan latar digerakkan oleh progress seretan/pegas
+     lewat JS (services/playerSheet + FullPlayer.renderSheet), bukan keyframe CSS, supaya mengikuti jari dan bisa dibalik. */
+  .fp-item,
   .fp-bg {
-    animation: fp-bg-in 480ms var(--ease) both;
+    will-change: opacity, transform;
   }
 
   /* Perpindahan halaman: geser horizontal lembut. --page-dx = +1 (maju, dari kanan) atau -1 (mundur, dari kiri). */
@@ -146,34 +140,6 @@
   }
 }
 
-@keyframes fp-rise {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes fp-out {
-  from {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0;
-    transform: translate3d(0, 8px, 0);
-  }
-}
-@keyframes fp-bg-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
 @keyframes page-enter {
   from {
     opacity: 0;

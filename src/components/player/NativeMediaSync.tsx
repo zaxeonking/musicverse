@@ -6,6 +6,7 @@ import { composeNotificationCover } from '../../utils/notificationCover'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { parseDurationText } from '../../hooks/useAudioPlayerController'
 import { parseDuration } from '../../utils/formatTime'
+import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 
 /** Selisih (detik) antara posisi yang diperkirakan notifikasi dan posisi sebenarnya sebelum dilaporkan ulang. */
 const DRIFT_S = 1.5
@@ -41,11 +42,20 @@ export default function NativeMediaSync() {
   const { status, currentTrack, playbackInfo, hasNext, hasPrevious } = useAudioPlayer()
   const actions = usePlayerActions()
   const { currentTime, duration } = usePlaybackTime()
+  const { isLiked, toggleLike } = useMyPlaylists()
 
-  const latest = useRef({ status, actions, currentTime })
+  const latest = useRef({ status, actions, currentTime, currentTrack, toggleLike })
   useEffect(() => {
-    latest.current = { status, actions, currentTime }
+    latest.current = { status, actions, currentTime, currentTrack, toggleLike }
   })
+
+  // Hati di widget layar utama mengikuti status suka lagu aktif (dan koreksi bila ketukan di widget gagal).
+  const liked = currentTrack ? isLiked(currentTrack) : false
+  const likedTitle = currentTrack?.title ?? ''
+  useEffect(() => {
+    if (!likedTitle) return
+    void MusicVerseNative.setWidgetLiked({ title: likedTitle, liked }).catch(() => {})
+  }, [liked, likedTitle])
 
   const trackId = currentTrack?.id ?? null
   const artists = currentTrack?.artists ?? ''
@@ -80,6 +90,12 @@ export default function NativeMediaSync() {
         case 'seek':
           if (event.seekMs !== undefined) a.seekTo(event.seekMs / 1000)
           break
+        case 'like': {
+          // Tombol hati di widget: sukai / batal sukai lagu aktif (sama dengan tombol hati di pemutar penuh).
+          const { currentTrack: track, toggleLike: toggle } = latest.current
+          if (track) toggle(track)
+          break
+        }
       }
     }).then((h) => {
       if (removed) void h.remove()
@@ -93,9 +109,17 @@ export default function NativeMediaSync() {
 
   // Sampul: dibuat sekali per lagu (sampul lagu + badge logo) lalu dikirim ke native sebagai base64.
   const [cover, setCover] = useState<{ trackId: string; base64: string } | null>(null)
+  // Sampul yang sudah disusun disimpan per lagu (12 terakhir): kembali ke lagu sebelumnya (tombol Sebelumnya) langsung
+  // membawa sampulnya bersama pembaruan judul, tanpa menunggu menyusun ulang.
+  const coverCache = useRef(new Map<string, string>())
   useEffect(() => {
     if (trackId === null) {
       setCover(null)
+      return
+    }
+    const cached = coverCache.current.get(trackId)
+    if (cached) {
+      setCover({ trackId, base64: cached })
       return
     }
     let cancelled = false
@@ -105,7 +129,12 @@ export default function NativeMediaSync() {
         if (!url) return
         const base64 = await blobUrlToBase64(url)
         URL.revokeObjectURL(url)
-        if (!cancelled && base64) setCover({ trackId, base64 })
+        if (!cancelled && base64) {
+          const cache = coverCache.current
+          cache.set(trackId, base64)
+          while (cache.size > 12) cache.delete(cache.keys().next().value as string)
+          setCover({ trackId, base64 })
+        }
       })
       .catch(() => {
         // Tetap memakai sampul bawaan APK.
@@ -156,7 +185,7 @@ export default function NativeMediaSync() {
       0
     if (durationS > 0) knownDuration.current = { trackId, seconds: durationS }
     const newTrack = sentTrack.current !== trackId
-    const coverReady = cover !== null && cover.trackId === trackId ? cover.base64 : null
+    const coverReady = cover !== null && cover.trackId === trackId ? cover.base64 : (coverCache.current.get(trackId) ?? null)
     const coverToSend = coverReady !== null && sentCover.current !== trackId ? coverReady : null
 
     const now = performance.now()

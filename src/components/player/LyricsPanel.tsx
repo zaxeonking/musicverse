@@ -67,6 +67,9 @@ type FillTiming = SweepTiming
 /** Baris isi terlama dianggap sepanjang ini bila baris berikutnya jauh (jeda instrumental). */
 const FILL_MAX_S = 7
 
+/** Pemutar penuh menyorot per kalimat (baris aktif utuh), bukan per kata. Ubah ke false untuk sorotan karaoke per kata lagi. Mini player tidak terpengaruh. */
+const LINE_ONLY = true
+
 /** Satu baris lirik. Tahan lama = "baris ini yang sedang dinyanyikan sekarang" (penyelarasan manual). */
 function Row({
   item,
@@ -106,12 +109,12 @@ function Row({
   const fillEnd = fill?.end
   const guessed = useMemo(
     () =>
-      state === 'active' && reliable && !bg && !realWords && item.text && fillStart !== undefined
+      !LINE_ONLY && state === 'active' && reliable && !bg && !realWords && item.text && fillStart !== undefined
         ? wordsFor({ time: fillStart, text: item.text }, fillEnd).words
         : null,
     [state, reliable, bg, realWords, item.text, fillStart, fillEnd],
   )
-  const sweepWords = state === 'active' && item.text ? (realWords ?? guessed) : null
+  const sweepWords = !LINE_ONLY && state === 'active' && item.text ? (realWords ?? guessed) : null
   const content =
     sweepWords && fill ? (
       <KaraokeWords words={sweepWords} timing={fill.timing} rest={bg ? REST_COLOR_DIM : REST_COLOR} className="whitespace-pre-wrap" />
@@ -121,7 +124,7 @@ function Row({
   // Romanisasi + terjemahan dari server (bila ada): kecil di bawah baris; vokal latar tidak diberi.
   const subs = !bg ? [item.transliteration, item.translation].filter((t): t is string => !!t) : []
   // Romanisasi dengan waktu kata dari server: pada baris aktif ikut terisi karaoke (sama seperti teks utama).
-  const romanWords = state === 'active' && fill && fill.timing.mode !== 'estimated' && item.transliterationWords && item.transliterationWords.length > 0 ? item.transliterationWords : null
+  const romanWords = !LINE_ONLY && state === 'active' && fill && fill.timing.mode !== 'estimated' && item.transliterationWords && item.transliterationWords.length > 0 ? item.transliterationWords : null
   const withSubs =
     subs.length > 0 ? (
       <>

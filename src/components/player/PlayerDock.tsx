@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePlayerUi } from '../../context/PlayerUiContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { getSheetHold, subscribeSheetHold } from '../../services/playerSheet'
 import FullPlayer from './FullPlayer'
 import MiniPlayer from './MiniPlayer'
 import QueuePanel from './QueuePanel'
@@ -18,10 +19,10 @@ export default function PlayerDock() {
   const { fullPlayerOpen, queueOpen, openFullPlayer, closeFullPlayer, openQueue, closeQueue, resetOverlays } =
     usePlayerUi()
   const active = status !== 'idle' && currentTrack !== null
-  // Pemutar penuh terpasang (terbuka atau sedang menutup) dan penghitung untuk memulai animasi dari awal bila dibuka lagi.
+  // Pemutar penuh terpasang (terbuka atau sedang menutup).
   const [fullMounted, setFullMounted] = useState(fullPlayerOpen)
-  const [fullKey, setFullKey] = useState(0)
-  const wasOpen = useRef(fullPlayerOpen)
+  // Terpasang juga selama seretan dari mini player (belum ada entri riwayat): lapisan mengikuti jari sejak awal.
+  const sheetHold = useSyncExternalStore(subscribeSheetHold, getSheetHold, () => false)
 
   // Pemutar dikosongkan (cleanup dipanggil) atau halaman dimuat ulang dengan penanda lama:
   // bersihkan penanda lapisan.
@@ -30,25 +31,19 @@ export default function PlayerDock() {
   }, [active, resetOverlays])
 
   useEffect(() => {
-    if (fullPlayerOpen && !wasOpen.current) {
-      // Dibuka saat animasi tutup sebelumnya masih berjalan: mulai ulang dari awal.
-      if (fullMounted) setFullKey((key) => key + 1)
-      setFullMounted(true)
-    }
-    wasOpen.current = fullPlayerOpen
-  }, [fullPlayerOpen, fullMounted])
+    if (fullPlayerOpen) setFullMounted(true)
+  }, [fullPlayerOpen])
 
   const handleClosed = useCallback(() => setFullMounted(false), [])
 
   if (!active) return null
-  const showFull = fullPlayerOpen || fullMounted
+  const showFull = fullPlayerOpen || fullMounted || sheetHold
   return (
     <>
       <MiniPlayer onOpen={openFullPlayer} onOpenQueue={openQueue} />
       {showFull && (
         <FullPlayer
-          key={fullKey}
-          closing={!fullPlayerOpen}
+          closing={!fullPlayerOpen && !sheetHold}
           onClosed={handleClosed}
           onClose={closeFullPlayer}
           onOpenQueue={openQueue}

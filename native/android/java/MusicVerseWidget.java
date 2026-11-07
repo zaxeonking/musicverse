@@ -20,8 +20,8 @@ import android.view.View;
 import android.widget.RemoteViews;
 
 /**
- * Widget layar utama. Ada 6 bentuk (lihat {@link Form}): Standar 4x1, Kotak 2x2, Tinggi 2x3, Besar 4x2, Strip 4x1 tipis,
- * Mini 1x1. Tiap bentuk punya receiver sendiri (subkelas kelas ini) dan tiap widget yang dipasang punya pengaturan sendiri
+ * Widget layar utama. Ada 5 bentuk di daftar widget (lihat {@link Form}), dari terkecil: Mini 1x1, Strip 4x1, Kotak 2x2, Tinggi 2x3,
+ * Besar 4x2. Kelas dasar ini sendiri tidak lagi tampil di daftar (dulu Standar 4x1, kembar dengan Strip). Tiap bentuk punya receiver sendiri (subkelas kelas ini) dan tiap widget yang dipasang punya pengaturan sendiri
  * (MusicVerseWidgetConfig, diatur di MusicVerseWidgetConfigActivity): tema, warna aksen, bentuk sampul, sudut, ukuran teks, dll.
  *
  * Keadaan didorong oleh PlaybackService (push / pushIdle) setiap kali lagu atau status berubah, bukan lewat polling,
@@ -35,16 +35,19 @@ public class MusicVerseWidget extends AppWidgetProvider {
   static final String ACTION_PREVIOUS = "__APP_ID__.widget.PREVIOUS";
   static final String ACTION_TOGGLE = "__APP_ID__.widget.TOGGLE";
   static final String ACTION_NEXT = "__APP_ID__.widget.NEXT";
+  static final String ACTION_LIKE = "__APP_ID__.widget.LIKE";
 
   /** Bentuk widget. Tiap bentuk = satu layout + satu receiver; bendera menandai view mana yang ada di layoutnya. */
   enum Form {
-    //        layout                  receiver                    nama       teks   prev   loading  coverPx titleSp artistSp  pratinjau (dp)
-    STANDARD(R.layout.widget_player, MusicVerseWidget.class, "Standar 4×1", true, true, true, 192, 14, 12, 300, 72),
-    SQUARE(R.layout.widget_square, MusicVerseWidgetSquare.class, "Kotak 2×2", true, true, true, 192, 13, 11, 160, 150),
-    TALL(R.layout.widget_tall, MusicVerseWidgetTall.class, "Tinggi 2×3", true, true, true, 320, 14, 12, 160, 250),
-    LARGE(R.layout.widget_large, MusicVerseWidgetLarge.class, "Besar 4×2", true, true, true, 320, 16, 13, 300, 150),
-    STRIP(R.layout.widget_strip, MusicVerseWidgetStrip.class, "Strip 4×1", true, true, false, 96, 12, 10, 300, 44),
-    TINY(R.layout.widget_tiny, MusicVerseWidgetTiny.class, "Mini 1×1", false, false, false, 192, 0, 0, 72, 72);
+    // Urutan = dari yang terkecil. STANDARD (4×1 lama) TIDAK lagi tampil di daftar widget (kembar dengan Strip 4×1); kelasnya tetap
+    // terdaftar di manifest sebagai penerima perintah tombol saja.
+    //        layout                  receiver                    nama       teks   prev   loading  progres like  coverPx titleSp artistSp  pratinjau (dp)
+    TINY(R.layout.widget_tiny, MusicVerseWidgetTiny.class, "Mini 1×1", false, false, false, false, false, 192, 0, 0, 72, 72),
+    STRIP(R.layout.widget_strip, MusicVerseWidgetStrip.class, "Strip 4×1", true, true, false, false, false, 128, 15, 12, 300, 60),
+    SQUARE(R.layout.widget_square, MusicVerseWidgetSquare.class, "Kotak 2×2", true, true, true, false, false, 192, 15, 12, 160, 150),
+    TALL(R.layout.widget_tall, MusicVerseWidgetTall.class, "Tinggi 2×3", true, true, true, true, false, 320, 16, 13, 160, 250),
+    LARGE(R.layout.widget_large, MusicVerseWidgetLarge.class, "Besar 4×2", true, true, true, true, true, 320, 18, 14, 300, 150),
+    STANDARD(R.layout.widget_player, MusicVerseWidget.class, "Standar 4×1", true, true, true, false, false, 192, 15, 12, 300, 72);
 
     final int layout;
     final Class<?> receiver;
@@ -55,20 +58,26 @@ public class MusicVerseWidget extends AppWidgetProvider {
     final boolean controls;
     /** Ada bilah "memuat". */
     final boolean loading;
+    /** Ada baris progres (bilah + waktu). */
+    final boolean progress;
+    /** Ada tombol suka. */
+    final boolean like;
     final int coverPx;
     final int titleSp;
     final int artistSp;
     final int previewW;
     final int previewH;
 
-    Form(int layout, Class<?> receiver, String label, boolean text, boolean controls, boolean loading, int coverPx, int titleSp,
-        int artistSp, int previewW, int previewH) {
+    Form(int layout, Class<?> receiver, String label, boolean text, boolean controls, boolean loading, boolean progress, boolean like,
+        int coverPx, int titleSp, int artistSp, int previewW, int previewH) {
       this.layout = layout;
       this.receiver = receiver;
       this.label = label;
       this.text = text;
       this.controls = controls;
       this.loading = loading;
+      this.progress = progress;
+      this.like = like;
       this.coverPx = coverPx;
       this.titleSp = titleSp;
       this.artistSp = artistSp;
@@ -90,6 +99,11 @@ public class MusicVerseWidget extends AppWidgetProvider {
     final boolean hasNext;
     final boolean hasPrevious;
     final Bitmap cover;
+    /** Lagu ini sudah disukai (disinkronkan dari JS lewat setWidgetLiked). */
+    boolean liked;
+    /** Posisi / durasi (ms) pada saat terakhir didorong; hanya untuk bilah progres dan waktu. */
+    long positionMs;
+    long durationMs;
 
     Model(String title, String artist, boolean playing, boolean loading, boolean hasNext, boolean hasPrevious, Bitmap cover) {
       this.title = title == null ? "" : title;
@@ -100,15 +114,79 @@ public class MusicVerseWidget extends AppWidgetProvider {
       this.hasPrevious = hasPrevious;
       this.cover = cover;
     }
+
+    Model copyWithoutCover() {
+      Model m = new Model(title, artist, playing, loading, hasNext, hasPrevious, null);
+      m.liked = liked;
+      m.positionMs = positionMs;
+      m.durationMs = durationMs;
+      return m;
+    }
   }
 
   /** Keadaan terakhir yang didorong service; null = siap (tidak ada pemutaran). Hanya diakses dari thread utama. */
   private static Model last;
 
   /** Dipanggil PlaybackService (thread utama). `cover` null = sampul bawaan. */
-  static void push(Context context, String title, String artist, boolean playing, boolean loading, boolean hasNext, boolean hasPrevious, Bitmap cover) {
-    last = new Model(title, artist, playing, loading, hasNext, hasPrevious, cover);
+  static void push(Context context, String title, String artist, boolean playing, boolean loading, boolean hasNext, boolean hasPrevious, Bitmap cover,
+      long positionMs, long durationMs) {
+    Model m = new Model(title, artist, playing, loading, hasNext, hasPrevious, cover);
+    m.positionMs = Math.max(0, positionMs);
+    m.durationMs = Math.max(0, durationMs);
+    // Tanda suka dicocokkan lewat judul lagu yang dilaporkan JS (setWidgetLiked), jadi tidak tertukar saat lagu berganti.
+    m.liked = likedValue && m.title.equals(likedTitle);
+    last = m;
     render(context, last);
+  }
+
+  /** Status suka terakhir yang dilaporkan JS, beserta judul lagunya. */
+  private static String likedTitle = "";
+  private static boolean likedValue = false;
+
+  /** JS melaporkan status suka lagu `title`. */
+  static void pushLiked(Context context, String title, boolean liked) {
+    likedTitle = title == null ? "" : title;
+    likedValue = liked;
+    Model m = last;
+    if (m == null || !m.title.equals(likedTitle) || m.liked == liked) return;
+    m.liked = liked;
+    render(context, m);
+  }
+
+  private static long lastTickAt = 0;
+
+  /**
+   * Detak tiap detik dari service saat memutar: perbarui HANYA bilah progres dan waktu (pembaruan sebagian, murah), dan hanya bila
+   * layar menyala dan ada widget yang menampilkannya.
+   */
+  static void tick(Context context, long positionMs, long durationMs) {
+    Model m = last;
+    if (m == null) return;
+    m.positionMs = Math.max(0, positionMs);
+    if (durationMs > 0) m.durationMs = durationMs;
+    long now = android.os.SystemClock.elapsedRealtime();
+    if (now - lastTickAt < 900) return;
+    lastTickAt = now;
+    Context app = context.getApplicationContext();
+    try {
+      android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(Context.POWER_SERVICE);
+      if (pm != null && !pm.isInteractive()) return;
+      AppWidgetManager manager = AppWidgetManager.getInstance(app);
+      for (Form form : Form.values()) {
+        if (!form.progress) continue;
+        int[] ids = manager.getAppWidgetIds(new ComponentName(app, form.receiver));
+        if (ids == null) continue;
+        for (int id : ids) {
+          MusicVerseWidgetConfig cfg = MusicVerseWidgetConfig.load(app, id);
+          if (!cfg.showProgress && !cfg.showTime) continue;
+          RemoteViews part = new RemoteViews(app.getPackageName(), form.layout);
+          applyProgress(part, m, cfg, palette(cfg, m.cover, 0));
+          manager.partiallyUpdateAppWidget(id, part);
+        }
+      }
+    } catch (RuntimeException ignored) {
+      // pembaruan penuh berikutnya akan menyusul
+    }
   }
 
   /** Service berhenti: kembali ke keadaan siap. */
@@ -116,6 +194,7 @@ public class MusicVerseWidget extends AppWidgetProvider {
     last = null;
     coverSrc = null;
     java.util.Arrays.fill(coverOut, null);
+    WidgetGlass.clearCache();
     render(context, null);
   }
 
@@ -133,13 +212,14 @@ public class MusicVerseWidget extends AppWidgetProvider {
   /** Gambar ulang satu widget dengan pengaturannya. Gagal menggambar sampul -> coba lagi tanpa sampul supaya tombol tetap hidup. */
   private static void update(Context app, AppWidgetManager manager, int id, Form form, Model model) {
     MusicVerseWidgetConfig cfg = MusicVerseWidgetConfig.load(app, id);
+    int[] size = sizeDp(manager, id, form);
     try {
-      manager.updateAppWidget(id, build(app, model, form, cfg));
+      manager.updateAppWidget(id, build(app, model, form, cfg, size[0], size[1]));
     } catch (RuntimeException e) {
       android.util.Log.w("MusicVerse", "Widget gagal digambar: " + e);
       if (model != null && model.cover != null) {
         try {
-          manager.updateAppWidget(id, build(app, new Model(model.title, model.artist, model.playing, model.loading, model.hasNext, model.hasPrevious, null), form, cfg));
+          manager.updateAppWidget(id, build(app, model.copyWithoutCover(), form, cfg, size[0], size[1]));
         } catch (RuntimeException ignored) {
           // biarkan tampilan lama
         }
@@ -153,6 +233,24 @@ public class MusicVerseWidget extends AppWidgetProvider {
     AppWidgetManager manager = AppWidgetManager.getInstance(app);
     Form form = formOf(manager, id);
     if (form != null) update(app, manager, id, form, last);
+  }
+
+  /** Ukuran widget (dp) dari opsi peluncur; bila tidak ada, ukuran pratinjau bentuknya. */
+  static int[] sizeDp(AppWidgetManager manager, int id, Form form) {
+    int w = form.previewW;
+    int h = form.previewH;
+    try {
+      android.os.Bundle o = manager.getAppWidgetOptions(id);
+      if (o != null) {
+        int ow = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
+        int oh = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
+        if (ow >= 40) w = ow;
+        if (oh >= 40) h = oh;
+      }
+    } catch (RuntimeException ignored) {
+      // pakai ukuran bawaan
+    }
+    return new int[] {w, h};
   }
 
   /** Bentuk widget `id` menurut penyedia yang terdaftar; null bila tidak dikenal. */
@@ -175,45 +273,94 @@ public class MusicVerseWidget extends AppWidgetProvider {
     } catch (RuntimeException ignored) {
       // tanpa sampul
     }
-    return new Model("Judul lagu", "Nama artis", true, false, true, true, cover);
+    Model sample = new Model("Judul lagu", "Nama artis", true, false, true, true, cover);
+    sample.positionMs = 70_000L;
+    sample.durationMs = 200_000L;
+    return sample;
+  }
+
+  /** Warna turunan dari gaya + aksen + sampul. */
+  static final class Palette {
+    int bg, accent, textPrimary, textSecondary, playFill, playIcon;
+    boolean accentTheme;
+  }
+
+  private static Palette palette(MusicVerseWidgetConfig cfg, Bitmap cover, int unused) {
+    // 0 = sampul tidak punya warna berarti (hampir hitam-putih / tidak ada): pakai aksen pilihan.
+    int coverBase = cover != null ? coverColor(cover) : 0;
+    Palette p = new Palette();
+    p.accent = cfg.accentFromCover && coverBase != 0 ? WidgetColors.vivid(coverBase) : cfg.accent;
+    switch (cfg.theme) {
+      case MusicVerseWidgetConfig.THEME_LIGHT: p.bg = 0xFFF2F2F2; break;
+      case MusicVerseWidgetConfig.THEME_GLASS:
+      case MusicVerseWidgetConfig.THEME_CLEAR_GLASS: p.bg = 0xFF14181C; break;
+      case MusicVerseWidgetConfig.THEME_COVER: p.bg = WidgetColors.deep(coverBase != 0 ? coverBase : p.accent); break;
+      case MusicVerseWidgetConfig.THEME_ACCENT: p.bg = p.accent; break;
+      default: p.bg = 0xFF181818;
+    }
+    p.textPrimary = WidgetColors.onColor(cfg.isGlass() ? 0xFF000000 : p.bg);
+    p.textSecondary = WidgetColors.withAlpha(p.textPrimary, 0xB3);
+    // Tombol putar terisi: aksen (di tema Aksen: warna teks, supaya tetap kontras dengan latar). Ikon di atasnya kontras.
+    p.accentTheme = cfg.theme == MusicVerseWidgetConfig.THEME_ACCENT;
+    p.playFill = p.accentTheme ? p.textPrimary : p.accent;
+    p.playIcon = cfg.playStyle == MusicVerseWidgetConfig.PLAY_FILLED
+        ? (p.accentTheme ? p.bg : WidgetColors.onColor(p.accent))
+        : (p.accentTheme ? p.textPrimary : p.accent);
+    return p;
+  }
+
+  private static String fmtTime(long ms) {
+    long total = Math.max(0, ms) / 1000;
+    long m = total / 60;
+    long sec = total % 60;
+    if (m >= 60) return (m / 60) + ":" + String.format(java.util.Locale.US, "%02d:%02d", m % 60, sec);
+    return m + ":" + String.format(java.util.Locale.US, "%02d", sec);
+  }
+
+  /** Bilah progres + waktu. Dipakai build() (penuh) dan tick() (sebagian). */
+  private static void applyProgress(RemoteViews views, Model model, MusicVerseWidgetConfig cfg, Palette pal) {
+    long dur = model == null ? 0 : model.durationMs;
+    long pos = model == null ? 0 : Math.min(model.positionMs, dur > 0 ? dur : model.positionMs);
+    if (cfg.showProgress) {
+      float frac = dur > 0 ? pos / (float) dur : 0f;
+      views.setImageViewBitmap(R.id.widget_progress, WidgetGlass.progressBar(360, 8, frac, pal.textPrimary, WidgetColors.withAlpha(pal.textPrimary, 0x45)));
+    }
+    if (cfg.showTime) {
+      views.setTextViewText(R.id.widget_time_cur, fmtTime(pos));
+      views.setTextViewText(R.id.widget_time_total, dur > 0 ? fmtTime(dur) : "0:00");
+      views.setTextColor(R.id.widget_time_cur, pal.textSecondary);
+      views.setTextColor(R.id.widget_time_total, pal.textSecondary);
+    }
   }
 
   static RemoteViews build(Context app, Model model, Form form, MusicVerseWidgetConfig cfg) {
+    return build(app, model, form, cfg, form.previewW, form.previewH);
+  }
+
+  static RemoteViews build(Context app, Model model, Form form, MusicVerseWidgetConfig cfg, int wDp, int hDp) {
     RemoteViews views = new RemoteViews(app.getPackageName(), form.layout);
     boolean live = model != null;
     Bitmap cover = live ? model.cover : null;
 
-    // --- Warna dari tema + aksen ---
-    // 0 = sampul tidak punya warna berarti (hampir hitam-putih / tidak ada): pakai aksen pilihan.
-    int coverBase = cover != null ? coverColor(cover) : 0;
-    int accent = cfg.accentFromCover && coverBase != 0 ? WidgetColors.vivid(coverBase) : cfg.accent;
-    int bg;
-    switch (cfg.theme) {
-      case MusicVerseWidgetConfig.THEME_LIGHT: bg = 0xFFF2F2F2; break;
-      case MusicVerseWidgetConfig.THEME_GLASS: bg = 0xFF14181C; break;
-      case MusicVerseWidgetConfig.THEME_COVER: bg = WidgetColors.deep(coverBase != 0 ? coverBase : accent); break;
-      case MusicVerseWidgetConfig.THEME_ACCENT: bg = accent; break;
-      default: bg = 0xFF181818;
-    }
-    int opacity = cfg.theme == MusicVerseWidgetConfig.THEME_GLASS ? Math.round(cfg.opacity * 0.5f) : cfg.opacity;
-    int bgAlpha = Math.round(255 * opacity / 100f);
-    int textPrimary = WidgetColors.onColor(cfg.theme == MusicVerseWidgetConfig.THEME_GLASS ? 0xFF000000 : bg);
-    int textSecondary = WidgetColors.withAlpha(textPrimary, 0xB3);
-    // Tombol putar terisi: aksen (di tema Aksen: warna teks, supaya tetap kontras dengan latar). Ikon di atasnya kontras.
-    boolean accentTheme = cfg.theme == MusicVerseWidgetConfig.THEME_ACCENT;
-    int playFill = accentTheme ? textPrimary : accent;
-    int playIcon = cfg.playStyle == MusicVerseWidgetConfig.PLAY_FILLED ? (accentTheme ? bg : WidgetColors.onColor(accent)) : (accentTheme ? textPrimary : accent);
+    Palette pal = palette(cfg, cover, 0);
+    boolean accentTheme = pal.accentTheme;
+    int accent = pal.accent;
+    int textPrimary = pal.textPrimary;
+    int textSecondary = pal.textSecondary;
+    int playFill = pal.playFill;
+    int playIcon = pal.playIcon;
 
-    // --- Latar ---
-    int bgRes = cfg.corner == MusicVerseWidgetConfig.CORNER_SQUARE ? R.drawable.widget_bg_square
-        : cfg.corner == MusicVerseWidgetConfig.CORNER_PILL ? R.drawable.widget_bg_pill : R.drawable.widget_bg_round;
-    views.setImageViewResource(R.id.widget_bg, bgRes);
-    views.setInt(R.id.widget_bg, "setColorFilter", bg);
-    views.setInt(R.id.widget_bg, "setImageAlpha", bgAlpha);
+    // --- Latar: satu bitmap (kaca / warna) dengan sudut, frost, kilau, dan tepi sesuai pengaturan ---
+    int bgW = Math.round(wDp * 1.5f);
+    int bgH = Math.round(hDp * 1.5f);
+    Bitmap bgBitmap = WidgetGlass.render(bgW, bgH, cfg, pal.bg, cover, cover == null ? 0 : System.identityHashCode(cover));
+    views.setImageViewBitmap(R.id.widget_bg, bgBitmap);
+    views.setInt(R.id.widget_bg, "setColorFilter", 0);
+    views.setInt(R.id.widget_bg, "setImageAlpha", 255);
 
     // --- Teks ---
     if (form.text) {
-      float scale = cfg.textSize == MusicVerseWidgetConfig.SIZE_SMALL ? 0.88f : cfg.textSize == MusicVerseWidgetConfig.SIZE_LARGE ? 1.18f : 1f;
+      float scale = cfg.textSize == MusicVerseWidgetConfig.SIZE_SMALL ? 0.93f : cfg.textSize == MusicVerseWidgetConfig.SIZE_LARGE ? 1.2f : 1f;
       views.setTextViewText(R.id.widget_title, live && !model.title.isEmpty() ? model.title : "MusicVerse");
       String artist;
       if (!live) artist = "Ketuk untuk membuka";
@@ -242,6 +389,16 @@ public class MusicVerseWidget extends AppWidgetProvider {
       else views.setImageViewResource(R.id.widget_cover, R.drawable.notif_default_cover);
     }
 
+    // --- Progres + waktu ---
+    if (form.progress) {
+      boolean any = cfg.showProgress || cfg.showTime;
+      views.setViewVisibility(R.id.widget_progress_row, any ? View.VISIBLE : View.GONE);
+      views.setViewVisibility(R.id.widget_progress, cfg.showProgress ? View.VISIBLE : View.GONE);
+      views.setViewVisibility(R.id.widget_time_cur, cfg.showTime ? View.VISIBLE : View.GONE);
+      views.setViewVisibility(R.id.widget_time_total, cfg.showTime ? View.VISIBLE : View.GONE);
+      if (any) applyProgress(views, live ? model : null, cfg, pal);
+    }
+
     // --- Tombol ---
     views.setImageViewResource(R.id.widget_play, live && model.playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play);
     views.setInt(R.id.widget_play, "setColorFilter", playIcon);
@@ -260,6 +417,15 @@ public class MusicVerseWidget extends AppWidgetProvider {
       // Putar: buka aplikasi (di latar belakang bila bisa) lalu ambil tautan audio baru dan lanjut dari posisi terakhir.
       PendingIntent playAndOpen = openAndPlay(app);
       views.setOnClickPendingIntent(R.id.widget_play, playAndOpen != null ? playAndOpen : open);
+    }
+
+    // --- Suka ---
+    if (form.like) {
+      boolean liked = live && model.liked;
+      views.setViewVisibility(R.id.widget_like, !cfg.showLike ? View.GONE : (live ? View.VISIBLE : View.INVISIBLE));
+      views.setImageViewResource(R.id.widget_like, liked ? R.drawable.ic_widget_heart_filled : R.drawable.ic_widget_heart);
+      views.setInt(R.id.widget_like, "setColorFilter", liked ? (accentTheme ? textPrimary : accent) : textPrimary);
+      views.setOnClickPendingIntent(R.id.widget_like, live ? command(app, ACTION_LIKE, 25) : open);
     }
 
     if (form.controls) {
@@ -374,6 +540,12 @@ public class MusicVerseWidget extends AppWidgetProvider {
   }
 
   @Override
+  public void onAppWidgetOptionsChanged(Context context, AppWidgetManager manager, int appWidgetId, android.os.Bundle newOptions) {
+    // Widget diubah ukurannya: latar (bitmap) disesuaikan dengan ukuran baru supaya sudut tidak melar.
+    update(context.getApplicationContext(), manager, appWidgetId, form(), last);
+  }
+
+  @Override
   public void onDeleted(Context context, int[] appWidgetIds) {
     for (int id : appWidgetIds) MusicVerseWidgetConfig.delete(context, id);
   }
@@ -387,7 +559,20 @@ public class MusicVerseWidget extends AppWidgetProvider {
     if (ACTION_PREVIOUS.equals(action)) command = "previous";
     else if (ACTION_TOGGLE.equals(action)) command = "toggle";
     else if (ACTION_NEXT.equals(action)) command = "next";
+    else if (ACTION_LIKE.equals(action)) command = "like";
     else return;
+    if (command.equals("like")) {
+      // Balik hati SEKARANG (tanpa menunggu JS); JS menyinkronkan status sebenarnya lewat setWidgetLiked.
+      Model m = last;
+      if (m != null) {
+        m.liked = !m.liked;
+        likedTitle = m.title;
+        likedValue = m.liked;
+        render(context, m);
+      }
+      PlaybackService.dispatch(command);
+      return;
+    }
     if (PlaybackService.dispatch(command)) return;
     // Tidak ada service (proses sudah dimatikan sistem): widget usang. Kembalikan ke "siap" supaya ketukan berikutnya
     // membuka aplikasi, dan coba buka sekarang (bisa ditolak sistem bila aplikasi di latar belakang).

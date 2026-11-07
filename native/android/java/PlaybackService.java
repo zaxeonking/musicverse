@@ -159,6 +159,12 @@ public class PlaybackService extends Service {
     return true;
   }
 
+  /** JS melaporkan apakah lagu aktif sudah disukai: hati di widget ikut berubah. Boleh dipanggil dari thread mana pun. */
+  static void setWidgetLiked(Context context, String title, boolean liked) {
+    final Context app = context.getApplicationContext();
+    new Handler(Looper.getMainLooper()).post(() -> MusicVerseWidget.pushLiked(app, title, liked));
+  }
+
   /** Widget baru ditambahkan saat memutar: dorong ulang keadaan sekarang. */
   static void refreshWidget() {
     PlaybackService running = instance;
@@ -356,8 +362,11 @@ public class PlaybackService extends Service {
     final float normGain;
     final String trackId;
     final String trackUrl;
+    /** Sampul yang sedang tampil saat lagu ditinggalkan: dipakai lagi saat kembali (lagu yang dimuat JS tidak punya URL sampul di native). */
+    final Bitmap cover;
 
-    HistoryItem(String url, String cacheKey, String title, String artist, String album, String coverUrl, long durationMs, int index, long at, float normGain, String trackId, String trackUrl) {
+    HistoryItem(String url, String cacheKey, String title, String artist, String album, String coverUrl, long durationMs, int index, long at, float normGain, String trackId, String trackUrl, Bitmap cover) {
+      this.cover = cover;
       this.trackId = trackId;
       this.trackUrl = trackUrl;
       this.normGain = normGain;
@@ -374,6 +383,13 @@ public class PlaybackService extends Service {
   }
 
   private final List<HistoryItem> history = new ArrayList<>();
+  /** Sampul lagu yang baru diputar (10 terakhir), kunci = judul + artis. */
+  private final java.util.LinkedHashMap<String, Bitmap> coverMemo = new java.util.LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
+    @Override
+    protected boolean removeEldestEntry(java.util.Map.Entry<String, Bitmap> eldest) {
+      return size() > 10;
+    }
+  };
   /**
    * Id lagu (antrean JS) dari lagu yang dimulai RANTAI native, lengkap dengan judulnya. Id hanya dipercaya bila judul lagu aktif
    * masih sama: lagu yang dimuat ulang oleh JS tidak boleh mewarisi id lagu rantai sebelumnya.
@@ -422,7 +438,7 @@ public class PlaybackService extends Service {
   private void pushHistory() {
     Src src = activeSrc;
     if (src == null || knownIndex < 0 || current.title.isEmpty()) return;
-    history.add(new HistoryItem(src.proxyUrl, src.cacheKey, current.title, current.artist, current.album, currentCoverUrl, current.durationMs, knownIndex, SystemClock.elapsedRealtime(), engineNorm, activeTrackId(), activeTrackUrl()));
+    history.add(new HistoryItem(src.proxyUrl, src.cacheKey, current.title, current.artist, current.album, currentCoverUrl, current.durationMs, knownIndex, SystemClock.elapsedRealtime(), engineNorm, activeTrackId(), activeTrackUrl(), current.cover));
     while (history.size() > HISTORY_MAX) history.remove(0);
   }
 
@@ -436,7 +452,9 @@ public class PlaybackService extends Service {
     }
     Src leaving = activeSrc;
     if (leaving != null && knownIndex >= 0 && !current.title.isEmpty()) {
-      upcoming.add(0, new UpcomingItem(knownIndex, leaving.proxyUrl, leaving.cacheKey, current.title, current.artist, current.album, currentCoverUrl, current.durationMs, engineNorm, activeTrackId(), activeTrackUrl()));
+      UpcomingItem leavingItem = new UpcomingItem(knownIndex, leaving.proxyUrl, leaving.cacheKey, current.title, current.artist, current.album, currentCoverUrl, current.durationMs, engineNorm, activeTrackId(), activeTrackUrl());
+      leavingItem.coverBitmap = current.cover; // supaya "Berikutnya" nanti juga langsung punya sampul
+      upcoming.add(0, leavingItem);
     }
     engineNorm = h.normGain;
     applyVolumes();
@@ -459,11 +477,13 @@ public class PlaybackService extends Service {
     s.hasPrevious = true;
     s.interrupted = false;
     s.resetCover = true;
+    // Sampul lagu yang dituju langsung dipasang bersama judulnya (tanpa jeda "banner kosong"); mengunduh hanya bila tidak ada.
+    s.cover = h.cover;
     chainLoading = true;
     chainLoadingSince = SystemClock.elapsedRealtime();
     applyInternal(s, false);
     UpcomingItem back = new UpcomingItem(h.index, h.url, h.cacheKey, h.title, h.artist, h.album, h.coverUrl, h.durationMs, h.normGain, h.trackId, h.trackUrl);
-    fetchCover(back);
+    if (h.cover == null) fetchCover(back);
     journalPlay(back);
     emitEngine("advanced", 0, "idx:" + h.index);
     preloadChainStandby();
@@ -547,6 +567,8 @@ public class PlaybackService extends Service {
     /** Id lagu di antrean JS + URL Spotify-nya: dipakai jurnal putar (PlayJournal). Kosong = tidak dicatat. */
     final String trackId;
     final String trackUrl;
+    /** Sampul yang sudah ada di memori (lagu yang baru ditinggalkan lewat Sebelumnya): dipakai langsung tanpa mengunduh. */
+    Bitmap coverBitmap;
 
     public UpcomingItem(int index, String url, String cacheKey, String title, String artist, String album, String coverUrl, long durationMs) {
       this(index, url, cacheKey, title, artist, album, coverUrl, durationMs, 1f);
@@ -688,6 +710,9 @@ public class PlaybackService extends Service {
 
     @Override public void onIsPlayingChanged(boolean isPlaying) {
       if (isPlaying) {
+        // Pemutar benar-benar berbunyi tetapi notifikasi masih "jeda" (mis. putar-ulang otomatis setelah gangguan saat JS
+        // beku / tidak sempat melapor): samakan tampilan notifikasi + widget dengan kenyataan.
+        if (!stopped && !current.playing && !jsAlive()) markNativePlaying(true);
         emitEngine("playing", 0, null);
         // Lagu hasil pindah native: lepas indikator memuat, isi durasi dan posisi dari pemutar.
         releaseChainLoading();
@@ -709,6 +734,8 @@ public class PlaybackService extends Service {
           else resumer.end();
         }
         recordSession(true);
+        // JS tidak melapor: notifikasi harus ikut menunjukkan jeda (dan tombol Putar berfungsi sebagai Putar).
+        if (!stopped && current.playing && !jsAlive() && !current.loading) markNativePlaying(false);
         emitEngine("pause", 0, why);
       }
     }
@@ -1472,6 +1499,8 @@ public class PlaybackService extends Service {
       if (stopped || !current.playing || session == null) return;
       releaseChainLoading();
       pushPlaybackState();
+      // Bilah progres + waktu di widget layar utama (pembaruan sebagian, hanya bila layar menyala).
+      MusicVerseWidget.tick(PlaybackService.this, livePosition(), current.durationMs);
       // ROM yang menggambar bilah dari notifikasi (bukan dari sesi) hanya bergerak jika notifikasinya ikut diperbarui.
       NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
       if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
@@ -1806,10 +1835,11 @@ public class PlaybackService extends Service {
     s.hasPrevious = true;
     s.interrupted = false;
     s.resetCover = true;
+    s.cover = item.coverBitmap;
     chainLoading = true;
     chainLoadingSince = SystemClock.elapsedRealtime();
     applyInternal(s, false);
-    fetchCover(item);
+    if (item.coverBitmap == null) fetchCover(item);
     journalPlay(item);
     // Lagu yang dipilih native sendiri (tanpa JS): bawa id video + URL supaya JS bisa menyamakan state saat bangun.
     emitEngine("advanced", 0, "idx:" + item.index + (item.ytId.isEmpty() ? "" : "|yt:" + item.ytId + "|url:" + item.url));
@@ -1983,6 +2013,7 @@ public class PlaybackService extends Service {
     current.positionMs = target;
     positionAt = SystemClock.elapsedRealtime();
     pushPlaybackState();
+    MusicVerseWidget.tick(this, target, current.durationMs);
     // ROM yang menggambar bilah dari notifikasi (bukan dari sesi): perbarui notifikasinya juga.
     NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     if (nm != null) nm.notify(NOTIFICATION_ID, buildNotification());
@@ -2128,6 +2159,11 @@ public class PlaybackService extends Service {
   /** `fromJs` false = pembaruan native (rantai lagu / tombol notifikasi): tidak boleh dianggap detak JS. */
   void applyInternal(State next, boolean fromJs) {
     if (stopped) return;
+    if (fromJs && next.resetCover && !next.title.equals(current.title)) {
+      // JS memindahkan lagu sendiri: riwayat native (lagu yang ia tinggalkan sendiri) sudah usang. Tanpa ini tombol
+      // Sebelumnya di notifikasi melompat ke lagu yang beda dari yang terlihat di aplikasi.
+      history.clear();
+    }
     if (fromJs) {
       lastJsUpdateAt = SystemClock.elapsedRealtime();
       chainLoading = false; // JS hidup lagi dan memegang keadaan
@@ -2149,6 +2185,11 @@ public class PlaybackService extends Service {
     current.interrupted = next.interrupted;
     if (next.resetCover) current.cover = null;
     if (next.cover != null) current.cover = next.cover;
+    // Sampul lagu yang baru saja diputar diingat (per judul + artis): kembali ke lagu itu (Sebelumnya di notifikasi) langsung
+    // punya banner, tidak menunggu JS menyusun sampul lagi.
+    String memoKey = current.title + "\u0001" + current.artist;
+    if (next.resetCover && next.cover == null && !current.title.isEmpty()) current.cover = coverMemo.get(memoKey);
+    if (current.cover != null && !current.title.isEmpty()) coverMemo.put(memoKey, current.cover);
 
     updateSession();
     notifyWidget();
@@ -2258,7 +2299,7 @@ public class PlaybackService extends Service {
     widgetKey = key;
     widgetCover = current.cover;
     MusicVerseWidget.push(this, current.title, current.artist, current.playing, current.loading,
-        current.hasNext, current.hasPrevious, current.cover);
+        current.hasNext, current.hasPrevious, current.cover, livePosition(), current.durationMs);
   }
 
   private void updateSession() {
