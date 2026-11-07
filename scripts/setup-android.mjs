@@ -42,15 +42,17 @@ for (const file of readdirSync(join(nativeDir, 'java'))) {
 // 2. Resource
 cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
 
-// 3. Versi aplikasi: versionName = package.json "version" (dibandingkan dengan tag GitHub Release saat cek
-// pembaruan), versionCode = major*10000 + minor*100 + patch (selalu naik saat versi naik).
+// 3. Versi aplikasi: versionName = package.json "appVersion" (atau "version") (dibandingkan dengan tag GitHub Release saat cek
+// pembaruan), versionCode = ((major*100 + minor)*100 + patch)*100 + revisi (selalu naik saat versi naik; skala baru, jauh di atas skala lama).
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-const [maj = 0, min = 0, pat = 0] = String(pkg.version).split('.').map((n) => parseInt(n, 10) || 0)
+// "appVersion" boleh 4 angka (mis. 0.5.37.5); "version" tetap semver 3 angka supaya npm tidak menolak.
+const appVersion = String(pkg.appVersion || pkg.version)
+const [maj = 0, min = 0, pat = 0, rev = 0] = appVersion.split('.').map((n) => parseInt(n, 10) || 0)
 const gradlePath = join(root, 'android', 'app', 'build.gradle')
 if (existsSync(gradlePath)) {
   const gradle = readFileSync(gradlePath, 'utf8')
-    .replace(/versionName\s*=?\s*"[^"]*"/, `versionName "${pkg.version}"`)
-    .replace(/versionCode\s*=?\s*\d+/, `versionCode ${maj * 10000 + min * 100 + pat}`)
+    .replace(/versionName\s*=?\s*"[^"]*"/, `versionName "${appVersion}"`)
+    .replace(/versionCode\s*=?\s*\d+/, `versionCode ${((maj * 100 + min) * 100 + pat) * 100 + rev}`)
   // Mesin audio ExoPlayer (Media3) di PlaybackService.
   const media3 = '1.8.0'
   const deps = [`androidx.media3:media3-exoplayer:${media3}`, `androidx.media3:media3-datasource-okhttp:${media3}`]

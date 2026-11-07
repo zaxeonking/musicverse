@@ -28,6 +28,6 @@ rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
 execFileSync('zip', ['-qr', join(out, 'bundle.zip'), '.'], { cwd: dist, stdio: 'inherit' })
 
-const manifest = { builtAt, nativeHash: computeNativeHash(root), version: pkg.version }
+const manifest = { builtAt, nativeHash: computeNativeHash(root), version: pkg.appVersion || pkg.version }
 writeFileSync(join(out, 'ota.json'), JSON.stringify(manifest) + '\n')
 console.log(`OTA siap: ${JSON.stringify(manifest)} (${Math.round(statSync(join(out, 'bundle.zip')).size / 1024)} KB)`)
