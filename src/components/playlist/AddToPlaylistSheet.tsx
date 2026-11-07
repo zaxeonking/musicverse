@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { ToastAction } from '../../context/TrackMenuContext'
 import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import AddToPlaylistPicker from '../player/AddToPlaylistPicker'
@@ -8,7 +9,7 @@ import OverlayPortal from '../ui/OverlayPortal'
 interface AddToPlaylistSheetProps {
   track: PlaylistTrack
   onClose: () => void
-  onDone: (message: string) => void
+  onDone: (message: string, action?: ToastAction) => void
 }
 
 /** Sheet bawah untuk menambahkan satu lagu ke "Playlist saya" (pilih yang ada atau buat baru). */
@@ -51,8 +52,8 @@ export default function AddToPlaylistSheet({ track, onClose, onDone }: AddToPlay
         <AddToPlaylistPicker
           track={track}
           onBack={onClose}
-          onDone={(message) => {
-            onDone(message)
+          onDone={(message, action) => {
+            onDone(message, action)
             onClose()
           }}
         />

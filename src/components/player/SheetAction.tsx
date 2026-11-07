@@ -8,10 +8,12 @@ interface SheetActionProps {
   onClick: () => void
   disabled?: boolean
   danger?: boolean
+  /** Kelas tambahan untuk ikon (mis. animasi). */
+  iconClassName?: string
 }
 
 /** Satu baris aksi di menu bawah (bottom sheet). Dipakai menu antrean dan menu lagu. */
-export default function SheetAction({ icon: Icon, label, hint, onClick, disabled, danger }: SheetActionProps) {
+export default function SheetAction({ icon: Icon, label, hint, onClick, disabled, danger, iconClassName }: SheetActionProps) {
   return (
     <li>
       <button
@@ -22,7 +24,7 @@ export default function SheetAction({ icon: Icon, label, hint, onClick, disabled
           danger ? 'text-danger' : 'text-ink'
         } focus-ring`}
       >
-        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <Icon className={`h-5 w-5 shrink-0 ${iconClassName ?? ''}`} aria-hidden="true" />
         <span className="min-w-0">
           <span className="block">{label}</span>
           {hint && <span className="block text-xs font-normal text-ink-muted">{hint}</span>}

@@ -176,10 +176,30 @@ export function setPinnedIn(list: readonly MyPlaylist[], id: string, pinned: boo
   })
 }
 
+/** Mengembalikan playlist yang baru dihapus (ID, isi, sematan, dan waktunya sama seperti semula). Dipakai tombol Urungkan. */
+export function restoreMyPlaylist(list: readonly MyPlaylist[], playlist: MyPlaylist): MyPlaylistChange<MyPlaylist> {
+  if (isLikedId(playlist.id)) return { ok: false, reason: 'protected' }
+  if (list.some((item) => item.id === playlist.id)) return { ok: true, list: [...list], value: playlist }
+  if (list.length >= MAX_MY_PLAYLISTS) return { ok: false, reason: 'limit' }
+  return { ok: true, list: [playlist, ...list], value: playlist }
+}
+
 export function deleteMyPlaylist(list: readonly MyPlaylist[], id: string): MyPlaylistChange<null> {
   if (isLikedId(id)) return { ok: false, reason: 'protected' }
   if (!list.some((item) => item.id === id)) return { ok: false, reason: 'missing' }
   return { ok: true, list: list.filter((item) => item.id !== id), value: null }
+}
+
+/**
+ * Menghapus banyak playlist sekaligus dalam satu perubahan (mode pilih banyak di Koleksi).
+ * "Lagu Disukai" dan ID yang tidak ada dilewati; `value` = playlist yang benar-benar terhapus (untuk Urungkan).
+ * Gagal ('missing') bila tidak ada satu pun yang bisa dihapus.
+ */
+export function deleteMyPlaylists(list: readonly MyPlaylist[], ids: readonly string[]): MyPlaylistChange<MyPlaylist[]> {
+  const wanted = new Set(ids.filter((id) => !isLikedId(id)))
+  const removed = list.filter((item) => wanted.has(item.id))
+  if (removed.length === 0) return { ok: false, reason: ids.length > 0 && ids.every(isLikedId) ? 'protected' : 'missing' }
+  return { ok: true, list: list.filter((item) => !wanted.has(item.id)), value: removed }
 }
 
 /** Suka / batal suka sebuah lagu di playlist bawaan. Lagu baru ditaruh di paling atas (seperti Spotify). */

@@ -49,7 +49,6 @@ export default function PlaylistView() {
 
   const [picking, setPicking] = useState(false)
   const [manualFor, setManualFor] = useState<PlaylistTrack | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
 
   // Cek ketersediaan audio semua lagu playlist (bukan hasil cari lagu satuan). Hook ini harus sebelum return di bawah.
   const checkable = status === 'success' && playlist !== null && playlist.source !== 'search'
@@ -57,11 +56,6 @@ export default function PlaylistView() {
   // Selama pengecekan, lagu yang BELUM dicek dikunci (tidak bisa diputar); terbuka satu per satu begitu hasilnya keluar.
   const checking = checkable && availability.running
   const isLocked = (track: PlaylistTrack): boolean => checking && availability.results[track.id] === undefined
-  useEffect(() => {
-    if (toast === null) return
-    const timer = setTimeout(() => setToast(null), 2500)
-    return () => clearTimeout(timer)
-  }, [toast])
 
   // Playlist Spotify TIDAK masuk tab Playlist sendiri; hanya bila pengguna menekan tombolnya, atau menyalakan
   // "Tambah otomatis" di Pengaturan > Playlist. Playlist yang hanya dipulihkan dari penyimpanan tidak diproses.
@@ -185,7 +179,7 @@ export default function PlaylistView() {
           title={manualFor.title}
           onPicked={() => availability.recheckOne(manualFor)}
           onClose={() => setManualFor(null)}
-          onToast={setToast}
+          onToast={showToast}
         />
       )}
 
@@ -193,16 +187,8 @@ export default function PlaylistView() {
         <AddToPlaylistSheet
           track={playlist.tracks[0]}
           onClose={() => setPicking(false)}
-          onDone={setToast}
+          onDone={showToast}
         />
-      )}
-      {toast && (
-        <div
-          role="status"
-          className="fixed inset-x-4 bottom-44 z-[70] mx-auto w-fit max-w-sm rounded-full bg-ink px-4 py-2 text-center text-sm font-medium text-bg shadow-lg"
-        >
-          {toast}
-        </div>
       )}
 
       <TrackList

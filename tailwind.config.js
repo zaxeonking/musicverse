@@ -84,6 +84,8 @@ export default {
           '60%': { opacity: '1' },
           '100%': { transform: 'none', opacity: '1', borderRadius: '0px' },
         },
+        // Ikon centang/daftar yang baru berganti di picker playlist: membal kecil supaya perubahannya terasa.
+        pop: { '0%': { transform: 'scale(0.4)', opacity: '0.4' }, '60%': { transform: 'scale(1.25)', opacity: '1' }, '100%': { transform: 'none', opacity: '1' } },
         eq: { '0%, 100%': { transform: 'scaleY(0.4)' }, '50%': { transform: 'scaleY(1)' } },
         disc: { to: { transform: 'rotate(360deg)' } },
         'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'none' } },
@@ -101,6 +103,7 @@ export default {
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         'bubble-rise': 'bubble-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        pop: 'pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         disc: 'disc 18s linear infinite',
         eq: 'eq 1.1s ease-in-out infinite',
         'sheet-up': 'sheet-up 240ms cubic-bezier(0.22, 1, 0.36, 1) both',

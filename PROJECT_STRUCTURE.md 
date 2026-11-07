@@ -116,6 +116,7 @@ PlaylistsSection.tsx| Menampilkan bagian daftar playlist.
 NewPlaylistForm.tsx| Form pembuatan playlist baru.
 SavedPlaylistCard.tsx| Kartu playlist yang sudah disimpan.
 PlaylistMenuSheet.tsx| Panel menu tindakan playlist.
+PlaylistSelection.tsx| Mode pilih banyak di Koleksi: kartu yang bisa dicentang (SelectableCard) dan bilah aksi hapus sekaligus (SelectionBar).
 ManualSearchSheet.tsx| Panel pencarian manual.
 MoveDownloadSheet.tsx| Panel untuk memindahkan unduhan.
 DownloadsSection.tsx| Menampilkan bagian daftar unduhan. Folder Lokal (LocalFolder) selalu tampil paling atas.

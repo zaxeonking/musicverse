@@ -81,7 +81,7 @@ function TrackLine({
 export default function MyPlaylistPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { getPlaylist, renamePlaylist, deletePlaylist, removeTrack, moveTrack, saveDownloadedPlaylist, setPinned } = useMyPlaylists()
+  const { getPlaylist, renamePlaylist, deletePlaylist, restorePlaylist, removeTrack, moveTrack, saveDownloadedPlaylist, setPinned } = useMyPlaylists()
   const { removePlaylist: removeSaved } = useLibrary()
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
@@ -284,6 +284,14 @@ export default function MyPlaylistPage() {
                 if (!result.ok) return fail(result.reason)
                 // Playlist hasil "Unduh semua": kartu Spotify-nya yang tadi disembunyikan ikut dilepas, supaya tidak muncul lagi.
                 if (playlist.sourceId) removeSaved(playlist.sourceId)
+                const deleted = playlist
+                showToast(`Playlist "${deleted.name}" dihapus`, {
+                  label: 'Urungkan',
+                  onClick: () => {
+                    const restored = restorePlaylist(deleted)
+                    showToast(restored.ok ? `Playlist "${deleted.name}" dikembalikan` : myPlaylistErrorText(restored.reason))
+                  },
+                })
                 navigate('/library', { replace: true })
               }}
               className="btn-danger px-4"

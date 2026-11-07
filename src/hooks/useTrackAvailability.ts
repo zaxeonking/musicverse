@@ -47,6 +47,14 @@ function writeCache(map: Record<string, number>): void {
   }
 }
 
+/** Membuang status "ada" yang tersimpan untuk lagu ini, mis. setelah pilihan manualnya dilepas, supaya dicek ulang dengan benar. */
+export function forgetAvailability(track: { title: string; artists?: string }): void {
+  const cache = readCache()
+  if (!(pinKey(track) in cache)) return
+  delete cache[pinKey(track)]
+  writeCache(cache)
+}
+
 async function checkOne(track: PlaylistTrack, signal: AbortSignal): Promise<TrackAvailability | 'aborted'> {
   // Sudah terunduh (APK) atau sudah dipilih manual: pasti bisa diputar, tanpa jaringan.
   if (isLocalTrackUrl(track.url) || findDownloaded(track) || getManualPin(track)) return 'ok'
@@ -56,7 +64,7 @@ async function checkOne(track: PlaylistTrack, signal: AbortSignal): Promise<Trac
   )
   if (outcome === 'aborted') return 'aborted'
   if (outcome === 'ok') return 'ok'
-  // Tidak ketemu, audio ditolak, stream tidak terbaca, atau melewati batas 6 detik: semuanya "tidak ditemukan" supaya
+  // Tidak ketemu, audio ditolak, stream tidak terbaca, atau melewati batas waktu cek (25–30 detik menurut durasi lagu): semuanya "tidak ditemukan" supaya
   // lagunya bisa dicari manual / dicek ulang, bukan dibiarkan terlihat siap diputar.
   return 'missing'
 }

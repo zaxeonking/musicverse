@@ -113,8 +113,20 @@ const PLUGIN_BUDGET_STRICT_MS = 35_000
  * metadata audionya dibaca (sama seperti saat diputar), jadi lagu yang hanya "ada di hasil pencarian" tetapi tidak
  * bisa diputar tidak lolos. Lewat batas = dianggap tidak ditemukan (pengguna bisa Cari manual atau Cek ulang).
  */
-const CHECK_BUDGET_MS = 6_000
-const CHECK_PROBE_TIMEOUT_MS = 4_000
+const CHECK_BUDGET_MIN_MS = 25_000
+const CHECK_BUDGET_MAX_MS = 30_000
+/** Durasi lagu (detik) yang mendapat batas terendah / tertinggi; di antaranya naik bertahap. */
+const CHECK_BUDGET_SHORT_S = 180
+const CHECK_BUDGET_LONG_S = 360
+const CHECK_PROBE_TIMEOUT_MS = 8_000
+
+/** Batas waktu cek SATU lagu: 25 dtk (<= 3 mnt) sampai 30 dtk (>= 6 mnt), menurut durasi lagu di playlist. Durasi tak diketahui = 25 dtk. */
+function checkBudgetMs(expectedSec: number | null): number {
+  if (expectedSec === null || expectedSec <= CHECK_BUDGET_SHORT_S) return CHECK_BUDGET_MIN_MS
+  if (expectedSec >= CHECK_BUDGET_LONG_S) return CHECK_BUDGET_MAX_MS
+  const ratio = (expectedSec - CHECK_BUDGET_SHORT_S) / (CHECK_BUDGET_LONG_S - CHECK_BUDGET_SHORT_S)
+  return Math.round(CHECK_BUDGET_MIN_MS + ratio * (CHECK_BUDGET_MAX_MS - CHECK_BUDGET_MIN_MS))
+}
 
 function pluginBudgetMs(strict: boolean): number {
   return strict ? PLUGIN_BUDGET_STRICT_MS : PLUGIN_BUDGET_BY_TIER[getNetworkTier()]
@@ -237,7 +249,7 @@ export async function resolveViaPluginsDetailed(
   const forward = () => inner.abort()
   if (options.signal?.aborted) return { info: null, outcome: 'aborted' }
   options.signal?.addEventListener('abort', forward, { once: true })
-  const budget = setTimeout(() => inner.abort(), options.searchOnly ? CHECK_BUDGET_MS : pluginBudgetMs(strict))
+  const budget = setTimeout(() => inner.abort(), options.searchOnly ? checkBudgetMs(expected) : pluginBudgetMs(strict))
   const signal = inner.signal
 
   const disabled = readDisabled()

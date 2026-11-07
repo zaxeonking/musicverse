@@ -20,6 +20,7 @@ import {
   readRecentPlays,
   readSavedPlaylists,
   removeSavedPlaylist,
+  removeSavedPlaylists,
   upsertSavedPlaylist,
   writePrefs,
   writeRecentPlays,
@@ -56,6 +57,8 @@ export interface LibraryContextValue {
   savePlaylist: (playlist: PlaylistDetail, options?: { allowMemoryOnly?: boolean }) => boolean
   /** Menghapus dari Koleksi. Mengembalikan true jika penghapusan berhasil tersimpan. */
   removePlaylist: (playlistId: string) => boolean
+  /** Menghapus banyak sekaligus dalam satu penulisan. ID yang tidak ada di Koleksi dilewati. true jika berhasil tersimpan. */
+  removePlaylists: (playlistIds: readonly string[]) => boolean
   clearRecent: () => void
   setPrefs: (patch: Partial<LibraryPrefs>) => void
   dismissNotice: () => void
@@ -179,6 +182,33 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [commitSaved],
   )
 
+  const removePlaylists = useCallback(
+    (playlistIds: readonly string[]): boolean => {
+      const read = readSavedPlaylists()
+      const memoryOnly = read.health === 'unavailable'
+      const base = memoryOnly ? savedRef.current : read.items
+      const gone = new Set(playlistIds)
+      const targets = base.filter((item) => gone.has(item.id))
+      // Tidak ada yang ada di Koleksi: tidak ada yang ditulis ulang.
+      if (targets.length === 0) return true
+      const next = removeSavedPlaylists(base, playlistIds)
+      const write = writeSavedPlaylists(next)
+
+      if (!write.ok && !memoryOnly) {
+        commitSaved(base)
+        setHealth('unavailable')
+        setNotice({ reason: write.reason, action: 'remove', title: targets.length === 1 ? targets[0].title : `${targets.length} playlist` })
+        return false
+      }
+
+      commitSaved(next)
+      setNotice(null)
+      setHealth(write.ok ? 'ok' : 'unavailable')
+      return true
+    },
+    [commitSaved],
+  )
+
   const recordPlay = useCallback(
     (track: PlaylistTrack, source: RecentPlaySource) => {
       const read = readRecentPlays()
@@ -257,11 +287,12 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       savedIdFor: (target: PlaylistDetail) => findSavedMatch(saved, target)?.id ?? null,
       savePlaylist,
       removePlaylist,
+      removePlaylists,
       clearRecent,
       setPrefs,
       dismissNotice,
     }),
-    [saved, recent, prefs, health, notice, savePlaylist, removePlaylist, clearRecent, setPrefs, dismissNotice],
+    [saved, recent, prefs, health, notice, savePlaylist, removePlaylist, removePlaylists, clearRecent, setPrefs, dismissNotice],
   )
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>

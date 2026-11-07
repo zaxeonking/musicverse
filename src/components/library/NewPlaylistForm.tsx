@@ -7,11 +7,13 @@ interface NewPlaylistFormProps {
   onCancel?: () => void
   autoFocus?: boolean
   submitLabel?: string
+  /** Isi awal kolom nama (mis. nama lama saat ganti nama). */
+  initialValue?: string
 }
 
-/** Isian nama + tombol Buat untuk playlist baru. Dipakai di halaman Koleksi dan menu "Simpan ke playlist". */
-export default function NewPlaylistForm({ onCreate, onCancel, autoFocus = true, submitLabel = 'Buat' }: NewPlaylistFormProps) {
-  const [name, setName] = useState('')
+/** Isian nama + tombol Buat untuk playlist baru. Dipakai di halaman Koleksi, menu "Simpan ke playlist", dan Ganti nama di menu playlist. */
+export default function NewPlaylistForm({ onCreate, onCancel, autoFocus = true, submitLabel = 'Buat', initialValue = '' }: NewPlaylistFormProps) {
+  const [name, setName] = useState(initialValue)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {

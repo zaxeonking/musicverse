@@ -24,16 +24,23 @@ export interface TrackMenuOptions {
   historyAt?: number
 }
 
+/** Tombol di dalam toast (mis. Urungkan). Toast yang punya tombol tampil lebih lama. */
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface TrackMenuApi {
   /** Membuka menu opsi untuk satu lagu dari daftar mana pun. Identitasnya stabil. */
   openTrackMenu: (track: PlaylistTrack, options?: TrackMenuOptions) => void
   /** Menampilkan pesan singkat di bawah layar. */
-  showToast: (message: string) => void
+  showToast: (message: string, action?: ToastAction) => void
 }
 
 const TrackMenuContext = createContext<TrackMenuApi | null>(null)
 
 const TOAST_MS = 2400
+const TOAST_ACTION_MS = 6000
 
 /**
  * Pemilik satu-satunya menu opsi lagu (tahan lama pada baris lagu di seluruh aplikasi) dan toast.
@@ -48,7 +55,7 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
     place?: TrackMenuPlace
     historyAt?: number
   } | null>(null)
-  const [toast, setToast] = useState<{ id: number; message: string } | null>(null)
+  const [toast, setToast] = useState<{ id: number; message: string; action?: ToastAction } | null>(null)
   const toastTimer = useRef<number | null>(null)
 
   const openTrackMenu = useCallback(
@@ -64,10 +71,10 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
   )
   const closeMenu = useCallback(() => setMenu(null), [])
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, action?: ToastAction) => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
-    setToast({ id: Date.now(), message })
-    toastTimer.current = window.setTimeout(() => setToast(null), TOAST_MS)
+    setToast({ id: Date.now(), message, action })
+    toastTimer.current = window.setTimeout(() => setToast(null), action ? TOAST_ACTION_MS : TOAST_MS)
   }, [])
   useEffect(
     () => () => {
@@ -98,12 +105,26 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
         className="pointer-events-none fixed inset-x-0 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] z-[65] flex justify-center px-4 lg:bottom-28"
       >
         {toast && (
-          <p
+          <div
             key={toast.id}
-            className="max-w-sm animate-fade-in rounded-full bg-raised px-4 py-2.5 text-center text-sm font-medium text-ink shadow-xl shadow-black/50"
+            className="flex max-w-sm animate-fade-in items-center gap-2 rounded-full bg-raised py-2.5 pl-4 pr-4 text-center text-sm font-medium text-ink shadow-xl shadow-black/50"
           >
-            {toast.message}
-          </p>
+            <p className="min-w-0">{toast.message}</p>
+            {toast.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  const { onClick } = toast.action as ToastAction
+                  if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
+                  setToast(null)
+                  onClick()
+                }}
+                className="pointer-events-auto -my-1 -mr-2 shrink-0 rounded-full px-3 py-1.5 font-semibold text-accent hover:bg-white/10 active:bg-white/15 focus-ring"
+              >
+                {toast.action.label}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </TrackMenuContext.Provider>

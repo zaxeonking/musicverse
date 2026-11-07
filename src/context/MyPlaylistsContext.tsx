@@ -6,6 +6,7 @@ import {
   addTracksToMyPlaylist,
   createMyPlaylist,
   deleteMyPlaylist,
+  deleteMyPlaylists,
   moveTrackInMyPlaylist,
   transferTracks as transferTracksIn,
   MY_PLAYLISTS_KEY,
@@ -17,6 +18,7 @@ import {
   trackIdentity,
   LIKED_ID,
   renameMyPlaylist,
+  restoreMyPlaylist,
   writeMyPlaylists,
   type BulkAddResult,
   type MyPlaylistChange,
@@ -36,6 +38,10 @@ export interface MyPlaylistsContextValue {
   createPlaylist: (name: string, sourceId?: string) => MyPlaylistResult<MyPlaylist>
   renamePlaylist: (id: string, name: string) => MyPlaylistResult<MyPlaylist>
   deletePlaylist: (id: string) => MyPlaylistResult<null>
+  /** Menghapus banyak playlist dalam satu penulisan; mengembalikan yang benar-benar terhapus (untuk Urungkan). */
+  deletePlaylists: (ids: readonly string[]) => MyPlaylistResult<MyPlaylist[]>
+  /** Mengembalikan playlist yang baru dihapus (untuk Urungkan). */
+  restorePlaylist: (playlist: MyPlaylist) => MyPlaylistResult<MyPlaylist>
   addTrack: (playlistId: string, track: PlaylistTrack) => MyPlaylistResult<MyPlaylist>
   /** Menambah banyak lagu sekaligus; yang sudah ada dilewati. */
   addTracks: (playlistId: string, tracks: readonly PlaylistTrack[]) => MyPlaylistResult<BulkAddResult>
@@ -134,6 +140,8 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
   const createPlaylist = useCallback((name: string, sourceId?: string) => mutate((l) => createMyPlaylist(l, name, Date.now(), sourceId)), [mutate])
   const renamePlaylist = useCallback((id: string, name: string) => mutate((l) => renameMyPlaylist(l, id, name)), [mutate])
   const deletePlaylist = useCallback((id: string) => mutate((l) => deleteMyPlaylist(l, id)), [mutate])
+  const deletePlaylists = useCallback((ids: readonly string[]) => mutate((l) => deleteMyPlaylists(l, ids)), [mutate])
+  const restorePlaylist = useCallback((playlist: MyPlaylist) => mutate((l) => restoreMyPlaylist(l, playlist)), [mutate])
   const addTrack = useCallback((id: string, track: PlaylistTrack) => mutate((l) => addTrackToMyPlaylist(l, id, track)), [mutate])
   const addTracks = useCallback((id: string, tracks: readonly PlaylistTrack[]) => mutate((l) => addTracksToMyPlaylist(l, id, tracks)), [mutate])
   const saveDownloadedPlaylist = useCallback(
@@ -187,6 +195,8 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       createPlaylist,
       renamePlaylist,
       deletePlaylist,
+      deletePlaylists,
+      restorePlaylist,
       addTrack,
       addTracks,
       saveDownloadedPlaylist,
@@ -200,7 +210,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       setPinned,
       transferTracks,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike, setPinned],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, deletePlaylists, restorePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike, setPinned],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>

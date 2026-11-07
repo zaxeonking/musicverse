@@ -1,10 +1,13 @@
-import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, History, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, History, Link2, ListEnd, ListPlus, ListX, Play, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { writeClipboardText } from '../../native/clipboard'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
-import type { TrackMenuPlace } from '../../context/TrackMenuContext'
+import type { ToastAction, TrackMenuPlace } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
+import { forgetAvailability } from '../../hooks/useTrackAvailability'
+import { forgetManualPin, getManualPin } from '../../plugins/manualPins'
+import { forgetResolved } from '../../plugins/registry'
 import { removePlayLogEntry } from '../../utils/playLog'
 import type { QueueAddResult } from '../../types/player'
 import { QUEUE_RESULT_TEXT } from '../../utils/queueResultText'
@@ -36,7 +39,7 @@ interface TrackMenuSheetProps {
   /** Waktu putar entri Riwayat yang ditekan lama; dipakai bersama place 'history'. */
   historyAt?: number
   onClose: () => void
-  onToast: (message: string) => void
+  onToast: (message: string, action?: ToastAction) => void
 }
 
 /**
@@ -55,6 +58,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   useOverlayHistory(true, onClose)
   const sheetRef = useRef<HTMLDivElement>(null)
   const [picking, setPicking] = useState(false)
+  // Lagu ini pernah dipilih sumbernya secara manual (Cari manual): tampilkan opsi untuk melepasnya.
+  const [pinned] = useState(() => getManualPin(track) !== null)
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const native = isNativeApp()
   // Di APK tautan Spotify (buka/salin) disembunyikan.
@@ -117,6 +122,14 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
     if (!sourcePlaylist) return
     const result = removeTrack(sourcePlaylist.id, track.id)
     onToast(result.ok ? 'Dihapus dari playlist' : myPlaylistErrorText(result.reason))
+    onClose()
+  }
+
+  const releaseManualPin = () => {
+    forgetManualPin(track)
+    forgetResolved(track)
+    forgetAvailability(track)
+    onToast('Pilihan manual dilepas. Lagu dicari otomatis lagi')
     onClose()
   }
 
@@ -189,8 +202,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
           <AddToPlaylistPicker
             track={track}
             onBack={() => setPicking(false)}
-            onDone={(message) => {
-              onToast(message)
+            onDone={(message, action) => {
+              onToast(message, action)
               onClose()
             }}
           />
@@ -278,6 +291,14 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                     danger
                   />
                 </>
+              )}
+              {pinned && (
+                <Action
+                  icon={Undo2}
+                  label="Lepas pilihan manual"
+                  hint="Kembali ke pencarian otomatis untuk lagu ini"
+                  onClick={releaseManualPin}
+                />
               )}
               {place === 'history' && historyAt !== undefined && (
                 <Action icon={History} label="Hapus dari riwayat" hint="Hanya entri putar ini" onClick={removeFromHistory} danger />

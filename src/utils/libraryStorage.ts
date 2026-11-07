@@ -305,6 +305,11 @@ export function removeSavedPlaylist(list: readonly SavedPlaylist[], id: string):
   return list.filter((item) => item.id !== id)
 }
 
+export function removeSavedPlaylists(list: readonly SavedPlaylist[], ids: readonly string[]): SavedPlaylist[] {
+  const gone = new Set(ids)
+  return list.filter((item) => !gone.has(item.id))
+}
+
 export function sortSavedPlaylists(list: readonly SavedPlaylist[], sort: LibrarySort): SavedPlaylist[] {
   const copy = [...list]
   if (sort === 'name') return copy.sort((a, b) => a.title.localeCompare(b.title, 'id', { sensitivity: 'base' }))

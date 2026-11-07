@@ -1,31 +1,33 @@
-import { ArrowRightLeft, Copy, ListMusic, Pin, PinOff, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Copy, ListMusic, Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
+import type { ToastAction } from '../../context/TrackMenuContext'
 import type { MyPlaylist } from '../../types/library'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isLikedId } from '../../utils/myPlaylistStorage'
 import Action from '../player/SheetAction'
 import CoverArt from '../ui/CoverArt'
+import NewPlaylistForm from './NewPlaylistForm'
 import PlaylistTransferPanel from './PlaylistTransferPanel'
 import OverlayPortal from '../ui/OverlayPortal'
 
 interface PlaylistMenuSheetProps {
   playlist: MyPlaylist
   onClose: () => void
-  onToast: (message: string) => void
+  onToast: (message: string, action?: ToastAction) => void
 }
 
-/** Menu kecil satu playlist buatanmu (tahan lama pada kartunya): buka, sematkan, salin/pindahkan semua lagu, hapus playlist. */
+/** Menu kecil satu playlist buatanmu (tahan lama pada kartunya): buka, ganti nama, sematkan, salin/pindahkan semua lagu, hapus playlist. */
 export default function PlaylistMenuSheet({ playlist, onClose, onToast }: PlaylistMenuSheetProps) {
   useOverlayHistory(true, onClose)
   const navigate = useNavigate()
-  const { setPinned, deletePlaylist } = useMyPlaylists()
+  const { setPinned, renamePlaylist, deletePlaylist, restorePlaylist } = useMyPlaylists()
   const { removePlaylist: removeSaved } = useLibrary()
   const sheetRef = useRef<HTMLDivElement>(null)
-  const [mode, setMode] = useState<'copy' | 'move' | 'delete' | null>(null)
+  const [mode, setMode] = useState<'copy' | 'move' | 'delete' | 'rename' | null>(null)
   const fallback = useMemo(() => fallbackCover(playlist.name), [playlist.name])
   const count = playlist.tracks.length
 
@@ -65,7 +67,22 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
           </span>
         </div>
 
-        {mode === 'delete' ? (
+        {mode === 'rename' ? (
+          <div className="border-t border-line px-4 pb-2 pt-4">
+            <NewPlaylistForm
+              initialValue={playlist.name}
+              submitLabel="Simpan"
+              onCancel={() => setMode(null)}
+              onCreate={(name) => {
+                const result = renamePlaylist(playlist.id, name)
+                if (!result.ok) return myPlaylistErrorText(result.reason)
+                onToast(`Nama playlist diganti jadi "${result.value.name}"`)
+                onClose()
+                return null
+              }}
+            />
+          </div>
+        ) : mode === 'delete' ? (
           <div className="border-t border-line px-4 pb-2 pt-4" role="group" aria-label={`Konfirmasi hapus ${playlist.name}`}>
             <p className="text-sm text-ink">Hapus playlist ini?</p>
             <p className="mt-1 text-xs text-ink-muted">
@@ -85,7 +102,13 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
                   }
                   // Playlist hasil "Unduh semua": kartu Spotify-nya yang tadi disembunyikan ikut dilepas, supaya tidak muncul lagi.
                   if (playlist.sourceId) removeSaved(playlist.sourceId)
-                  onToast(`Playlist "${playlist.name}" dihapus`)
+                  onToast(`Playlist "${playlist.name}" dihapus`, {
+                    label: 'Urungkan',
+                    onClick: () => {
+                      const restored = restorePlaylist(playlist)
+                      onToast(restored.ok ? `Playlist "${playlist.name}" dikembalikan` : myPlaylistErrorText(restored.reason))
+                    },
+                  })
                   onClose()
                 }}
                 className="btn-danger flex-1 px-4"
@@ -115,6 +138,7 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
                 navigate(`/my/${playlist.id}`)
               }}
             />
+            {!isLikedId(playlist.id) && <Action icon={Pencil} label="Ganti nama" onClick={() => setMode('rename')} />}
             {!isLikedId(playlist.id) && (
               <Action
                 icon={playlist.pinned ? PinOff : Pin}

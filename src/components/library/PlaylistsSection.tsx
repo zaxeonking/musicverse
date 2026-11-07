@@ -1,5 +1,5 @@
-import { Heart, LayoutGrid, Library, List, Pin, Plus } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { Heart, LayoutGrid, Library, List, ListChecks, Pin, Plus } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
@@ -16,6 +16,7 @@ import EmptyState from '../ui/EmptyState'
 import SectionHeader from '../ui/SectionHeader'
 import NewPlaylistForm from './NewPlaylistForm'
 import PlaylistMenuSheet from './PlaylistMenuSheet'
+import { SelectableCard, SelectionBar } from './PlaylistSelection'
 import SavedPlaylistCard from './SavedPlaylistCard'
 import SavedPlaylistMenuSheet from './SavedPlaylistMenuSheet'
 
@@ -32,6 +33,9 @@ const viewOptions: { id: LibraryView; label: string; icon: typeof LayoutGrid }[]
 type Entry =
   | { kind: 'mine'; id: string; title: string; at: number; playlist: MyPlaylist }
   | { kind: 'saved'; id: string; title: string; at: number; playlist: SavedPlaylist }
+
+/** Kunci pilihan: awalan membedakan playlist buatanmu dan yang tersimpan, yang ID-nya bisa kebetulan sama. */
+const keyOf = (entry: Entry) => `${entry.kind === 'mine' ? 'm' : 's'}:${entry.id}`
 
 function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; layout: LibraryView; onMenu: (playlist: MyPlaylist) => void }) {
   // Tahan lama (atau klik kanan) membuka menu kecil; klik/ketukan yang menyusul tidak ikut membuka playlist.
@@ -94,12 +98,14 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
 export default function PlaylistsSection() {
   const navigate = useNavigate()
   const { playlist: active, restorePlaylist } = usePlaylist()
-  const { saved, prefs, removePlaylist, setPrefs } = useLibrary()
-  const { playlists: mine, createPlaylist } = useMyPlaylists()
+  const { saved, prefs, removePlaylist, removePlaylists, savePlaylist, setPrefs } = useLibrary()
+  const { playlists: mine, createPlaylist, deletePlaylists, restorePlaylist } = useMyPlaylists()
   const { showToast } = useTrackMenu()
   const [creating, setCreating] = useState(false)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [savedMenuId, setSavedMenuId] = useState<string | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const savedMenuPlaylist = savedMenuId === null ? undefined : saved.find((item) => item.id === savedMenuId)
   const menuPlaylist = menuId === null ? undefined : mine.find((item) => item.id === menuId)
   const sectionRef = useRef<HTMLDivElement>(null)
@@ -143,6 +149,63 @@ export default function PlaylistsSection() {
     [removePlaylist],
   )
 
+  const selectable = useMemo(() => entries.filter((entry) => !(entry.kind === 'mine' && isLikedId(entry.id))), [entries])
+  // Playlist yang sudah hilang (mis. dihapus di tab lain) tidak ikut terhitung.
+  const chosen = useMemo(() => selectable.filter((entry) => selected.has(keyOf(entry))), [selectable, selected])
+
+  const exitSelecting = useCallback(() => {
+    setSelecting(false)
+    setSelected(new Set())
+  }, [])
+  // Tidak ada lagi yang bisa dipilih (mis. semua dihapus dari tab lain): keluar dari mode pilih.
+  useEffect(() => {
+    if (selecting && selectable.length === 0) exitSelecting()
+  }, [selecting, selectable.length, exitSelecting])
+
+  const toggleSelected = (entry: Entry) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      const key = keyOf(entry)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  /** Menghapus semua yang dipilih sekaligus (satu penulisan per jenis), dengan Urungkan. Berkas unduhan dan antrean tidak disentuh. */
+  const handleDeleteSelected = () => {
+    const mineChosen = chosen.flatMap((entry) => (entry.kind === 'mine' ? [entry.playlist] : []))
+    const savedChosen = chosen.flatMap((entry) => (entry.kind === 'saved' ? [entry.playlist] : []))
+    if (mineChosen.length + savedChosen.length === 0) return
+
+    let removedMine: MyPlaylist[] = []
+    if (mineChosen.length > 0) {
+      const result = deletePlaylists(mineChosen.map((item) => item.id))
+      if (!result.ok) {
+        showToast(myPlaylistErrorText(result.reason))
+        return
+      }
+      removedMine = result.value
+    }
+    // Playlist hasil "Unduh semua" ikut melepas kartu Spotify-nya (sama seperti hapus satuan).
+    const savedIds = [...savedChosen.map((item) => item.id), ...removedMine.flatMap((item) => (item.sourceId ? [item.sourceId] : []))]
+    const savedSnapshots = saved.filter((item) => savedIds.includes(item.id))
+    if (savedIds.length > 0) removePlaylists(savedIds)
+
+    const total = removedMine.length + savedChosen.length
+    exitSelecting()
+    // Fokus ke bagian ini agar pengguna keyboard/pembaca layar tidak "jatuh" ke awal halaman.
+    requestAnimationFrame(() => sectionRef.current?.focus())
+    showToast(`${total} playlist dihapus`, {
+      label: 'Urungkan',
+      onClick: () => {
+        let failed = false
+        for (const item of removedMine) if (!restorePlaylist(item).ok) failed = true
+        for (const item of savedSnapshots) if (!savePlaylist(toPlaylistDetail(item))) failed = true
+        showToast(failed ? 'Sebagian playlist tidak bisa dikembalikan' : `${total} playlist dikembalikan`)
+      },
+    })
+  }
+
   const create = (name: string): string | null => {
     const result = createPlaylist(name)
     if (!result.ok) return myPlaylistErrorText(result.reason)
@@ -163,11 +226,19 @@ export default function PlaylistsSection() {
           title="Playlist"
           subtitle={subtitle}
           action={
-            !creating ? (
-              <button type="button" onClick={() => setCreating(true)} className="btn-secondary h-10 px-4 text-sm">
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Buat playlist
-              </button>
+            !creating && !selecting ? (
+              <div className="flex shrink-0 items-center gap-2">
+                {selectable.length > 0 && (
+                  <button type="button" onClick={() => setSelecting(true)} className="btn-secondary h-10 px-4 text-sm">
+                    <ListChecks className="h-4 w-4" aria-hidden="true" />
+                    Pilih
+                  </button>
+                )}
+                <button type="button" onClick={() => setCreating(true)} className="btn-secondary h-10 px-4 text-sm">
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Buat playlist
+                </button>
+              </div>
             ) : undefined
           }
         />
@@ -193,6 +264,16 @@ export default function PlaylistsSection() {
         )
       ) : (
         <div className="space-y-4">
+          {selecting && (
+            <SelectionBar
+              count={chosen.length}
+              total={selectable.length}
+              onSelectAll={() => setSelected(new Set(selectable.map(keyOf)))}
+              onClear={() => setSelected(new Set())}
+              onCancel={exitSelecting}
+              onDelete={handleDeleteSelected}
+            />
+          )}
           <div className="flex items-center justify-between gap-3">
             <div className="no-scrollbar -m-1 flex gap-2 overflow-x-auto p-1" role="group" aria-label="Urutkan playlist">
               {sortOptions.map((option) => (
@@ -228,7 +309,22 @@ export default function PlaylistsSection() {
             }
           >
             {entries.map((entry) =>
-              entry.kind === 'mine' ? (
+              selecting ? (
+                <SelectableCard
+                  key={entry.id}
+                  title={entry.title}
+                  subtitle={
+                    entry.kind === 'mine'
+                      ? `${isLikedId(entry.id) ? 'Bawaan' : 'Buatanmu'} · ${entry.playlist.tracks.length === 0 ? 'kosong' : `${entry.playlist.tracks.length} lagu`}`
+                      : `Tersimpan · ${entry.playlist.tracks.length} lagu`
+                  }
+                  cover={entry.kind === 'mine' ? entry.playlist.tracks[0]?.cover : entry.playlist.cover}
+                  layout={prefs.view}
+                  locked={entry.kind === 'mine' && isLikedId(entry.id)}
+                  selected={selected.has(keyOf(entry))}
+                  onToggle={() => toggleSelected(entry)}
+                />
+              ) : entry.kind === 'mine' ? (
                 <MyPlaylistCard key={entry.id} playlist={entry.playlist} layout={prefs.view} onMenu={(item) => setMenuId(item.id)} />
               ) : (
                 <SavedPlaylistCard

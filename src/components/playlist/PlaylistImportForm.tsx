@@ -4,8 +4,19 @@ import { usePlaylist } from '../../context/PlaylistContext'
 import { readClipboardText } from '../../native/clipboard'
 import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
+import Chip from '../ui/Chip'
 
-export default function PlaylistImportForm() {
+/** Jenis pencarian untuk judul yang diketik: lagu (alur lama) atau artis (daftar artis dari luar). */
+export type SearchMode = 'track' | 'artist'
+
+interface PlaylistImportFormProps {
+  mode: SearchMode
+  onModeChange: (mode: SearchMode) => void
+  /** Teks artis yang dicari; null = hapus hasil artis. */
+  onArtistSearch: (query: string | null) => void
+}
+
+export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch }: PlaylistImportFormProps) {
   const { status, loadPlaylist, reset } = usePlaylist()
   const [value, setValue] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -19,7 +30,7 @@ export default function PlaylistImportForm() {
 
   // Saran judul (YouTube Music) saat mengetik judul; ditunda 300 ms dan dibatalkan bila teks berubah lagi.
   useEffect(() => {
-    if (!focused || loading || inputKind !== 'search') {
+    if (!focused || loading || inputKind !== 'search' || mode === 'artist') {
       setSuggestions([])
       return
     }
@@ -33,7 +44,7 @@ export default function PlaylistImportForm() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [value, focused, loading, inputKind])
+  }, [value, focused, loading, inputKind, mode])
 
   async function pickSuggestion(text: string) {
     setSuggestions([])
@@ -48,8 +59,20 @@ export default function PlaylistImportForm() {
 
     const input = classifyImportInput(value)
     if (input.kind === 'empty') {
-      setValidationError('Ketik judul lagu, atau tempel tautan lagu/playlist Spotify.')
+      setValidationError(
+        mode === 'artist' ? 'Ketik nama artis.' : 'Ketik judul lagu, atau tempel tautan lagu/playlist Spotify.',
+      )
       return
+    }
+    if (mode === 'artist') {
+      if (input.kind === 'search') {
+        // Nama artis: cari daftar artis (tanpa menyentuh playlist/hasil lagu yang sedang tampil).
+        setValidationError(null)
+        onArtistSearch(input.query)
+        return
+      }
+      // Tautan Spotify ditempel saat mode Artis: pakai alur lama (lagu/playlist).
+      onModeChange('track')
     }
     if (input.kind === 'playlist') {
       const result = validateSpotifyPlaylistUrl(value)
@@ -64,6 +87,7 @@ export default function PlaylistImportForm() {
 
   /** Kosongkan input dan langsung kembali ke beranda: batalkan permintaan yang berjalan, hapus hasil. */
   function handleReset() {
+    if (mode === 'artist') onArtistSearch(null)
     reset()
     setValue('')
     setValidationError(null)
@@ -118,7 +142,7 @@ export default function PlaylistImportForm() {
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder="Judul lagu, tautan lagu, atau tautan playlist"
+            placeholder={mode === 'artist' ? 'Nama artis' : 'Judul lagu, tautan lagu, atau tautan playlist'}
             autoComplete="off"
             spellCheck={false}
             aria-invalid={validationError ? true : undefined}
@@ -176,9 +200,25 @@ export default function PlaylistImportForm() {
             {loading && (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             )}
-            {loading ? 'Memuat…' : inputKind === 'playlist' ? 'Muat playlist' : inputKind === 'track' ? 'Muat lagu' : 'Cari lagu'}
+            {loading
+              ? 'Memuat…'
+              : inputKind === 'playlist'
+                ? 'Muat playlist'
+                : inputKind === 'track'
+                  ? 'Muat lagu'
+                  : mode === 'artist'
+                    ? 'Cari artis'
+                    : 'Cari lagu'}
           </button>
         </div>
+      </div>
+      <div className="flex gap-2" role="group" aria-label="Jenis pencarian">
+        <Chip active={mode === 'track'} onClick={() => onModeChange('track')}>
+          Lagu
+        </Chip>
+        <Chip active={mode === 'artist'} onClick={() => onModeChange('artist')}>
+          Artis
+        </Chip>
       </div>
       {validationError && (
         <p id={errorId} role="alert" className="text-sm text-danger">
