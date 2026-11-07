@@ -75,6 +75,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
 
   return (
     <li
+      data-tour="track-row"
       aria-current={selected ? 'true' : undefined}
       aria-disabled={locked || offlineBlocked || undefined}
       onClick={() => {

@@ -382,6 +382,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     />
     <div
       role="region"
+      data-tour="mini-player"
       aria-label="Pemutar musik"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

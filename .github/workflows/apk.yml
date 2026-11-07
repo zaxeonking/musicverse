@@ -1,9 +1,10 @@
 name: Build APK
 
-# Rilis OTOMATIS: tiap push ke branch utama, versi dibaca dari package.json "appVersion" (kalau kosong: "version"), mis. 0.5.37.6 -> tag v0.5.37.6.
+# Rilis OTOMATIS: tiap push ke branch utama, versi dibaca dari package.json "appVersion" (kalau kosong: "version"), mis. 0.5.38 -> tag v0.5.38.
 # - Release v<versi> BELUM ada di repo rilis -> APK dibuild, ditandatangani, lalu dirilis dengan tag itu.
 # - Release v<versi> SUDAH ada               -> APK tetap dibuild ulang dan APK lama di tag yang sama DIGANTI
 #   dengan yang baru (tag/rilis tidak dibuat ulang, hanya berkas musicverse.apk yang ditimpa).
+# Deskripsi rilis diambil dari CHANGES-<versi>.md (mis. CHANGES-0.5.38.md); buat berkasnya sebelum push.
 # Naikkan "appVersion" (boleh 4 angka) di package.json bila ingin rilis/tag baru; biarkan sama bila ingin memperbarui tag yang ada.
 on:
   push:
@@ -151,12 +152,25 @@ jobs:
         run: |
           set -euo pipefail
           HINT="::error::Token RELEASES_TOKEN ditolak saat menulis ke $RELEASE_REPO (403). Fine-grained PAT: Repository access harus mencakup repo itu dan Permissions > Contents = Read and write. Atau pakai classic PAT dengan scope repo."
+          # Deskripsi rilis = isi CHANGES-<versi>.md (versi dari package.json "appVersion"). Tanpa berkas itu, rilis dibuat tanpa catatan.
+          VERSION="${TAG#v}"
+          NOTES_FILE="CHANGES-${VERSION}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "Deskripsi rilis dari $NOTES_FILE"
+            NOTES_ARGS=(--notes-file "$NOTES_FILE")
+          else
+            echo "::warning::$NOTES_FILE tidak ditemukan, rilis tanpa deskripsi."
+            NOTES_ARGS=(--notes "")
+          fi
           if [ "$EXISTS" = "true" ]; then
             gh release upload "$TAG" musicverse.apk --repo "$RELEASE_REPO" --clobber || { echo "$HINT"; exit 1; }
+            # Rilis yang sudah ada: perbarui deskripsinya juga, hanya bila berkas catatan ada (jangan mengosongkan yang sudah terisi).
+            if [ -f "$NOTES_FILE" ]; then
+              gh release edit "$TAG" --repo "$RELEASE_REPO" "${NOTES_ARGS[@]}" || { echo "$HINT"; exit 1; }
+            fi
           else
-            # Rilis langsung tanpa catatan/keterangan.
             gh release create "$TAG" musicverse.apk \
               --repo "$RELEASE_REPO" \
               --title "MusicVerse ${TAG}" \
-              --notes "" || { echo "$HINT"; exit 1; }
+              "${NOTES_ARGS[@]}" || { echo "$HINT"; exit 1; }
           fi

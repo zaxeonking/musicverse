@@ -140,6 +140,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
             aria-hidden="true"
           />
           <input
+            data-tour="import-input"
             id={inputId}
             ref={inputRef}
             type="text"

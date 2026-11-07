@@ -1,0 +1,16 @@
+# 0.5.38 — Tutorial di dalam aplikasi (coach marks)
+## Perubahan
+- **Tutorial interaktif** yang menyorot elemen asli di layar: bagian lain digelapkan, elemen yang dijelaskan diberi bingkai hijau, kartu penjelasan muncul di dekatnya (atas/bawah menyesuaikan ruang). Titik peraga bergerak di atas sorotan: bergeser (gestur geser), berdenyut (tekan lama), atau beriak (ketuk).
+- **9 langkah** (8 di web, tanpa Unduhan): sambutan -> kolom cari/tautan -> geser lagu -> tekan lama lagu -> tab Playlist -> geser playlist & mode pilih -> tab Unduhan (APK) -> pemutar mini -> selesai.
+- **Konsisten antar langkah:** tombol **Lanjut** selalu ada dan membuka halaman langkah berikutnya otomatis (mis. dari Beranda ke Playlist). Langkah yang menyorot tab juga lanjut sendiri bila tab itu diketuk. Ada Kembali, Lewati, penghitung "n / total", dan titik progres. Escape juga melewati.
+- **Elemen target tidak ada** (mis. belum ada lagu/playlist/pemutar): kartu tampil di tengah dengan penjelasan yang tetap berguna, jadi alurnya tidak macet.
+- **Mulai otomatis sekali** di Beranda sekitar 1,5 detik setelah dibuka; selesai atau dilewati tersimpan (`mv:tour:v1`), tidak muncul lagi. Pengguna lama juga melihatnya sekali. Bisa diulang dari **Pengaturan > Tutorial** (APK) atau tombol **Tutorial** di sidebar (layar lebar).
+- File baru: `tour/steps.ts` (daftar langkah; tambah langkah = satu entri + atribut `data-tour`), `tour/tourStore.ts`, `tour/TourHost.tsx` (dipasang di `AppShell`).
+- Atribut `data-tour` ditambahkan di: kolom cari (`PlaylistImportForm`), baris lagu (`playlist/TrackRow`), tab navigasi (`BottomNav`, `Sidebar`), daftar playlist (`PlaylistsSection`), pemutar mini (`MiniPlayer`), ikon Pengaturan (`MobileHeader`) dan tombol Tutorial (`Sidebar`).
+## Catatan
+- Hanya JS (OTA). Belum dibuild/diuji di perangkat; pengecekan tipe penuh belum dijalankan (dependensi tidak terpasang).
+- Di web layar sempit belum ada tombol untuk mengulang tutorial (Pengaturan hanya di APK dan sidebar hanya di layar lebar).
+- Tombol Back Android selama tutorial berjalan seperti biasa (tidak menutup tutorial); gunakan Lewati.
+## Rilis otomatis: deskripsi dari CHANGES
+- `.github/workflows/apk.yml`: deskripsi GitHub Release sekarang diambil dari `CHANGES-<versi>.md` versi saat ini (versi dari `appVersion`, mis. `CHANGES-0.5.38.md` untuk tag `v0.5.38`). Sebelumnya rilis dibuat dengan catatan kosong. Bila rilis sudah ada (build ulang tag yang sama), APK diganti dan deskripsinya ikut diperbarui. Bila berkasnya tidak ada, rilis tetap dibuat tanpa deskripsi dan ada peringatan di log. Penamaan berkas harus persis `CHANGES-<appVersion>.md`.
+- Halaman Pembaruan di app menampilkan deskripsi itu apa adanya (teks mentah, tanda `#` dan `**` ikut terlihat); di GitHub tampil terformat.

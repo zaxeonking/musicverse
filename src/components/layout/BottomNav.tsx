@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { getNavItems } from '../../config/navigation'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { activeNavIndex } from '../../utils/navActive'
+import { navTourName } from '../../tour/steps'
 
 /**
  * Bottom nav "kaca cair" (liquid glass): pil melayang dengan latar kaca tembus pandang (blur + saturasi, jadi warnanya
@@ -71,6 +72,7 @@ export default function BottomNav() {
             {items.map(({ to, label, icon: Icon }) => (
               <li key={to} className="min-w-0 flex-1">
                 <NavLink
+                  data-tour={navTourName(to)}
                   to={to}
                   end={to === '/'}
                   tabIndex={keyboardOpen ? -1 : undefined}

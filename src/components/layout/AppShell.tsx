@@ -10,6 +10,7 @@ import PlayerDock from '../player/PlayerDock'
 import BottomNav from './BottomNav'
 import MobileHeader from './MobileHeader'
 import Sidebar from './Sidebar'
+import TourHost from '../../tour/TourHost'
 
 /**
  * Kerangka layar penuh yang terkunci ke viewport (fixed inset-0) dan disusun sebagai kolom flex:
@@ -76,6 +77,7 @@ export default function AppShell() {
         <PlayerDock />
         <BottomNav />
       </div>
+      <TourHost />
     </div>
   )
 }

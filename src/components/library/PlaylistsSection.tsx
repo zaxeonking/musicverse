@@ -310,6 +310,7 @@ export default function PlaylistsSection() {
           </div>
 
           <ul
+            data-tour="playlist-list"
             {...swipeHandlers}
             className={`touch-pan-y ${
               prefs.view === 'grid'

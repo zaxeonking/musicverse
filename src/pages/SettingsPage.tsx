@@ -1,5 +1,6 @@
-import { ChevronRight, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { ChevronRight, CircleHelp, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import { startTour } from '../tour/tourStore'
 import { isNativeApp } from '../native/platform'
 
 interface Category {
@@ -32,6 +33,18 @@ export default function SettingsPage() {
     <section aria-label="Pengaturan" className="px-4 pb-8 pt-2">
       <h1 className="mb-4 text-3xl font-extrabold text-ink">Pengaturan</h1>
       <CategoryList items={CATEGORIES} />
+      <button
+        type="button"
+        onClick={startTour}
+        className="mt-2 flex w-full items-center gap-3 rounded-lg bg-card px-4 py-3 text-left text-ink focus-ring"
+      >
+        <CircleHelp className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Tutorial</span>
+          <span className="block text-xs text-ink-muted">Ulangi panduan penggunaan aplikasi</span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
+      </button>
       <h2 className="mb-2 mt-8 text-sm font-semibold text-ink-muted">Tentang</h2>
       <CategoryList items={LEGAL} />
     </section>

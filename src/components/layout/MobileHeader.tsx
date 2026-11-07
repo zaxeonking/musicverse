@@ -21,7 +21,7 @@ export default function MobileHeader() {
         {/* Pintasan antrean: tampil hanya saat ada lagu, jadi tidak perlu membuka pemutar penuh dulu. */}
         {active && <QueueButton onClick={openQueue} size="lg" className="flex" />}
         {isNativeApp() && (
-          <Link to="/settings" aria-label="Pengaturan" className="icon-btn text-ink-muted">
+          <Link to="/settings" data-tour="tour-restart" aria-label="Pengaturan" className="icon-btn text-ink-muted">
             <Settings className="h-6 w-6" aria-hidden="true" />
           </Link>
         )}

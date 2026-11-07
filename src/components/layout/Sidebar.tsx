@@ -1,3 +1,4 @@
+import { CircleHelp } from 'lucide-react'
 import { Link, NavLink } from 'react-router-dom'
 import { getNavItems } from '../../config/navigation'
 import { usePlaylist } from '../../context/PlaylistContext'
@@ -5,6 +6,8 @@ import type { Cover } from '../../types'
 import { fallbackCover } from '../../utils/fallbackCover'
 import CoverArt from '../ui/CoverArt'
 import Logo from '../ui/Logo'
+import { navTourName } from '../../tour/steps'
+import { startTour } from '../../tour/tourStore'
 
 interface SidebarItem {
   id: string
@@ -43,6 +46,7 @@ export default function Sidebar() {
           {getNavItems().map(({ to, label, icon: Icon }) => (
             <li key={to}>
               <NavLink
+                data-tour={navTourName(to)}
                 to={to}
                 end={to === '/'}
                 className={({ isActive }) =>
@@ -94,6 +98,18 @@ export default function Sidebar() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="px-3 pb-4">
+        <button
+          type="button"
+          data-tour="tour-restart"
+          onClick={startTour}
+          className="flex h-11 w-full items-center gap-4 rounded-md px-3 font-medium text-ink-muted transition-colors hover:bg-card/60 hover:text-ink focus-ring"
+        >
+          <CircleHelp className="h-6 w-6" aria-hidden="true" />
+          Tutorial
+        </button>
       </div>
     </aside>
   )
