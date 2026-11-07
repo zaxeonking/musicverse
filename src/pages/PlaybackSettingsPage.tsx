@@ -43,7 +43,7 @@ export default function PlaybackSettingsPage() {
         onChange={() => setRadioAuto(!radioAuto)}
         icon={Radio}
         label="Radio otomatis"
-        hint="Saat antrean hampir habis, tambahkan lagu mirip (artis yang sama dan artis serupa dari Deezer; butuh internet, bila gagal memakai Riwayat). Antrean yang sudah ada tidak diubah."
+        hint="Menyala secara bawaan. Saat antrean hampir habis, lanjut memutar lagu rekomendasi yang cocok dengan lagu sebelumnya: genre yang sama dan tempo yang berdekatan (artis yang sama dan artis serupa dari Deezer; butuh internet, bila gagal memakai Riwayat). Antrean yang sudah ada tidak diubah."
       />
       <SettingSwitch
         checked={direct}

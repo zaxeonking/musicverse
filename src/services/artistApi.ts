@@ -60,8 +60,8 @@ interface DeezerTrack {
   title?: string
   duration?: number
   link?: string
-  artist?: { name?: string }
-  album?: { title?: string; cover_medium?: string }
+  artist?: { id?: number; name?: string }
+  album?: { id?: number; title?: string; cover_medium?: string }
 }
 
 interface ItunesRow {
@@ -145,6 +145,72 @@ async function deezerTopSongs(artistId: string, signal?: AbortSignal): Promise<P
 export async function fetchArtistRadio(artistId: string, limit = 40, signal?: AbortSignal): Promise<PlaylistTrack[]> {
   const rows = await getList<DeezerTrack>(`${DEEZER}/artist/${encodeURIComponent(artistId)}/radio?limit=${limit}`, 'data', signal)
   return mapDeezerRows(rows)
+}
+
+/** Calon lagu radio beserta id Deezer-nya (untuk menilai kecocokan genre dan tempo). */
+export interface RadioCandidate {
+  track: PlaylistTrack
+  dzId?: string
+  albumId?: string
+}
+
+/** Versi `fetchArtistRadio` yang menyimpan id lagu dan album Deezer. */
+export async function fetchArtistRadioCandidates(artistId: string, limit = 60, signal?: AbortSignal): Promise<RadioCandidate[]> {
+  const rows = await getList<DeezerTrack>(`${DEEZER}/artist/${encodeURIComponent(artistId)}/radio?limit=${limit}`, 'data', signal)
+  const out: RadioCandidate[] = []
+  for (const row of rows) {
+    const [track] = mapDeezerRows([row])
+    if (!track) continue
+    out.push({ track, dzId: row.id ? String(row.id) : undefined, albumId: row.album?.id ? String(row.album.id) : undefined })
+  }
+  return out
+}
+
+export interface DeezerSeed {
+  artistId?: string
+  dzId?: string
+  albumId?: string
+}
+
+/** Cari lagu yang sedang diputar di Deezer (judul + artis) untuk mendapat id artis, lagu, dan albumnya. Tidak ketemu = null. */
+export async function findDeezerSeed(title: string, artist: string, signal?: AbortSignal): Promise<DeezerSeed | null> {
+  const q = `artist:"${artist.replace(/"/g, '')}" track:"${title.replace(/"/g, '')}"`
+  const rows = await getList<DeezerTrack>(`${DEEZER}/search?q=${encodeURIComponent(q)}&limit=5`, 'data', signal)
+  const wantedTitle = normalizeSearchText(title)
+  const wantedArtist = normalizeSearchText(artist)
+  const hit =
+    rows.find((row) => normalizeSearchText(row.title ?? '') === wantedTitle && normalizeSearchText(row.artist?.name ?? '') === wantedArtist) ??
+    rows.find((row) => normalizeSearchText(row.artist?.name ?? '') === wantedArtist)
+  if (!hit) return null
+  return {
+    artistId: hit.artist?.id ? String(hit.artist.id) : undefined,
+    dzId: hit.id ? String(hit.id) : undefined,
+    albumId: hit.album?.id ? String(hit.album.id) : undefined,
+  }
+}
+
+const albumGenreCache = new Map<string, number[]>()
+const trackTempoCache = new Map<string, number>()
+
+/** Id genre album di Deezer (mis. Pop, Rap/Hip Hop). Hasil disimpan selama aplikasi berjalan. */
+export async function fetchAlbumGenreIds(albumId: string, signal?: AbortSignal): Promise<number[]> {
+  const cached = albumGenreCache.get(albumId)
+  if (cached) return cached
+  const body = await getJson(`${DEEZER}/album/${encodeURIComponent(albumId)}`, signal)
+  const data = (body.genres as { data?: { id?: number }[] } | undefined)?.data
+  const ids = Array.isArray(data) ? data.map((genre) => genre.id).filter((id): id is number => typeof id === 'number' && id > 0) : []
+  albumGenreCache.set(albumId, ids)
+  return ids
+}
+
+/** Tempo (BPM) lagu dari Deezer; 0 = tidak diketahui. Hasil disimpan selama aplikasi berjalan. */
+export async function fetchTrackTempo(dzId: string, signal?: AbortSignal): Promise<number> {
+  const cached = trackTempoCache.get(dzId)
+  if (cached !== undefined) return cached
+  const body = await getJson(`${DEEZER}/track/${encodeURIComponent(dzId)}`, signal)
+  const bpm = typeof body.bpm === 'number' && Number.isFinite(body.bpm) && body.bpm > 0 ? body.bpm : 0
+  trackTempoCache.set(dzId, bpm)
+  return bpm
 }
 
 /** Profil iTunes yang namanya sama persis dengan artis Deezer (huruf besar/kecil diabaikan). */

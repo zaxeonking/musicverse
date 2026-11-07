@@ -40,8 +40,10 @@ Teks baris yang sedang dinyanyikan terisi putih dari kiri ke kanan mengikuti lag
 
 ## 📻 Radio otomatis + Mulai radio dari lagu ini
 - **Mulai radio dari lagu ini** (menu lagu, termasuk di web): memutar lagu itu, mengganti antrean, lalu mengisinya dengan lagu mirip, terus diisi ulang.
-- **Radio otomatis** (Pengaturan > Pemutaran, APK, **mati secara bawaan**): saat sisa antrean tinggal 1 lagu atau kurang, 15 lagu mirip ditambahkan di akhir antrean.
+- **Radio otomatis** (Pengaturan > Pemutaran, APK, **menyala secara bawaan**; yang sudah pernah mengubah pilihannya tidak berubah): saat sisa antrean tinggal 1 lagu atau kurang, 15 lagu rekomendasi ditambahkan di akhir antrean sehingga musik langsung lanjut tanpa jeda.
 - Sumber lagu mirip: *radio artis* Deezer (APK, perlu internet). Cadangan: lagu dari Riwayat, artis yang sama didahulukan.
+- **Cocok dengan lagu sebelumnya**: calon lagu diurutkan menurut **genre** album yang sama dengan lagu terakhir, lalu **tempo (BPM)** yang berdekatan (selisih ≤ 15) sebagai ukuran suasana santai atau berenergi. Genre dan tempo dibaca dari Deezer (maks. 20 album dan 12 lagu per pengisian, disimpan sementara). Bila gagal atau datanya kosong, dipakai urutan radio Deezer biasa.
+- Genre Deezer cukup kasar (mis. Pop, Rap/Hip Hop), dan BPM tidak selalu tersedia, jadi ini pendekatan suasana, bukan jaminan.
 - Tidak aktif saat mode ulang "satu lagu" atau "berhenti setelah lagu ini". Lagu radio dicocokkan ke sumber audio lewat judul + artis, jadi sesekali bisa salah cocok.
 
 ## 🔊 Normalisasi volume
