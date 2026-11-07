@@ -179,6 +179,12 @@ export default function PlaylistsSection() {
     if (!entry || (entry.kind === 'mine' && isLikedId(entry.id))) return
     setSelecting(true)
     toggleSelected(entry)
+  }, (index) => {
+    // Petunjuk saat menggeser: Lagu Disukai tidak bisa dipilih; selain itu "Pilih" atau "Batal" kalau sudah terpilih.
+    const entry = entries[index]
+    if (!entry) return null
+    if (entry.kind === 'mine' && isLikedId(entry.id)) return { icon: 'blocked', label: 'Bawaan' }
+    return selecting && selected.has(keyOf(entry)) ? { icon: 'unselect', label: 'Batal' } : { icon: 'select', label: 'Pilih' }
   })
 
   /** Menghapus semua yang dipilih sekaligus (satu penulisan per jenis), dengan Urungkan. Berkas unduhan dan antrean tidak disentuh. */

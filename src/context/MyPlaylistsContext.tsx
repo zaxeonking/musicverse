@@ -12,6 +12,7 @@ import {
   MY_PLAYLISTS_KEY,
   readMyPlaylists,
   removeTrackFromMyPlaylist,
+  removeTracksFromMyPlaylist,
   ensureLiked,
   toggleLikeIn,
   setPinnedIn,
@@ -51,6 +52,8 @@ export interface MyPlaylistsContextValue {
    */
   saveDownloadedPlaylist: (sourceId: string, name: string, tracks: readonly PlaylistTrack[]) => MyPlaylistResult<{ playlist: MyPlaylist } & BulkAddResult>
   removeTrack: (playlistId: string, trackId: string) => MyPlaylistResult<MyPlaylist>
+  /** Menghapus banyak lagu sekaligus (satu penulisan); mengembalikan jumlah yang terhapus. */
+  removeTracks: (playlistId: string, trackIds: readonly string[]) => MyPlaylistResult<number>
   moveTrack: (playlistId: string, from: number, to: number) => MyPlaylistResult<MyPlaylist>
   /**
    * Menyalin (`copy`) atau memindahkan (`move`) lagu antar playlist buatanmu dalam satu perubahan.
@@ -167,6 +170,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
   const setPinned = useCallback((id: string, pinned: boolean) => mutate((l) => setPinnedIn(l, id, pinned)), [mutate])
   const toggleLike = useCallback((track: PlaylistTrack) => mutate((l) => toggleLikeIn(l, track)), [mutate])
   const removeTrack = useCallback((id: string, trackId: string) => mutate((l) => removeTrackFromMyPlaylist(l, id, trackId)), [mutate])
+  const removeTracks = useCallback((id: string, trackIds: readonly string[]) => mutate((l) => removeTracksFromMyPlaylist(l, id, trackIds)), [mutate])
   const moveTrack = useCallback((id: string, from: number, to: number) => mutate((l) => moveTrackInMyPlaylist(l, id, from, to)), [mutate])
   const transferTracks = useCallback(
     (fromId: string, toId: string, trackIds: readonly string[] | null, mode: 'copy' | 'move') =>
@@ -201,6 +205,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       addTracks,
       saveDownloadedPlaylist,
       removeTrack,
+      removeTracks,
       moveTrack,
       isLiked: (track: Pick<PlaylistTrack, 'url'>) => {
         const identity = trackIdentity(track)
@@ -210,7 +215,7 @@ export function MyPlaylistsProvider({ children }: { children: ReactNode }) {
       setPinned,
       transferTracks,
     }),
-    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, deletePlaylists, restorePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, moveTrack, transferTracks, toggleLike, setPinned],
+    [playlists, health, createPlaylist, renamePlaylist, deletePlaylist, deletePlaylists, restorePlaylist, addTrack, addTracks, saveDownloadedPlaylist, removeTrack, removeTracks, moveTrack, transferTracks, toggleLike, setPinned],
   )
 
   return <MyPlaylistsContext.Provider value={value}>{children}</MyPlaylistsContext.Provider>

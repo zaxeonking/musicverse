@@ -269,6 +269,20 @@ export function removeTrackFromMyPlaylist(list: readonly MyPlaylist[], id: strin
   })
 }
 
+/** Menghapus banyak lagu sekaligus dari satu playlist (satu kali baca-tulis). `value` = jumlah yang benar-benar terhapus. */
+export function removeTracksFromMyPlaylist(list: readonly MyPlaylist[], id: string, trackIds: readonly string[], now = Date.now()): MyPlaylistChange<number> {
+  const index = list.findIndex((item) => item.id === id)
+  if (index === -1) return { ok: false, reason: 'missing' }
+  const drop = new Set(trackIds)
+  const playlist = list[index]
+  const kept = playlist.tracks.filter((item) => !drop.has(item.id))
+  const removed = playlist.tracks.length - kept.length
+  if (removed === 0) return { ok: false, reason: 'missing' }
+  const copy = [...list]
+  copy[index] = { ...playlist, tracks: kept, updatedAt: now }
+  return { ok: true, list: copy, value: removed }
+}
+
 /** Memindahkan lagu dari posisi `from` ke `to` (0-based). */
 export function moveTrackInMyPlaylist(list: readonly MyPlaylist[], id: string, from: number, to: number, now = Date.now()) {
   return update(list, id, (p) => {

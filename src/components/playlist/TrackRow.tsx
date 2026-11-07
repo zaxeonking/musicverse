@@ -4,6 +4,7 @@ import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
+import { OFFLINE_BLOCK_TEXT } from '../../hooks/useOfflineBlock'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
@@ -34,11 +35,13 @@ interface TrackRowProps {
   fromSearch?: boolean
   /** Lagu ini belum selesai dicek ketersediaan audionya: tidak bisa diketuk / diputar dulu. */
   locked?: boolean
+  /** Perangkat offline dan lagu ini belum diunduh: tampil redup, ketukan hanya memberi tahu (tidak diputar). */
+  offlineBlocked?: boolean
 }
 
-function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false, locked = false }: TrackRowProps) {
+function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay, fromSearch = false, locked = false, offlineBlocked = false }: TrackRowProps) {
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
-  const { openTrackMenu } = useTrackMenu()
+  const { openTrackMenu, showToast } = useTrackMenu()
   const { openFullPlayer } = usePlayerUiActions()
   const { playlists } = useMyPlaylists()
   // Hasil cari lagu satuan: tandai kalau lagunya sudah ada di playlist buatanmu (dan di playlist mana).
@@ -73,9 +76,13 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
   return (
     <li
       aria-current={selected ? 'true' : undefined}
-      aria-disabled={locked || undefined}
+      aria-disabled={locked || offlineBlocked || undefined}
       onClick={() => {
         if (locked) return
+        if (offlineBlocked) {
+          showToast(OFFLINE_BLOCK_TEXT)
+          return
+        }
         onSelect(track.id)
         // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh.
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay(track, index)
@@ -85,7 +92,9 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
       className={`grid ${TRACK_GRID} select-none rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] ${
         locked
           ? 'cursor-not-allowed opacity-50'
-          : `cursor-pointer ${selected ? 'bg-raised shadow-now' : 'hover:bg-card focus-within:bg-card active:bg-raised'}`
+          : offlineBlocked
+            ? 'cursor-not-allowed opacity-50'
+            : `cursor-pointer ${selected ? 'bg-raised shadow-now' : 'hover:bg-card focus-within:bg-card active:bg-raised'}`
       }`}
     >
       <span
@@ -131,6 +140,10 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         onClick={(event) => {
           event.stopPropagation()
           if (locked) return
+          if (offlineBlocked) {
+            showToast(OFFLINE_BLOCK_TEXT)
+            return
+          }
           onPlay(track, index)
         }}
         disabled={locked}

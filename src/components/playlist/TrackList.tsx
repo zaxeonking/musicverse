@@ -2,6 +2,8 @@ import { ListMusic, Search, SearchX, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
+import { useOfflineBlock } from '../../hooks/useOfflineBlock'
+import { useTrackSwipe } from '../../hooks/useTrackSwipe'
 import { buildSearchIndex, filterSearchIndex } from '../../utils/trackSearch'
 import EmptyState from '../ui/EmptyState'
 import TrackRow, { TRACK_GRID } from './TrackRow'
@@ -66,6 +68,9 @@ export default function TrackList({
   const entries = useMemo(() => buildSearchIndex(tracks, { includeAlbum }), [tracks, includeAlbum])
   const visible = useMemo(() => filterSearchIndex(entries, query), [entries, query])
   const isFiltering = query.trim() !== ''
+  const offlineBlocked = useOfflineBlock()
+  // Geser kanan = tambah ke antrean, kiri = suka. Indeks = urutan baris di <ul> (setelah filter).
+  const swipeHandlers = useTrackSwipe((i) => visible[i]?.track, { fromSearch: searchable })
 
   const handlePlay = useCallback<PlayTrackHandler>((track, index) => {
     setSelectedId(track.id)
@@ -150,7 +155,7 @@ export default function TrackList({
             <span className="text-right">Durasi</span>
             <span />
           </div>
-          <ul className="-mx-2">
+          <ul {...swipeHandlers} className="-mx-2 touch-pan-y">
             {visible.map(({ track, index }) => (
               <TrackRow
                 key={track.id}
@@ -162,6 +167,7 @@ export default function TrackList({
                 onPlay={handlePlay}
                 fromSearch={searchable}
                 locked={isLocked?.(track) ?? false}
+                offlineBlocked={offlineBlocked(track)}
               />
             ))}
           </ul>
