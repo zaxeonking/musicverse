@@ -86,7 +86,7 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
         }}
         aria-label={label}
         aria-busy={activity === 'loading'}
-        className={`flex h-11 w-11 items-center justify-center justify-self-end rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
+        className={`flex h-11 w-11 items-center justify-center justify-self-end rounded-full transition-colors hover:bg-veil/10 active:bg-veil/15 focus-ring ${
           highlighted ? 'text-accent' : 'text-ink-muted hover:text-accent'
         }`}
       >

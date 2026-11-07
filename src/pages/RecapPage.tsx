@@ -79,7 +79,7 @@ export default function RecapPage() {
               {recap.perWeekday.map((count, i) => (
                 <div key={WEEKDAYS[i]} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                   <div
-                    className={`w-full rounded-t ${i === recap.busiestWeekday ? 'bg-accent' : 'bg-white/25'}`}
+                    className={`w-full rounded-t ${i === recap.busiestWeekday ? 'bg-accent' : 'bg-veil/25'}`}
                     style={{ height: `${Math.max(count > 0 ? 6 : 0, (count / maxDay) * 100)}%` }}
                   />
                   <span className="text-[10px] text-ink-muted">{WEEKDAYS[i].slice(0, 3)}</span>

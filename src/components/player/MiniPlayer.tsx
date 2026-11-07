@@ -535,7 +535,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-white/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
+      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-veil/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
     >
       {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
       <button
@@ -545,10 +545,10 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         title="Seret ke bawah untuk memperkecil"
         className="absolute left-1/2 top-0 z-10 flex h-4 w-20 -translate-x-1/2 items-start justify-center pt-1 focus-ring"
       >
-        <span aria-hidden="true" className="h-1 w-9 rounded-full bg-white/25" />
+        <span aria-hidden="true" className="h-1 w-9 rounded-full bg-veil/25" />
       </button>
       {/* Lirik menyatu dengan kartu: satu kaca blur yang sama, hanya dipisah garis tipis. */}
-      <div className="border-b border-white/10">
+      <div className="border-b border-veil/10">
         <LyricLine />
       </div>
       <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 px-4 pb-2.5 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] lg:gap-x-6 lg:px-6 lg:py-2">

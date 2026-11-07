@@ -108,7 +108,7 @@ export function ShuffleButton({ size = 'md', className = '' }: { size?: 'md' | '
       aria-pressed={shuffle}
       aria-label={shuffle ? 'Acak aktif, ketuk untuk menonaktifkan' : 'Acak nonaktif, ketuk untuk mengaktifkan'}
       title={shuffle ? 'Acak: aktif' : 'Acak: nonaktif'}
-      className={`relative items-center justify-center rounded-full press active:bg-white/10 ${
+      className={`relative items-center justify-center rounded-full press active:bg-veil/10 ${
         big ? 'h-12 w-12' : 'h-11 w-11 lg:h-9 lg:w-9'
       } ${shuffle ? 'text-accent' : 'text-ink-muted hover:text-ink'} ${FOCUS} ${className}`}
     >
@@ -131,7 +131,7 @@ export function RepeatButton({ size = 'md', className = '' }: { size?: 'md' | 'l
       aria-label={label}
       title={label}
       data-repeat-mode={repeat}
-      className={`relative items-center justify-center rounded-full press active:bg-white/10 ${
+      className={`relative items-center justify-center rounded-full press active:bg-veil/10 ${
         big ? 'h-12 w-12' : 'h-11 w-11 lg:h-9 lg:w-9'
       } ${active ? 'text-accent' : 'text-ink-muted hover:text-ink'} ${FOCUS} ${className}`}
     >
@@ -175,7 +175,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         onClick={playPrevious}
         disabled={!canPrevious}
         aria-label="Lagu sebelumnya"
-        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
+        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-veil/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
       >
         <SkipBack className={sideIcon} fill="currentColor" aria-hidden="true" />
       </button>
@@ -187,7 +187,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         aria-label={main.label}
         aria-busy={main.kind === 'busy'}
         data-player-status={status}
-        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black ${xl ? 'shadow-[0_0_36px_rgba(255,255,255,0.35)]' : ''} transition-[transform,box-shadow] duration-150 ease-in-out hover:scale-105 active:scale-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
+        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-bg ${xl ? 'shadow-[0_0_36px_rgb(var(--mv-ink,255_255_255)/0.35)]' : ''} transition-[transform,box-shadow] duration-150 ease-in-out hover:scale-105 active:scale-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
       >
         <MainIcon kind={main.kind} className={icon} />
       </button>
@@ -197,7 +197,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         onClick={playNext}
         disabled={!hasNext}
         aria-label="Lagu berikutnya"
-        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
+        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-veil/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
       >
         <SkipForward className={sideIcon} fill="currentColor" aria-hidden="true" />
       </button>
@@ -225,7 +225,7 @@ export function SpotifyLink({ url, variant, className = '' }: SpotifyLinkProps) 
       rel="noopener noreferrer"
       aria-label="Buka di Spotify"
       title="Buka di Spotify"
-      className={`flex h-11 w-11 rounded-full active:bg-white/10 lg:h-9 lg:w-9 ${common} ${className}`}
+      className={`flex h-11 w-11 rounded-full active:bg-veil/10 lg:h-9 lg:w-9 ${common} ${className}`}
     >
       <ExternalLink className="h-5 w-5" aria-hidden="true" />
     </a>
@@ -234,7 +234,7 @@ export function SpotifyLink({ url, variant, className = '' }: SpotifyLinkProps) 
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`inline-flex h-11 gap-2 rounded-full border border-white/20 px-6 text-sm font-semibold text-ink hover:border-accent active:bg-white/10 ${common} ${className}`}
+      className={`inline-flex h-11 gap-2 rounded-full border border-veil/20 px-6 text-sm font-semibold text-ink hover:border-accent active:bg-veil/10 ${common} ${className}`}
     >
       <ExternalLink className="h-4 w-4" aria-hidden="true" />
       Buka di Spotify
@@ -258,7 +258,7 @@ export function QueueButton({ onClick, size = 'sm', className = '' }: QueueButto
       aria-label="Buka antrean"
       title="Antrean"
       className={`${
-        size === 'lg' ? 'h-11 w-11 hover:bg-white/10 hover:text-ink active:bg-white/15' : 'h-11 w-11 hover:text-accent active:bg-white/10 lg:h-9 lg:w-9'
+        size === 'lg' ? 'h-11 w-11 hover:bg-veil/10 hover:text-ink active:bg-veil/15' : 'h-11 w-11 hover:text-accent active:bg-veil/10 lg:h-9 lg:w-9'
       } press items-center justify-center rounded-full text-ink-muted ${FOCUS} ${className}`}
     >
       <ListMusic className={size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'} aria-hidden="true" />

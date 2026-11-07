@@ -29,7 +29,7 @@ export default function RoundAction({ icon: Icon, label, onClick, primary = fals
       aria-pressed={pressed}
       className={`inline-flex shrink-0 select-none items-center justify-center rounded-full transition-[background-color,transform,opacity] duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 ${
         primary
-          ? 'h-14 w-14 bg-accent text-accent-on hover:bg-accent-soft active:bg-accent-deep focus-visible:ring-white'
+          ? 'h-14 w-14 bg-accent text-accent-on hover:bg-accent-soft active:bg-accent-deep focus-visible:ring-ink'
           : `h-11 w-11 bg-raised hover:bg-raised-hover active:bg-raised focus-visible:ring-accent ${danger ? 'text-ink hover:text-danger' : 'text-ink'}`
       }`}
     >

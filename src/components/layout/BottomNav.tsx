@@ -256,14 +256,14 @@ export default function BottomNav() {
             WebkitBackdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
             backdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
           }}
-          className={`relative w-full max-w-md rounded-full border border-white/[0.12] bg-card/85 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),inset_0_0_18px_rgba(255,255,255,0.05)] supports-[backdrop-filter]:bg-card/60 ${
+          className={`relative w-full max-w-md rounded-full border border-veil/[0.12] bg-card/85 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.28),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06),inset_0_0_18px_rgb(var(--mv-veil,255_255_255)/0.05)] supports-[backdrop-filter]:bg-card/60 ${
             keyboardOpen ? 'pointer-events-none' : 'pointer-events-auto'
           }`}
         >
           {/* Kilau lengkung di tepi atas bar. */}
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.08] via-transparent to-transparent"
+            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-veil/[0.08] via-transparent to-transparent"
           />
           {/* Penanda tab aktif: kotak kaca melengkung yang ringkas, hanya selebar ikon + label dan tetap di dalam bar,
               diwarnai aksen tema. Hilang bila tak ada tab aktif (mis. Pengaturan). */}
@@ -280,12 +280,12 @@ export default function BottomNav() {
                   width: '4.5rem',
                   opacity: active >= 0 || pressed ? 1 : 0,
                   backgroundImage:
-                    'radial-gradient(circle at 50% 38%, rgb(var(--mv-accent, 29 185 84) / 0.38) 0%, rgb(var(--mv-accent, 29 185 84) / 0.12) 38%, transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
+                    'radial-gradient(circle at 50% 38%, rgb(var(--mv-accent, 29 185 84) / 0.38) 0%, rgb(var(--mv-accent, 29 185 84) / 0.12) 38%, transparent 62%), linear-gradient(180deg, rgb(var(--mv-veil, 255 255 255)/0.12) 0%, rgb(var(--mv-veil, 255 255 255)/0.03) 50%, rgb(var(--mv-veil, 255 255 255)/0.06) 100%)',
                 }}
                 className={`h-full rounded-2xl border bg-accent/[0.12] transition-[opacity,box-shadow,border-color] duration-300 will-change-transform motion-reduce:transition-none ${
                   pressed
-                    ? 'border-white/35 shadow-[0_6px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35),inset_0_-1px_0_rgba(255,255,255,0.1)]'
-                    : 'border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(255,255,255,0.06)]'
+                    ? 'border-veil/35 shadow-[0_6px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.35),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.1)]'
+                    : 'border-veil/20 shadow-[inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.22),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06)]'
                 }`}
               />
             </span>

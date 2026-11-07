@@ -121,7 +121,7 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
                   setToast(null)
                   onClick()
                 }}
-                className="pointer-events-auto -my-1 -mr-2 shrink-0 rounded-full px-3 py-1.5 font-semibold text-accent hover:bg-white/10 active:bg-white/15 focus-ring"
+                className="pointer-events-auto -my-1 -mr-2 shrink-0 rounded-full px-3 py-1.5 font-semibold text-accent hover:bg-veil/10 active:bg-veil/15 focus-ring"
               >
                 {toast.action.label}
               </button>

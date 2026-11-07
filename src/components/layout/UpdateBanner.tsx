@@ -68,7 +68,7 @@ function UpdateCard({ update }: { update: AppUpdateState }) {
 
   return (
     <div role="region" aria-label="Pembaruan aplikasi" className="pointer-events-auto">
-      <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-black/55 text-sm text-ink shadow-2xl shadow-black/60 backdrop-blur-xl backdrop-saturate-150">
+      <div className="relative w-full overflow-hidden rounded-2xl border border-veil/10 bg-card/85 text-sm text-ink shadow-2xl shadow-black/60 backdrop-blur-xl backdrop-saturate-150">
         <div aria-hidden="true" className="pointer-events-none absolute -left-10 -top-10 h-28 w-28 rounded-full bg-accent/25 blur-2xl" />
         <div className="relative flex items-center gap-3 px-3 py-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/20 text-accent ring-1 ring-accent/30">
@@ -94,7 +94,7 @@ function UpdateCard({ update }: { update: AppUpdateState }) {
           )}
         </div>
         {busy && (
-          <div className="relative h-1 bg-white/10" role="progressbar" aria-label="Progres unduhan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
+          <div className="relative h-1 bg-veil/10" role="progressbar" aria-label="Progres unduhan" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
             <div
               className={`h-full rounded-full bg-accent ${percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}
               style={percent === null ? undefined : { width: `${percent}%` }}

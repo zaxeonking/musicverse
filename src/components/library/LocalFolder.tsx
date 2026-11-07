@@ -96,7 +96,7 @@ function LocalRow({ item, track, activity, onPlay, onToggle }: LocalRowProps) {
         }}
         aria-label={playLabel}
         aria-busy={activity === 'loading'}
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-veil/10 active:bg-veil/15 focus-ring ${
           isCurrent ? 'text-accent' : 'text-ink-muted'
         }`}
       >

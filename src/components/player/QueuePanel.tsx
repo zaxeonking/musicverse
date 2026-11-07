@@ -152,7 +152,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Tutup antrean"
-            className="icon-btn -mr-2 hover:bg-white/10"
+            className="icon-btn -mr-2 hover:bg-veil/10"
           >
             <X className="h-6 w-6" aria-hidden="true" />
           </button>

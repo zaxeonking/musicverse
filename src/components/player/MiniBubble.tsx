@@ -24,14 +24,14 @@ function ProgressRing({ error, loading }: { error: boolean; loading: boolean }) 
     // Jeda antar lagu / buffering: busur berputar (bukan cincin posisi yang diam).
     return (
       <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-        <circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="3" />
+        <circle cx="28" cy="28" r={RING_R} fill="none" style={{ stroke: 'rgb(var(--mv-veil, 255 255 255) / 0.14)' }} strokeWidth="3" />
         <g className="origin-center animate-spin motion-reduce:animate-pulse" style={{ transformOrigin: '28px 28px' }}>
           <circle
             cx="28"
             cy="28"
             r={RING_R}
             fill="none"
-            stroke="rgb(var(--mv-accent, 29 185 84))"
+            style={{ stroke: 'rgb(var(--mv-accent, 29 185 84))' }}
             strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={`${CIRC * 0.28} ${CIRC}`}
@@ -42,13 +42,13 @@ function ProgressRing({ error, loading }: { error: boolean; loading: boolean }) 
   }
   return (
     <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
-      <circle cx="28" cy="28" r={RING_R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="3" />
+      <circle cx="28" cy="28" r={RING_R} fill="none" style={{ stroke: 'rgb(var(--mv-veil, 255 255 255) / 0.14)' }} strokeWidth="3" />
       <circle
         cx="28"
         cy="28"
         r={RING_R}
         fill="none"
-        stroke={error ? '#ff6b6b' : 'rgb(var(--mv-accent, 29 185 84))'}
+        style={{ stroke: error ? 'rgb(var(--mv-danger, 255 107 107))' : 'rgb(var(--mv-accent, 29 185 84))' }}
         strokeWidth="3"
         strokeLinecap="round"
         strokeDasharray={CIRC}
@@ -184,7 +184,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
           transition: drag ? 'none' : 'transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
-        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl focus-ring"
+        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-xl focus-ring"
       >
         {/* Piringan: berputar saat playing, berhenti di posisi terakhir saat jeda. */}
         <span
@@ -193,18 +193,18 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           style={{ animationPlayState: playing && !loading ? 'running' : 'paused', opacity: loading ? 0.55 : 1 }}
         >
           <CoverArt cover={now.cover} src={now.coverSrc} round />
-          <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgba(255,255,255,0.14),transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%,rgba(255,255,255,0.14))]" />
+          <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
         </span>
         <ProgressRing error={error} loading={loading} />
         {/* Lubang tengah piringan; berubah jadi ikon play saat jeda. */}
         <span
           aria-hidden="true"
-          className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-bg transition-all ${
+          className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-veil/25 bg-bg transition-all ${
             paused || loading ? 'h-6 w-6 bg-black/70' : 'h-3 w-3'
           }`}
         >
-          {paused && <Play className="h-3 w-3 text-white" fill="currentColor" />}
-          {loading && <Loader2 className="h-3 w-3 animate-spin text-white motion-reduce:animate-pulse" />}
+          {paused && <Play className="h-3 w-3 text-ink" fill="currentColor" />}
+          {loading && <Loader2 className="h-3 w-3 animate-spin text-ink motion-reduce:animate-pulse" />}
         </span>
       </button>
     </div>

@@ -39,7 +39,7 @@ export default function ColorField({ label, value, onChange, minL = 0, maxL = 1,
   return (
     <div className="rounded-lg bg-card px-4 py-3">
       <div className="mb-3 flex items-center gap-3">
-        <span className="h-9 w-9 shrink-0 rounded-full border border-white/20" style={{ backgroundColor: value }} aria-hidden="true" />
+        <span className="h-9 w-9 shrink-0 rounded-full border border-veil/20" style={{ backgroundColor: value }} aria-hidden="true" />
         <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{label}</span>
         <input
           value={text}

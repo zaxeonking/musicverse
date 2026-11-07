@@ -501,7 +501,7 @@ export default function FullPlayer({
   const isError = status === 'error'
   const mismatch = playbackInfo !== null && !looksLikeSameTrack(currentTrack, playbackInfo)
   const iconBtn =
-    'press flex h-12 w-12 items-center justify-center rounded-full active:bg-white/10 focus-ring'
+    'press flex h-12 w-12 items-center justify-center rounded-full active:bg-veil/10 focus-ring'
 
   return (
     <div
@@ -510,7 +510,7 @@ export default function FullPlayer({
       aria-modal="true"
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
-      className={`fixed inset-0 z-50 isolate flex flex-col overflow-hidden will-change-transform ${closing || dragHold ? 'pointer-events-none' : ''}`}
+      className={`mv-dark-scope fixed inset-0 z-50 isolate flex flex-col overflow-hidden will-change-transform ${closing || dragHold ? 'pointer-events-none' : ''}`}
       style={{ '--mv-accent': coverColor.replace(/,/g, ' ') } as CSSProperties}
     >
       {/* Latar: artwork diburamkan + gradient gelap. Memudar masuk/keluar sebagai satu lapisan (di atas Beranda). */}
@@ -538,7 +538,7 @@ export default function FullPlayer({
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
+        className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-veil/25"
       />
       <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'pb-2'} transition-[padding] duration-500 ease-out motion-reduce:transition-none pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] ${lyricsFullActive ? 'pt-0' : 'pt-[max(0.75rem,env(safe-area-inset-top))]'}`}>
         <Collapse hidden={lyricsFullActive}>
@@ -548,7 +548,7 @@ export default function FullPlayer({
             type="button"
             onClick={animateClose}
             aria-label="Tutup pemutar penuh"
-            className={`-ml-2 text-ink hover:bg-white/10 ${iconBtn}`}
+            className={`-ml-2 text-ink hover:bg-veil/10 ${iconBtn}`}
           >
             <ChevronDown className="h-8 w-8" aria-hidden="true" />
           </button>
@@ -561,7 +561,7 @@ export default function FullPlayer({
             onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
             aria-haspopup="dialog"
             aria-label="Menu lagu"
-            className={`-mr-2 justify-self-end text-ink hover:bg-white/10 ${iconBtn}`}
+            className={`-mr-2 justify-self-end text-ink hover:bg-veil/10 ${iconBtn}`}
           >
             <MoreVertical className="h-6 w-6" aria-hidden="true" />
           </button>
@@ -612,7 +612,7 @@ export default function FullPlayer({
                 onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
                 aria-haspopup="dialog"
                 aria-label="Menu lagu"
-                className={`-mr-2 ${iconBtn} text-ink hover:bg-white/10`}
+                className={`-mr-2 ${iconBtn} text-ink hover:bg-veil/10`}
               >
                 <MoreVertical className="h-6 w-6" aria-hidden="true" />
               </button>
@@ -755,7 +755,7 @@ export default function FullPlayer({
         data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-white/5 focus-ring"
+        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-veil/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-veil/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya

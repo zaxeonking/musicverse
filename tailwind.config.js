@@ -21,12 +21,17 @@ export default {
           on: 'rgb(var(--mv-on-accent, 0 0 0) / <alpha-value>)',
         },
         ink: {
-          DEFAULT: '#ffffff',
+          DEFAULT: 'rgb(var(--mv-ink, 255 255 255) / <alpha-value>)',
           muted: 'rgb(var(--mv-ink-muted, 167 167 167) / <alpha-value>)',
           // Dinaikkan dari #6a6a6a (±3.3:1) agar teks sekunder lolos kontras AA (≥4.5:1) di atas bg/card.
           faint: 'rgb(var(--mv-ink-faint, 138 138 138) / <alpha-value>)',
         },
-        danger: '#ff6b6b',
+        danger: {
+          DEFAULT: 'rgb(var(--mv-danger, 255 107 107) / <alpha-value>)',
+          on: 'rgb(var(--mv-on-danger, 0 0 0) / <alpha-value>)',
+        },
+        // Lapisan transparan di atas permukaan (hover, tekan, garis tipis): putih di mode gelap, hitam di mode terang.
+        veil: 'rgb(var(--mv-veil, 255 255 255) / <alpha-value>)',
         // Halaman web (landing, privasi, ketentuan). Terang, supaya aplikasi gelap di dalamnya jadi satu-satunya benda pekat.
         site: {
           fog: '#E8EDEE',
@@ -36,7 +41,7 @@ export default {
           green: '#0A6E31',
           line: 'rgba(17,24,27,0.14)',
         },
-        line: 'rgba(255,255,255,0.08)',
+        line: 'rgb(var(--mv-veil, 255 255 255) / 0.08)',
       },
       fontFamily: {
         display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
@@ -46,6 +51,14 @@ export default {
       },
       spacing: {
         sidebar: '17rem',
+      },
+      // Bentuk sudut bisa diubah di Pengaturan > Tema (--mv-radius: 0,3 tajam, 1 normal, 1,6 bulat). `full` tidak ikut berubah.
+      borderRadius: {
+        md: 'calc(0.375rem * var(--mv-radius, 1))',
+        lg: 'calc(0.5rem * var(--mv-radius, 1))',
+        xl: 'calc(0.75rem * var(--mv-radius, 1))',
+        '2xl': 'calc(1rem * var(--mv-radius, 1))',
+        '3xl': 'calc(1.5rem * var(--mv-radius, 1))',
       },
       // Skala radius: kontrol = full, permukaan/kartu = lg, thumbnail & baris = md, sheet = 2xl (atas saja).
       boxShadow: {

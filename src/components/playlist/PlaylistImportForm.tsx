@@ -173,7 +173,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
               type="button"
               onClick={handleReset}
               aria-label="Hapus pencarian"
-              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-white/10 focus-ring"
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-veil/10 focus-ring"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -182,7 +182,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
               type="button"
               onClick={() => void handlePaste()}
               aria-label="Tempel dari clipboard"
-              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-white/10 focus-ring"
+              className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-veil/10 focus-ring"
             >
               <ClipboardPaste className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -191,7 +191,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
             <ul
               role="listbox"
               aria-label="Saran judul"
-              className="mv-drop absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl bg-raised py-1 shadow-lg ring-1 ring-white/10"
+              className="mv-drop absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl bg-raised py-1 shadow-lg ring-1 ring-veil/10"
             >
               {suggestions.map((text) => (
                 <li key={text} role="option" aria-selected={false}>
@@ -199,7 +199,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => void pickSuggestion(text)}
-                    className="block w-full truncate px-4 py-2.5 text-left text-sm text-ink active:bg-white/10"
+                    className="block w-full truncate px-4 py-2.5 text-left text-sm text-ink active:bg-veil/10"
                   >
                     {text}
                   </button>

@@ -38,7 +38,7 @@ export function SleepTimerButton({ onClick, variant = 'pill' }: { onClick: () =>
         aria-haspopup="dialog"
         aria-label={active ? `Sleep timer aktif: ${label}` : 'Atur sleep timer'}
         title={active ? label : 'Sleep timer'}
-        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-white/10 focus-ring ${
+        className={`relative flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-veil/10 focus-ring ${
           active ? 'text-accent' : 'text-ink hover:text-accent'
         }`}
       >
@@ -57,8 +57,8 @@ export function SleepTimerButton({ onClick, variant = 'pill' }: { onClick: () =>
       onClick={onClick}
       aria-haspopup="dialog"
       aria-label={active ? `Sleep timer aktif: ${label}` : 'Atur sleep timer'}
-      className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-5 text-sm font-semibold tabular-nums transition-colors active:bg-white/10 focus-ring ${
-        active ? 'border-accent text-accent' : 'border-white/20 text-ink hover:border-accent'
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-5 text-sm font-semibold tabular-nums transition-colors active:bg-veil/10 focus-ring ${
+        active ? 'border-accent text-accent' : 'border-veil/20 text-ink hover:border-accent'
       }`}
     >
       <Moon className="h-4 w-4" aria-hidden="true" />

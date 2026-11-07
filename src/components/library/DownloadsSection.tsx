@@ -127,7 +127,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
         }}
         aria-label={playLabel}
         aria-busy={activity === 'loading'}
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-veil/10 active:bg-veil/15 focus-ring ${
           highlighted ? 'text-accent' : 'text-ink-muted'
         }`}
       >
@@ -381,7 +381,7 @@ export default function DownloadsSection() {
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={transfer.percent ?? undefined}
-                      className="mv-pop mt-2 block h-1 overflow-hidden rounded-full bg-white/10"
+                      className="mv-pop mt-2 block h-1 overflow-hidden rounded-full bg-veil/10"
                     >
                       <span
                         className={`block h-full rounded-full bg-accent ${transfer.percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}

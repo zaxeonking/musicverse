@@ -208,7 +208,7 @@ export default function PlaylistView() {
       />
 
       {hasRelated && (
-        <section aria-label="Terkait" className="animate-fade-in border-t border-white/10 pt-6">
+        <section aria-label="Terkait" className="animate-fade-in border-t border-veil/10 pt-6">
           <SectionHeader title="Terkait" subtitle="Kemungkinan lain yang mirip" />
           <TrackList
             key={`${playlist.id}-terkait`}

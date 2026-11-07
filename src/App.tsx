@@ -3,6 +3,7 @@ import AppShell from './components/layout/AppShell'
 import AutoRadioSync from './components/player/AutoRadioSync'
 import AutoResumeSync from './components/player/AutoResumeSync'
 import AutoSync from './components/player/AutoSync'
+import ThemeAccentSync from './components/player/ThemeAccentSync'
 import MediaSessionSync from './components/player/MediaSessionSync'
 import VolumeNormSync from './components/player/VolumeNormSync'
 import { AudioPlayerProvider } from './context/AudioPlayerContext'
@@ -80,6 +81,7 @@ export default function App() {
                 <AutoResumeSync />
                 <AutoRadioSync />
                 <AutoSync />
+                <ThemeAccentSync />
                 <VolumeNormSync />
                 <RouterProvider router={router} />
               </SleepTimerProvider>

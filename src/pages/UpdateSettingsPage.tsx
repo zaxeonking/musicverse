@@ -149,7 +149,7 @@ export default function UpdateSettingsPage() {
           )}
 
           {phase === 'downloading' && (
-            <div className="mv-drop mt-3 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
+            <div className="mv-drop mt-3 h-1 overflow-hidden rounded-full bg-veil/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
               <div
                 className={`h-full rounded-full bg-accent ${percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}
                 style={percent === null ? undefined : { width: `${percent}%` }}

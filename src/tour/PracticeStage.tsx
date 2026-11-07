@@ -266,7 +266,7 @@ function LikeTrackPractice({ onComplete }: { onComplete: () => void }) {
             setLiked(next)
             if (next) complete.current()
           }}
-          className={`flex h-11 w-11 items-center justify-center rounded-full active:bg-white/10 ${liked ? 'text-accent' : 'text-ink'}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-full active:bg-veil/10 ${liked ? 'text-accent' : 'text-ink'}`}
         >
           <Heart className={`h-6 w-6 transition-transform duration-200 ${liked ? 'scale-110' : ''}`} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
         </button>

@@ -119,7 +119,7 @@ export default function LibraryPage() {
               <button
                 type="button"
                 onClick={clearRecent}
-                className="inline-flex h-10 shrink-0 items-center rounded-full px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-white/5 hover:text-ink active:bg-white/10 focus-ring"
+                className="inline-flex h-10 shrink-0 items-center rounded-full px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-veil/5 hover:text-ink active:bg-veil/10 focus-ring"
               >
                 Hapus riwayat
               </button>
