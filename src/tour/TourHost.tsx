@@ -1,8 +1,9 @@
-import { ChevronLeft } from 'lucide-react'
+import { Check, ChevronLeft, Hand } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isNativeApp } from '../native/platform'
+import PracticeStage from './PracticeStage'
 import { TOUR_STEPS, type TourStep } from './steps'
 import { endTour, goToTourStep, isTourDone, startTour, useTourState } from './tourStore'
 
@@ -57,6 +58,7 @@ export default function TourHost() {
   const [searching, setSearching] = useState(false)
   const [rect, setRect] = useState<Rect | null>(null)
   const [cardH, setCardH] = useState(220)
+  const [done, setDone] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const nextRef = useRef<HTMLButtonElement>(null)
   const dotRef = useRef<HTMLSpanElement>(null)
@@ -71,6 +73,7 @@ export default function TourHost() {
   // Pindah ke halaman langkah ini, lalu tunggu elemen targetnya muncul (halaman baru butuh waktu merender).
   const stepId = step?.id
   useEffect(() => {
+    setDone(false)
     setTarget(null)
     setRect(null)
     if (!step) return
@@ -125,6 +128,13 @@ export default function TourHost() {
     loop()
     return () => cancelAnimationFrame(raf)
   }, [target])
+
+  // Latihan selesai: tampilkan "Berhasil" sebentar, lalu lanjut otomatis ke langkah berikutnya.
+  useEffect(() => {
+    if (!done) return
+    const timer = window.setTimeout(() => (index + 1 < steps.length ? goToTourStep(index + 1) : endTour()), 1100)
+    return () => window.clearTimeout(timer)
+  }, [done, index, steps.length])
 
   // Mengetuk elemen yang disorot (langkah tab) = lanjut otomatis.
   useEffect(() => {
@@ -275,6 +285,19 @@ export default function TourHost() {
         </div>
         <h2 className="mt-2 font-display text-lg font-bold leading-snug text-ink">{step.title}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">{text}</p>
+        {step.task && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+            <Hand className="h-3.5 w-3.5" aria-hidden="true" />
+            Coba: {step.task}
+          </p>
+        )}
+        {step.practice && <PracticeStage key={step.id} kind={step.practice} onComplete={() => setDone(true)} />}
+        {done && (
+          <p role="status" className="mt-2 flex animate-pop items-center gap-1.5 text-sm font-semibold text-accent">
+            <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
+            Berhasil! Lanjut otomatis…
+          </p>
+        )}
         <div className="mt-4 flex items-center gap-2">
           {last ? (
             <span className="flex-1" />

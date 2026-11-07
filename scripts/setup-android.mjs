@@ -45,7 +45,7 @@ cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
 // 3. Versi aplikasi: versionName = package.json "appVersion" (atau "version") (dibandingkan dengan tag GitHub Release saat cek
 // pembaruan), versionCode = ((major*100 + minor)*100 + patch)*100 + revisi (selalu naik saat versi naik; skala baru, jauh di atas skala lama).
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-// "appVersion" boleh 4 angka (mis. 0.5.38); "version" tetap semver 3 angka supaya npm tidak menolak.
+// "appVersion" boleh 4 angka (mis. 0.5.38.5); "version" tetap semver 3 angka supaya npm tidak menolak.
 const appVersion = String(pkg.appVersion || pkg.version)
 const [maj = 0, min = 0, pat = 0, rev = 0] = appVersion.split('.').map((n) => parseInt(n, 10) || 0)
 const gradlePath = join(root, 'android', 'app', 'build.gradle')

@@ -1,5 +1,8 @@
 export type TourAnimation = 'swipe' | 'press' | 'tap'
 
+/** Latihan langsung di dalam kartu (baris contoh yang asli bisa digeser / ditahan, tanpa mengubah data pengguna). */
+export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist'
+
 export interface TourStep {
   id: string
   /** Halaman tempat langkah ini tampil; Lanjut membuka halamannya otomatis. */
@@ -16,6 +19,10 @@ export interface TourStep {
   animate?: TourAnimation
   /** Mengetuk elemen yang disorot langsung melanjutkan ke langkah berikutnya (ketukannya tetap diteruskan ke elemen). */
   advanceOnTargetClick?: boolean
+  /** Latihan interaktif: kartu memuat baris contoh; selesai dilatih = lanjut otomatis (tombol Lanjut tetap ada). */
+  practice?: PracticeKind
+  /** Perintah singkat yang diminta dari pengguna (tampil sebagai label aksen di kartu). */
+  task?: string
   /** Hanya di APK. */
   nativeOnly?: boolean
 }
@@ -43,20 +50,18 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'track-swipe',
     route: '/',
-    target: 'track-row',
-    animate: 'swipe',
+    practice: 'swipe-track',
     title: 'Geser lagu',
-    body: 'Geser ke kanan untuk tambah ke antrean, ke kiri untuk suka. Ikon petunjuk muncul saat kamu menggeser.',
-    missing: 'Setelah playlist atau hasil cari muncul, geser lagu ke kanan untuk tambah ke antrean, ke kiri untuk suka. Ikon petunjuk muncul saat menggeser.',
+    body: 'Coba sendiri di baris contoh ini. Ikon petunjuk muncul saat kamu menggeser, sama seperti di daftar lagu.',
+    task: 'Geser ke kanan, lalu ke kiri',
   },
   {
     id: 'track-press',
     route: '/',
-    target: 'track-row',
-    animate: 'press',
+    practice: 'press-track',
     title: 'Tekan lama untuk menu',
-    body: 'Tahan lagu sebentar untuk membuka menu: putar berikutnya, simpan ke playlist, unduh, dan lainnya.',
-    missing: 'Tahan sebuah lagu sebentar untuk membuka menu: putar berikutnya, simpan ke playlist, unduh, dan lainnya.',
+    body: 'Menu yang sama keluar saat kamu menahan lagu di mana pun: daftar lagu, hasil cari, playlist, riwayat.',
+    task: 'Tahan baris contoh sampai menu muncul',
   },
   {
     id: 'library-tab',
@@ -65,17 +70,16 @@ export const TOUR_STEPS: readonly TourStep[] = [
     animate: 'tap',
     advanceOnTargetClick: true,
     title: 'Playlist-mu',
-    body: 'Ketuk tab Playlist (atau tekan Lanjut) untuk melihat semua playlist dan Lagu Disukai.',
+    body: 'Di sini ada semua playlist dan Lagu Disukai. Tab yang disorot bisa diketuk langsung.',
+    task: 'Ketuk tab Playlist',
   },
   {
     id: 'playlist-swipe',
     route: '/library',
-    target: 'playlist-list',
-    pickChild: 1,
-    animate: 'swipe',
+    practice: 'swipe-playlist',
     title: 'Pilih banyak sekaligus',
-    body: 'Geser playlist ke kanan atau kiri untuk mulai memilih banyak. Di dalam playlist, tombol Pilih lagu membuka mode pilih untuk salin, pindah, atau hapus.',
-    missing: 'Geser playlist ke kanan atau kiri untuk mulai memilih banyak. Di dalam playlist, tombol Pilih lagu membuka mode pilih untuk salin, pindah, atau hapus.',
+    body: 'Di daftar playlist, geser kartu ke kanan atau kiri untuk mulai memilih banyak. Di dalam playlist, tombol Pilih lagu membuka mode pilih untuk salin, pindah, atau hapus.',
+    task: 'Geser kartu contoh untuk memilihnya',
   },
   {
     id: 'downloads',
