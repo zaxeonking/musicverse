@@ -965,11 +965,9 @@ class AudioEngine {
       this.userPaused = false
       try {
         const { loaded } = await MusicVerseNative.engineResume()
-        if (!loaded) {
-          // Service sudah berhenti (jeda lama): muat ulang dari posisi terakhir.
-          const url = this.mirror.url ?? toNativeUrl(this.activeSource)
-          await this.nativeLoad(url, Math.round(Math.max(0, this.getLiveTime() ?? 0) * 1000), this.mirror.cacheKey)
-        }
+        // Service sudah berhenti (jeda lama): tautan lama kemungkinan sudah mati. Jangan dimuat ulang di sini;
+        // pemanggil meminta tautan baru (lihat togglePlayPause / replayCurrent).
+        if (!loaded) throw new AudioEngineError('unknown', 'Mesin audio sudah berhenti.')
       } catch {
         throw new AudioEngineError('unknown', 'Audio gagal diputar.')
       }

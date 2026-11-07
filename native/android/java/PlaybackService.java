@@ -1290,11 +1290,41 @@ public class PlaybackService extends Service {
   }
 
   private void markNativePlaying(boolean playing) {
-    if (stopped || current.playing == playing) return;
+    if (stopped || (current.playing == playing && !current.loading)) return;
+    optimisticLoading = false;
     State s = snapshot();
     s.playing = playing;
+    s.loading = false;
     applyInternal(s, false);
   }
+
+  /** True sejak Putar ditekan di notifikasi/widget sampai JS memegang keadaan lagi (atau batas waktu). */
+  private boolean optimisticLoading = false;
+
+  /**
+   * Putar ditekan dari notifikasi/widget/mobil: langsung tampil memuat (bilah berjalan + \"Memuat lagu…\"). JS yang kemudian
+   * menentukan (mengambil tautan baru atau lanjut biasa) dan menimpa keadaan ini lewat applyInternal(fromJs = true).
+   * Bila JS sama sekali tidak bereaksi dalam OPTIMISTIC_LOADING_MS, kembali ke keadaan jeda supaya tidak memuat selamanya.
+   */
+  private void showOptimisticLoading() {
+    if (stopped || current.playing) return;
+    optimisticLoading = true;
+    State s = snapshot();
+    s.playing = true;
+    s.loading = true;
+    applyInternal(s, false);
+    final long tappedAt = SystemClock.elapsedRealtime();
+    handler.postDelayed(() -> {
+      if (stopped || !optimisticLoading || lastJsUpdateAt > tappedAt) return;
+      optimisticLoading = false;
+      State back = snapshot();
+      back.playing = false;
+      back.loading = false;
+      applyInternal(back, false);
+    }, OPTIMISTIC_LOADING_MS);
+  }
+
+  private static final long OPTIMISTIC_LOADING_MS = 20_000L;
 
   /** Sampul lagu hasil pindah native diambil di thread sendiri (tanpa JS); gagal = tetap sampul bawaan. */
   private void fetchCover(UpcomingItem item) {
@@ -1347,9 +1377,20 @@ public class PlaybackService extends Service {
   private void handleAction(String action) {
     if (stopped) return;
     if (!nativeInCharge()) {
+      // Putar ditekan saat dijeda: tampilkan "Memuat lagu…" di notifikasi dan widget SEKARANG juga. JS bisa terlambat bereaksi
+      // (WebView di latar belakang) dan mengambil tautan baru butuh beberapa detik; tanpa ini tampilan tetap "jeda" tanpa tanda apa pun.
+      if (action.equals("play")) showOptimisticLoading();
       emit(action, -1);
       // Jaring pengaman untuk Putar/Jeda: bila JS beku sehingga tidak bereaksi, native mengerjakannya sendiri sebentar lagi.
-      if (action.equals("play") || action.equals("pause")) handler.postDelayed(() -> nativeFallback(action), 1_200L);
+      // Bila JS sempat bereaksi (mis. sedang mengambil tautan audio BARU setelah jeda lama), jangan dipaksa: memutar ulang
+      // audio lama yang tautannya sudah mati hanya membuat pemutar macet / galat sambil JS memuat yang baru.
+      if (action.equals("play") || action.equals("pause")) {
+        final long tappedAt = SystemClock.elapsedRealtime();
+        handler.postDelayed(() -> {
+          if (stopped || lastJsUpdateAt > tappedAt) return;
+          nativeFallback(action);
+        }, 1_200L);
+      }
       // Next/Previous: bila JS setengah beku (belum lewat batas detak) dan sama sekali tidak bereaksi, native mengerjakannya sendiri.
       // "Tidak bereaksi" = tidak ada kabar dari JS sejak tombol ditekan dan lagu belum berganti.
       if (action.equals("next") || action.equals("previous")) {
@@ -1456,6 +1497,7 @@ public class PlaybackService extends Service {
     if (fromJs) {
       lastJsUpdateAt = SystemClock.elapsedRealtime();
       chainLoading = false; // JS hidup lagi dan memegang keadaan
+      optimisticLoading = false;
     }
     current.title = next.title;
     current.artist = next.artist;

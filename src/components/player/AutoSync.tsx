@@ -80,11 +80,13 @@ async function tracksFromQuery(query: string, queue: readonly PlaylistTrack[]): 
  */
 export default function AutoSync() {
   const player = useAudioPlayer()
-  const { queue, currentIndex, currentTrack, playAll } = player
+  const { queue, currentIndex, currentTrack, playAll, status, togglePlayPause } = player
   const queueRef = useRef(queue)
   queueRef.current = queue
   const playAllRef = useRef(playAll)
   playAllRef.current = playAll
+  const resumeRef = useRef({ status, hasTrack: currentTrack !== null, togglePlayPause })
+  resumeRef.current = { status, hasTrack: currentTrack !== null, togglePlayPause }
 
   // 1) Terbitkan daftar telusur.
   useEffect(() => {
@@ -122,6 +124,19 @@ export default function AutoSync() {
       try {
         const request = await MusicVerseNative.consumeAutoRequest()
         if (!alive || !request.kind) return
+        if (request.kind === 'resume') {
+          // Tombol Putar di widget (aplikasi tadinya tertutup): lanjutkan lagu terakhir. togglePlayPause sudah menangani
+          // sesi pulihan dan jeda lama (mengambil tautan audio baru, lanjut dari posisi terakhir).
+          const { status: current, hasTrack, togglePlayPause: toggle } = resumeRef.current
+          if (hasTrack && (current === 'paused' || current === 'ended' || current === 'error')) {
+            toggle()
+            // Aplikasi hanya dibuka demi memutar: kembali ke layar sebelumnya, pemutaran lanjut lewat service.
+            window.setTimeout(() => {
+              MusicVerseNative.sendToBackground().catch(() => undefined)
+            }, 600)
+          }
+          return
+        }
         const payload = request.payload ?? ''
         const tracks = request.kind === 'media' ? tracksFromMediaId(payload, queueRef.current) : await tracksFromQuery(payload, queueRef.current)
         if (alive && tracks.length > 0) playAllRef.current(tracks)

@@ -53,6 +53,19 @@ final class AutoBridge {
     if (l != null) l.onRequest(kind, payload == null ? "" : payload);
   }
 
+  /**
+   * Permintaan dari layar utama (widget): sama seperti request(), tetapi tanpa percobaan buka aplikasi ulang dan tanpa
+   * pesan galat Android Auto, karena aplikasi sudah dibuka oleh ketukan widget itu sendiri.
+   */
+  static void requestQuiet(Context context, String kind) {
+    appContext = context.getApplicationContext();
+    synchronized (lock) {
+      pending = new String[] {kind, ""};
+    }
+    Listener l = listener;
+    if (l != null) l.onRequest(kind, "");
+  }
+
   /** Mengambil permintaan yang menunggu (sekali pakai). Null = tidak ada. */
   static String[] consume() {
     String[] taken;

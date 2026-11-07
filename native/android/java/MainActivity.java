@@ -24,6 +24,8 @@ public class MainActivity extends BridgeActivity {
     // Plugin lokal harus didaftarkan SEBELUM super.onCreate().
     registerPlugin(MusicVerseNativePlugin.class);
     super.onCreate(savedInstanceState);
+    // Hanya saat benar-benar dibuka dari widget (bukan dibuat ulang karena rotasi layar).
+    if (savedInstanceState == null) handleWidgetPlay(getIntent());
     if (getBridge() != null) {
       WebView webView = getBridge().getWebView();
       // Jaga proses renderer WebView tetap berprioritas tinggi walau tidak terlihat; kalau diturunkan,
@@ -32,6 +34,22 @@ public class MainActivity extends BridgeActivity {
         webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
       }
     }
+  }
+
+  @Override
+  protected void onNewIntent(android.content.Intent intent) {
+    super.onNewIntent(intent);
+    handleWidgetPlay(intent);
+  }
+
+  /**
+   * Tombol Putar di widget saat aplikasi sudah tertutup: simpan permintaan "lanjut memutar". JS mengambilnya begitu siap
+   * (atau langsung bila sudah hidup), mengambil tautan audio baru, lalu memutar dari posisi terakhir.
+   */
+  private void handleWidgetPlay(android.content.Intent intent) {
+    if (intent == null || !intent.getBooleanExtra(MusicVerseWidget.EXTRA_PLAY, false)) return;
+    intent.removeExtra(MusicVerseWidget.EXTRA_PLAY); // sekali pakai
+    AutoBridge.requestQuiet(getApplicationContext(), "resume");
   }
 
   private void resumeWebViewTimers() {

@@ -1,6 +1,6 @@
-# 🎵 MusicVerse 0.5.39.5
+# 🎵 MusicVerse 0.5.39.8
 
-> Rilis gabungan **0.5.39 → 0.5.46**, dibangun di atas 0.5.38.5 (tutorial di dalam aplikasi). Pemutar lebih personal, lebih pintar, dan kini ikut ke layar utama serta dashboard mobil.
+> Rilis gabungan **0.5.39 → 0.5.46** (termasuk perbaikan 0.5.39.5 sampai 0.5.39.8), dibangun di atas 0.5.38.5 (tutorial di dalam aplikasi). Pemutar lebih personal, lebih pintar, dan kini ikut ke layar utama serta dashboard mobil.
 
 ## ✨ Sorotan
 
@@ -12,6 +12,7 @@
 - 📻 **Radio otomatis** dan **Mulai radio dari lagu ini**
 - 🔊 **Normalisasi volume** antar lagu
 - 📱 **Widget layar utama** dan 🚗 **Android Auto**
+- 🛠️ **Perbaikan** tombol Putar di notifikasi/widget setelah lama dijeda
 
 ---
 
@@ -84,6 +85,23 @@ MusicVerse kini muncul sebagai aplikasi media di mobil.
 
 ---
 
+## 🛠️ Perbaikan: tombol Putar di notifikasi dan widget setelah lama dijeda
+Sebelumnya, setelah dijeda lama lalu menekan **Putar** dari notifikasi atau widget, lagu bisa macet di "memuat" dan tidak pernah berbunyi. Penyebabnya, tautan audio lama (yang bisa kedaluwarsa) dipakai lagi, dan "jaring pengaman" native memaksa memutar audio lama itu sementara aplikasi sedang mengambil tautan baru.
+- Dijeda lebih dari **10 menit**: Putar kini mengambil **tautan audio baru** lalu lanjut dari posisi terakhir. Berlaku sama untuk tombol di aplikasi, notifikasi, widget, dan Android Auto.
+- Mesin audio sudah berhenti atau gagal melanjutkan: aplikasi otomatis meminta tautan baru, bukan menampilkan galat.
+- Native tidak lagi memaksa memutar audio lama bila aplikasi sudah bereaksi terhadap tombol itu.
+- Konsekuensi: setelah jeda lebih dari 10 menit, Putar butuh beberapa detik untuk mengambil tautan baru.
+- **Loading kini terlihat di notifikasi dan widget**: begitu Putar ditekan, native langsung menampilkan "Memuat lagu…" (notifikasi: bilah berjalan; widget: teks + bilah tipis di bawahnya) tanpa menunggu JS. Berlangsung selama tautan baru diambil sampai audio berbunyi. Bila JS tidak bereaksi dalam 20 dtk, tampilan kembali ke jeda.
+- ⚠️ Butuh **APK baru**.
+
+## 📱 Widget: Putar saat aplikasi sudah tertutup
+Bila proses aplikasi sudah mati (widget tampil "siap"), tombol **Putar** di widget kini membuka aplikasi, mengambil tautan audio baru, lalu memutar dari posisi terakhir, lalu aplikasi kembali ke layar utama. Sebelumnya tombol itu hanya membuka aplikasi tanpa memutar.
+- Memakai PendingIntent aktivitas langsung dari ketukan widget (boleh membuka aplikasi dari latar belakang), bukan startActivity dari receiver yang ditolak Android 10+.
+- Permintaan "lanjut memutar" lewat jalur `AutoBridge` yang sama dengan Android Auto (`kind = resume`), diambil JS saat siap.
+- Tanpa sesi tersimpan, aplikasi hanya terbuka. Tombol Sebelumnya/Berikutnya pada keadaan siap tetap hanya membuka aplikasi.
+- Layar aplikasi tetap sempat tampil sebentar karena WebView (yang mencari audio) hanya hidup bila aplikasi dibuka.
+- ⚠️ Butuh **APK baru**.
+
 ## ⚠️ Batasan yang perlu diketahui
 
 **Android Auto**
@@ -118,9 +136,9 @@ MusicVerse kini muncul sebagai aplikasi media di mobil.
 - JS: `components/player/AutoSync.tsx`, `AutoRadioSync.tsx`, `SpeedSheet.tsx`, `VolumeNormSync.tsx`, `pages/RecapPage.tsx`, `services/playbackSpeed.ts`, `radio.ts`, `volumeNorm.ts`, `utils/recap.ts`, `shareCard.ts`
 
 **File diubah**
-- Native: `PlaybackService.java` (sesi lewat `MediaSessionHolder`, widget, aksi `PLAY_FROM_MEDIA_ID` / `PLAY_FROM_SEARCH`, `engineSetSpeed`), `MusicVerseNativePlugin.java` (`setAutoBrowse`, `consumeAutoRequest`, event `autoRequest`, `engineSetSpeed`, `shareFile` dengan `mimeType`), `res/xml/update_file_paths.xml` (folder `share/`)
-- JS: `App.tsx`, `musicVerseNative.ts`, `audioEngine.ts`, `FullPlayer.tsx`, `LyricsPanel.tsx`, `TrackMenuSheet.tsx`, `useCoverGlow.ts` (`resolveCoverGlow`), `HistoryPage.tsx`, `PlaybackSettingsPage.tsx`, `plugins/ytmusic.ts` / `registry.ts` / `types.ts`, `types/spotify.ts`, `artistApi.ts` (`fetchArtistRadio`), `utils/playLog.ts`, `tailwind.config.js` (`accent` lewat `--mv-accent`)
-- `scripts/setup-android.mjs`, `package.json` (`version` 0.5.39, `appVersion` 0.5.39.5)
+- Native: `PlaybackService.java` (sesi lewat `MediaSessionHolder`, widget, jaring pengaman Putar/Jeda, aksi `PLAY_FROM_MEDIA_ID` / `PLAY_FROM_SEARCH`, `engineSetSpeed`), `MusicVerseNativePlugin.java` (`setAutoBrowse`, `consumeAutoRequest`, event `autoRequest`, `engineSetSpeed`, `shareFile` dengan `mimeType`), `res/xml/update_file_paths.xml` (folder `share/`)
+- JS: `App.tsx`, `musicVerseNative.ts`, `audioEngine.ts` (`resume`), `useAudioPlayerController.ts` (`togglePlayPause`), `FullPlayer.tsx`, `LyricsPanel.tsx`, `TrackMenuSheet.tsx`, `useCoverGlow.ts` (`resolveCoverGlow`), `HistoryPage.tsx`, `PlaybackSettingsPage.tsx`, `plugins/ytmusic.ts` / `registry.ts` / `types.ts`, `types/spotify.ts`, `artistApi.ts` (`fetchArtistRadio`), `utils/playLog.ts`, `tailwind.config.js` (`accent` lewat `--mv-accent`)
+- `scripts/setup-android.mjs`, `package.json` (`version` 0.5.39, `appVersion` 0.5.39.8)
 
 **Catatan versi**: catatan per versi 0.5.39 sampai 0.5.45 masih ada sebagai `CHANGES-0.5.39.md` sampai `CHANGES-0.5.45.md`; berkas ini menggabungkannya bersama 0.5.46.
 

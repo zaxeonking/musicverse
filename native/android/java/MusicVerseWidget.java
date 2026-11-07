@@ -102,6 +102,8 @@ public class MusicVerseWidget extends AppWidgetProvider {
     if (!live) views.setTextViewText(R.id.widget_artist, "Ketuk untuk membuka");
     else if (model.loading) views.setTextViewText(R.id.widget_artist, model.artist.isEmpty() ? "Memuat lagu…" : "Memuat lagu… · " + model.artist);
     else views.setTextViewText(R.id.widget_artist, model.artist);
+    // Bilah berjalan di bawah teks selama memuat, supaya terlihat jelas widget sedang bekerja (bukan macet).
+    views.setViewVisibility(R.id.widget_loading, live && model.loading ? View.VISIBLE : View.GONE);
 
     if (live && model.cover != null) views.setImageViewBitmap(R.id.widget_cover, roundedCover(model.cover));
     else views.setImageViewResource(R.id.widget_cover, R.drawable.notif_default_cover);
@@ -120,7 +122,9 @@ public class MusicVerseWidget extends AppWidgetProvider {
     } else {
       // Tidak ada service: broadcast tidak bisa melakukan apa-apa, jadi semua tombol membuka aplikasi.
       views.setOnClickPendingIntent(R.id.widget_prev, open);
-      views.setOnClickPendingIntent(R.id.widget_play, open);
+      // Putar: buka aplikasi (di latar belakang bila bisa) lalu ambil tautan audio baru dan lanjut dari posisi terakhir.
+      PendingIntent playAndOpen = openAndPlay(app);
+      views.setOnClickPendingIntent(R.id.widget_play, playAndOpen != null ? playAndOpen : open);
       views.setOnClickPendingIntent(R.id.widget_next, open);
     }
     views.setViewVisibility(R.id.widget_prev, live ? View.VISIBLE : View.INVISIBLE);
@@ -149,6 +153,22 @@ public class MusicVerseWidget extends AppWidgetProvider {
     if (open == null) return null;
     open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
     return PendingIntent.getActivity(app, 20, open, PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
+  }
+
+  /** Ekstra pada intent pembuka: MainActivity meneruskannya ke JS sebagai permintaan "lanjut memutar". */
+  static final String EXTRA_PLAY = "__APP_ID__.extra.WIDGET_PLAY";
+
+  /**
+   * Buka aplikasi sambil meminta lanjut memutar. Sengaja PendingIntent aktivitas (bukan broadcast lalu startActivity):
+   * ketukan langsung pada widget boleh membuka aplikasi dari latar belakang, sedangkan startActivity dari receiver
+   * ditolak sistem di Android 10+.
+   */
+  private static PendingIntent openAndPlay(Context app) {
+    Intent open = app.getPackageManager().getLaunchIntentForPackage(app.getPackageName());
+    if (open == null) return null;
+    open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+    open.putExtra(EXTRA_PLAY, true);
+    return PendingIntent.getActivity(app, 24, open, PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
   }
 
   /** Sampul dipotong persegi dari tengah, sudut dibulatkan, dan diperkecil. Hasil disimpan selama sampulnya sama. */
@@ -200,6 +220,7 @@ public class MusicVerseWidget extends AppWidgetProvider {
       Intent open = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
       if (open != null) {
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (ACTION_TOGGLE.equals(action)) open.putExtra(EXTRA_PLAY, true);
         context.startActivity(open);
       }
     } catch (RuntimeException ignored) {

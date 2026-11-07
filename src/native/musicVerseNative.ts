@@ -63,7 +63,8 @@ export interface NativeEngineEvent {
  * `kind` kosong = tidak ada permintaan.
  */
 export interface NativeAutoRequest {
-  kind?: 'media' | 'search'
+  /** `resume` = tombol Putar di widget saat aplikasi tertutup: lanjutkan lagu terakhir (tautan audio baru). */
+  kind?: 'media' | 'search' | 'resume'
   payload?: string
 }
 
@@ -379,6 +380,8 @@ export interface MusicVerseNativePlugin {
   setAutoBrowse(options: { json: string }): Promise<void>
   /** Mengambil permintaan putar dari Android Auto yang menunggu (sekali pakai). Objek kosong = tidak ada. Butuh APK v0.5.39.5+. */
   consumeAutoRequest(): Promise<NativeAutoRequest>
+  /** Pindah ke latar belakang tanpa menutup aplikasi. Butuh APK v0.5.39.8+; APK lama melempar UNIMPLEMENTED (diabaikan). */
+  sendToBackground(): Promise<void>
   addListener(eventName: 'autoRequest', listener: (event: NativeAutoRequest) => void): Promise<PluginListenerHandle>
 }
 

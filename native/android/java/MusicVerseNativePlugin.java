@@ -1051,6 +1051,17 @@ public class MusicVerseNativePlugin extends Plugin {
     call.resolve(result);
   }
 
+  /** Kembali ke layar sebelumnya (mis. layar utama) tanpa menutup aplikasi; dipakai setelah lanjut memutar dari widget. */
+  @PluginMethod
+  public void sendToBackground(PluginCall call) {
+    try {
+      if (getActivity() != null) getActivity().moveTaskToBack(true);
+    } catch (RuntimeException ignored) {
+      // tidak penting
+    }
+    call.resolve();
+  }
+
   @PluginMethod
   public void stopPlayback(PluginCall call) {
     PlaybackService.stop(getContext());

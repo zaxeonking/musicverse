@@ -57,6 +57,13 @@ const initialState: AudioPlayerState = {
 }
 const initialTime: PlaybackTime = { currentTime: 0, duration: null, seekable: false }
 
+/**
+ * Dijeda lebih lama dari ini: lanjut dengan tautan audio BARU (bukan memutar ulang yang lama). Tautan stream YouTube bisa
+ * kedaluwarsa / terkunci ke jaringan lama, dan mesin native mungkin sudah berhenti; memakai tautan lama membuat tombol putar
+ * di notifikasi / widget macet di "memuat" tanpa pernah berbunyi.
+ */
+const STALE_PAUSE_MS = 10 * 60_000
+
 interface StartOptions {
   /** Pertahankan urutan acak yang sedang berjalan (mis. lanjut ke lagu berikutnya). */
   keepOrder?: boolean
@@ -307,6 +314,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const stateRef = useRef<AudioPlayerState>(boot?.state ?? initialState)
   // True selama keadaan berasal dari sesi tersimpan dan belum ada audio yang dimuat (Play = mulai dari URL baru).
   const restoredRef = useRef(boot !== null)
+  /** Kapan status terakhir berubah jadi `paused` (ms). Jeda lama = tautan audio lama tidak boleh dipakai lagi. */
+  const pausedAtRef = useRef(0)
   // Detik tujuan setelah audio termuat (lanjut dari posisi tersimpan); null = mulai dari awal.
   const resumeAtRef = useRef<number | null>(null)
   /** Dipanggil saat durasi audio yang sebenarnya diketahui; mendeteksi klip 30 detik lalu ganti sumber. */
@@ -520,6 +529,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           persistPositionRef.current(true, event.currentTime)
           if (ACTIVE_STATUSES.includes(status)) {
             clearStartTimer()
+            pausedAtRef.current = Date.now()
             setStatus('paused')
           }
           break
@@ -973,11 +983,25 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           startPlayback(queue, currentIndex, { keepOrder: true, resumeAt: timeRef.current.currentTime })
           break
         }
+        const resumeTrack = currentIndex !== null ? queue[currentIndex] : undefined
+        // Jeda lama (atau tidak diketahui kapan jedanya): ambil tautan baru lalu lanjut dari posisi terakhir.
+        if (currentIndex !== null && resumeTrack && Date.now() - pausedAtRef.current > STALE_PAUSE_MS) {
+          forgetResolved(resumeTrack) // cache resolve bisa ±30 menit: tanpa ini tautan yang sama dipakai lagi
+          startPlayback(queue, currentIndex, { keepOrder: true, resumeAt: timeRef.current.currentTime })
+          break
+        }
         const requestId = requestIdRef.current
         audioEngine.resume().catch((error: unknown) => {
           if (requestIdRef.current !== requestId) return
           const code = error instanceof AudioEngineError ? error.code : 'unknown'
-          if (code !== 'aborted') fail(code)
+          if (code === 'aborted') return
+          // Mesin sudah tidak memegang audio (service berhenti / tautan mati): jangan menampilkan galat, ambil tautan baru.
+          if (currentIndex !== null && resumeTrack) {
+            forgetResolved(resumeTrack)
+            startPlayback(queue, currentIndex, { keepOrder: true, resumeAt: timeRef.current.currentTime })
+            return
+          }
+          fail(code)
         })
         break
       }
