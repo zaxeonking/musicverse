@@ -11,7 +11,7 @@
 //  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
 //  4. Menambah izin + <service> + usesCleartextTraffic ke AndroidManifest.xml
 //     (termasuk receiver widget layar utama dan AutoBrowserService + penanda aplikasi media untuk Android Auto)
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { computeNativeHash } from './native-hash.mjs'
@@ -42,6 +42,16 @@ for (const file of readdirSync(join(nativeDir, 'java'))) {
 
 // 2. Resource
 cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
+// 2-pra. Pratinjau widget kini PNG (drawable-nodpi). Buang sisa pratinjau vektor lama (drawable/widget_preview_*.xml) dari proyek android
+// hasil build sebelumnya: nama sama, dan peluncur bawaan pabrikan gagal memuat vektor sebagai previewImage.
+{
+  const oldDrawables = join(androidMain, 'res', 'drawable')
+  if (existsSync(oldDrawables)) {
+    for (const file of readdirSync(oldDrawables)) {
+      if (/^widget_preview_.*\.xml$/.test(file)) rmSync(join(oldDrawables, file), { force: true })
+    }
+  }
+}
 // 2a. XML penyedia widget memuat nama kelas layar atur (android:configure) yang butuh appId lengkap: isi __APP_ID__ di salinannya.
 const xmlSrc = join(nativeDir, 'res', 'xml')
 for (const file of readdirSync(xmlSrc)) {

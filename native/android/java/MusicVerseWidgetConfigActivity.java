@@ -42,13 +42,13 @@ import java.util.List;
  * "dari sampul". Penggeser menolak dicuri ScrollView induknya selama jari menyentuhnya, jadi seretan tidak ikut menggulir layar.
  */
 public class MusicVerseWidgetConfigActivity extends Activity {
-  private static final int BG = 0xFF1A1918;
-  private static final int CARD = 0xFF1A1918;
-  private static final int CARD_HI = 0xFF2D2A28;
-  private static final int TEXT = 0xFFEDE8E4;
-  private static final int TEXT_DIM = 0xFF9C9690;
+  private static final int BG = 0xFF0E1511;
+  private static final int CARD = 0xFF0E1511;
+  private static final int CARD_HI = 0xFF1C2A21;
+  private static final int TEXT = 0xFFE6F2EA;
+  private static final int TEXT_DIM = 0xFF86A08F;
   /** Warna antarmuka layar ini (chip terpilih, tombol Simpan); terpisah dari aksen widget supaya tidak berkedip saat menggeser. */
-  private static final int UI_ACCENT = 0xFFC2623F;
+  private static final int UI_ACCENT = 0xFF1DB954;
   /** Urutan seperti Auralys: ungu, biru, teal, hijau, kuning, oranye, merah muda, merah. */
   private static final int[] SWATCHES = {
     0xFF7C4DFF, 0xFF2979FF, 0xFF00BFA5, 0xFF2ECC71, 0xFFFFB300, 0xFFFF6E40, 0xFFFF4081, 0xFFE53935,
@@ -107,7 +107,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     scroll.setVerticalScrollBarEnabled(false);
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
-    root.setPadding(dp(20), dp(24), dp(20), dp(110));
+    root.setPadding(dp(16), dp(12), dp(16), dp(72));
     scroll.addView(root, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     frame.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -115,10 +115,10 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     LinearLayout bar = new LinearLayout(this);
     bar.setOrientation(LinearLayout.HORIZONTAL);
     bar.setBackgroundColor(BG);
-    bar.setPadding(dp(20), dp(12), dp(20), dp(16));
+    bar.setPadding(dp(16), dp(8), dp(16), dp(10));
     TextView done = button("Selesai", true);
     done.setOnClickListener(v -> saveAndFinish());
-    bar.addView(done, new LinearLayout.LayoutParams(0, dp(56), 1f));
+    bar.addView(done, new LinearLayout.LayoutParams(0, dp(44), 1f));
     FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     barLp.gravity = Gravity.BOTTOM;
     frame.addView(bar, barLp);
@@ -129,22 +129,22 @@ public class MusicVerseWidgetConfigActivity extends Activity {
       return insets;
     });
 
-    TextView title = text("Pengaturan widget", 32, TEXT, false);
+    TextView title = text("Pengaturan widget", 22, TEXT, false);
     title.setTypeface(Typeface.SERIF);
     root.addView(title);
 
     // Pratinjau di atas "wallpaper" keemasan supaya kaca terlihat (seperti Auralys).
     previewBox = new FrameLayout(this);
-    GradientDrawable wall = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {0xFFB8963F, 0xFF6F5B34, 0xFFCDB682});
-    wall.setCornerRadius(dp(28));
+    GradientDrawable wall = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {0xFF2E8B57, 0xFF14432B, 0xFF7BC89A});
+    wall.setCornerRadius(dp(20));
     previewBox.setBackground(wall);
-    previewBox.setPadding(dp(16), dp(24), dp(16), dp(24));
+    previewBox.setPadding(dp(12), dp(14), dp(12), dp(14));
     LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    pLp.topMargin = dp(18);
+    pLp.topMargin = dp(10);
     root.addView(previewBox, pLp);
 
-    TextView note = text("Ukuran mengikuti widget yang kamu pilih di daftar widget (4×2, 2×2, 4×1, 2×4, atau 1×1). Untuk mengubahnya nanti, tekan lama widget lalu seret pegangannya.", 15, TEXT_DIM, false);
-    note.setPadding(0, dp(16), 0, dp(8));
+    TextView note = text("Ukuran mengikuti widget yang dipilih. Ubah nanti: tekan lama widget lalu seret pegangannya.", 12, TEXT_DIM, false);
+    note.setPadding(0, dp(8), 0, dp(2));
     root.addView(note);
 
     // --- Gaya ---
@@ -158,7 +158,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
 
     // --- Warna aksen ---
     section(root, "Warna aksen");
-    swatchRow = new FlowLayout(this, dp(12), dp(12));
+    swatchRow = new FlowLayout(this, dp(8), dp(8));
     root.addView(swatchRow);
     rebuildSwatches();
 
@@ -181,22 +181,22 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     LinearLayout hexRow = new LinearLayout(this);
     hexRow.setOrientation(LinearLayout.HORIZONTAL);
     hexRow.setGravity(Gravity.CENTER_VERTICAL);
-    hexRow.setPadding(0, dp(12), 0, 0);
+    hexRow.setPadding(0, dp(6), 0, 0);
     colorDot = new View(this);
-    hexRow.addView(colorDot, new LinearLayout.LayoutParams(dp(40), dp(40)));
+    hexRow.addView(colorDot, new LinearLayout.LayoutParams(dp(32), dp(32)));
     hexInput = new EditText(this);
     hexInput.setTextColor(TEXT);
     hexInput.setHintTextColor(TEXT_DIM);
-    hexInput.setHint("#C2623F");
+    hexInput.setHint("#1DB954");
     hexInput.setSingleLine(true);
     hexInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
-    hexInput.setTextSize(17);
+    hexInput.setTextSize(14);
     hexInput.setTypeface(Typeface.MONOSPACE);
-    hexInput.setPadding(dp(14), dp(10), dp(14), dp(10));
+    hexInput.setPadding(dp(12), dp(6), dp(12), dp(6));
     hexInput.setBackground(round(CARD_HI, 14));
     hexInput.setText(WidgetColors.toHex(cfg.accent));
     LinearLayout.LayoutParams hexLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-    hexLp.setMarginStart(dp(12));
+    hexLp.setMarginStart(dp(10));
     hexRow.addView(hexInput, hexLp);
     customBox.addView(hexRow);
     hexInput.addTextChangedListener(new TextWatcher() {
@@ -216,11 +216,11 @@ public class MusicVerseWidgetConfigActivity extends Activity {
 
     // --- Penggeser persen (gaya Auralys: lintasan terisi + penunjuk berdiri) ---
     percent(root, "Kilau kaca", () -> cfg.glassShine, v -> cfg.glassShine = v);
-    percent(root, "Ketebalan kaca (lensa + bingkai)", () -> cfg.glassThickness, v -> cfg.glassThickness = v);
+    percent(root, "Tebal kaca", () -> cfg.glassThickness, v -> cfg.glassThickness = v);
     percent(root, "Kebulatan sudut", () -> cfg.roundness, v -> cfg.roundness = v);
-    percent(root, "Frost (blur sampul)", () -> cfg.frost, v -> cfg.frost = v);
+    percent(root, "Frost (blur)", () -> cfg.frost, v -> cfg.frost = v);
     // Keburaman latar hanya berpengaruh di gaya non-kaca (Gelap / Terang / Warna sampul).
-    percentRange(root, "Keburaman latar (Gelap / Terang / Warna sampul)", 20, () -> cfg.opacity, v -> cfg.opacity = v);
+    percentRange(root, "Keburaman latar", 20, () -> cfg.opacity, v -> cfg.opacity = v);
 
     // --- Bentuk sampul ---
     section(root, "Bentuk sampul");
@@ -240,7 +240,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     LinearLayout switches = new LinearLayout(this);
     switches.setOrientation(LinearLayout.VERTICAL);
     LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-    sLp.topMargin = dp(20);
+    sLp.topMargin = dp(10);
     root.addView(switches, sLp);
     if (form != MusicVerseWidget.Form.TINY) toggle(switches, "Tampilkan sampul", () -> cfg.showCover, v -> cfg.showCover = v);
     if (form.progress) {
@@ -261,8 +261,8 @@ public class MusicVerseWidgetConfigActivity extends Activity {
 
   /** Judul bagian (Gaya, Warna aksen, ...). */
   private void section(LinearLayout parent, String title) {
-    TextView t = text(title, 20, TEXT, true);
-    t.setPadding(0, dp(24), 0, dp(14));
+    TextView t = text(title, 15, TEXT, true);
+    t.setPadding(0, dp(12), 0, dp(6));
     parent.addView(t);
   }
 
@@ -270,11 +270,13 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     percentRange(parent, name, 0, source, sink);
   }
 
-  /** Penggeser 0..100 % dengan judul "Nama: NN%". `min` = batas bawah nilai. */
+  /** Penggeser 0..100 % sebaris: nama + nilai di kiri, penggeser di kanan. `min` = batas bawah nilai. */
   private void percentRange(LinearLayout parent, String name, int min, IntSource source, IntSink sink) {
-    TextView label = text(name + ": " + source.get() + "%", 18, TEXT, true);
-    label.setPadding(0, dp(24), 0, dp(4));
-    parent.addView(label);
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER_VERTICAL);
+    TextView label = text(name + " " + source.get() + "%", 13, TEXT, false);
+    row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
     Slider s = new Slider(this);
     s.setFilled(UI_ACCENT, CARD_HI);
     s.setLabel(name);
@@ -282,10 +284,11 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     s.setOnChange(v -> {
       int value = min + Math.round(v * (100 - min));
       sink.set(value);
-      label.setText(name + ": " + value + "%");
+      label.setText(name + " " + value + "%");
       renderPreview();
     });
-    parent.addView(s, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+    row.addView(s, new LinearLayout.LayoutParams(0, dp(34), 1.1f));
+    parent.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
   }
 
   private void saveAndFinish() {
@@ -363,7 +366,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
       rebuildSwatches();
       renderPreview();
     });
-    swatchRow.addView(fromCover, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)));
+    swatchRow.addView(fromCover, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
     for (int color : SWATCHES) {
       boolean selected = !cfg.accentFromCover && (cfg.accent & 0xFFFFFF) == (color & 0xFFFFFF);
       View dot = new View(this);
@@ -379,7 +382,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
         syncColorUi(false);
         renderPreview();
       });
-      swatchRow.addView(dot, new ViewGroup.LayoutParams(dp(48), dp(48)));
+      swatchRow.addView(dot, new ViewGroup.LayoutParams(dp(32), dp(32)));
     }
     // Warna kustom: buka / lipat penggeser rona, saturasi, kecerahan dan kolom hex.
     boolean customOpen = customBox != null && customBox.getVisibility() == View.VISIBLE;
@@ -388,7 +391,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
       customBox.setVisibility(customBox.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
       rebuildSwatches();
     });
-    swatchRow.addView(custom, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)));
+    swatchRow.addView(custom, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
   }
 
   private void setHex(String hex) {
@@ -417,16 +420,16 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
-    TextView t = text(name, 14, TEXT_DIM, false);
-    row.addView(t, new LinearLayout.LayoutParams(dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
-    row.addView(slider, new LinearLayout.LayoutParams(0, dp(44), 1f));
+    TextView t = text(name, 12, TEXT_DIM, false);
+    row.addView(t, new LinearLayout.LayoutParams(dp(72), ViewGroup.LayoutParams.WRAP_CONTENT));
+    row.addView(slider, new LinearLayout.LayoutParams(0, dp(34), 1f));
     row.setPadding(0, dp(4), 0, 0);
     return row;
   }
 
   /** Chip pilihan tunggal; baris membungkus ke bawah (tanpa gulir samping yang bisa mencuri seretan). */
   private void chips(LinearLayout parent, String[] labels, IntSource source, IntSink sink) {
-    FlowLayout row = new FlowLayout(this, dp(12), dp(12));
+    FlowLayout row = new FlowLayout(this, dp(8), dp(8));
     parent.addView(row);
     Runnable refresh = () -> {
       row.removeAllViews();
@@ -438,7 +441,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
           renderPreview();
           runRefreshers();
         });
-        row.addView(c, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)));
+        row.addView(c, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
       }
     };
     refreshers.add(refresh);
@@ -450,16 +453,16 @@ public class MusicVerseWidgetConfigActivity extends Activity {
   }
 
   private TextView chip(String label, boolean selected) {
-    TextView c = text(label, 18, selected ? TEXT : TEXT_DIM, selected);
+    TextView c = text(label, 13, selected ? TEXT : TEXT_DIM, selected);
     c.setGravity(Gravity.CENTER);
-    c.setPadding(dp(24), 0, dp(24), 0);
+    c.setPadding(dp(14), 0, dp(14), 0);
     GradientDrawable bg = new GradientDrawable();
-    bg.setCornerRadius(dp(18));
+    bg.setCornerRadius(dp(14));
     if (selected) {
       bg.setColor(CARD_HI);
     } else {
       bg.setColor(0x00000000);
-      bg.setStroke(dp(1), 0xFF3A3532);
+      bg.setStroke(dp(1), 0xFF2B4034);
     }
     c.setBackground(bg);
     return c;
@@ -469,7 +472,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
     LinearLayout row = new LinearLayout(this);
     row.setOrientation(LinearLayout.HORIZONTAL);
     row.setGravity(Gravity.CENTER_VERTICAL);
-    TextView t = text(label, 20, TEXT, false);
+    TextView t = text(label, 14, TEXT, false);
     row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
     Switch sw = new Switch(this);
     sw.setChecked(source.get());
@@ -479,23 +482,23 @@ public class MusicVerseWidgetConfigActivity extends Activity {
           new int[] {0xFFFFFFFF, 0xFFB0B4BC}));
       sw.setTrackTintList(new ColorStateList(
           new int[][] {new int[] {android.R.attr.state_checked}, new int[] {}},
-          new int[] {UI_ACCENT, 0xFF3A3532}));
+          new int[] {UI_ACCENT, 0xFF2B4034}));
     }
     sw.setOnCheckedChangeListener((b, checked) -> {
       sink.set(checked);
       renderPreview();
     });
     row.addView(sw);
-    row.setPadding(0, dp(10), 0, dp(10));
-    row.setMinimumHeight(dp(64));
+    row.setPadding(0, dp(2), 0, dp(2));
+    row.setMinimumHeight(dp(40));
     row.setOnClickListener(v -> sw.toggle());
     parent.addView(row);
   }
 
   private TextView button(String label, boolean primary) {
-    TextView b = text(label, 16, primary ? WidgetColors.onColor(UI_ACCENT) : TEXT, true);
+    TextView b = text(label, 15, primary ? WidgetColors.onColor(UI_ACCENT) : TEXT, true);
     b.setGravity(Gravity.CENTER);
-    b.setBackground(round(primary ? UI_ACCENT : CARD_HI, 28));
+    b.setBackground(round(primary ? UI_ACCENT : CARD_HI, 22));
     return b;
   }
 
@@ -602,7 +605,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
       float right = w - pad();
       if (right <= left) return;
       if (filled) {
-        float th = 24f * density;
+        float th = 16f * density;
         float cy = h / 2f;
         float x = left + value * (right - left);
         float gap = 6f * density;
@@ -614,7 +617,7 @@ public class MusicVerseWidgetConfigActivity extends Activity {
         rect.set(Math.min(right - th, x + gap), cy - th / 2f, right, cy + th / 2f);
         canvas.drawRoundRect(rect, th / 2f, th / 2f, trackPaint);
         thumbPaint.setColor(fillColor);
-        rect.set(x - 2f * density, cy - 20f * density, x + 2f * density, cy + 20f * density);
+        rect.set(x - 2f * density, cy - 14f * density, x + 2f * density, cy + 14f * density);
         canvas.drawRoundRect(rect, 2f * density, 2f * density, thumbPaint);
         return;
       }

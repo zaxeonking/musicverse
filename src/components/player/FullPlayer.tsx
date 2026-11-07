@@ -1,6 +1,6 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Maximize2, Mic2, Minimize2, MoreVertical } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type ReactNode, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
@@ -110,6 +110,21 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabi
  * Pemutar penuh (dialog modal). Memakai state dan aksi yang sama dengan MiniPlayer,
  * sehingga keduanya selalu sinkron. Esc / tombol turun menutupnya.
  */
+/** Bagian yang menutup/membuka dengan halus (tinggi + pudar) saat mode lirik layar penuh berganti. Tetap terpasang agar bisa beranimasi. */
+function Collapse({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+  return (
+    <div
+      aria-hidden={hidden || undefined}
+      {...(hidden ? { inert: '' } : {})}
+      className={`grid shrink-0 transition-[grid-template-rows,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+        hidden ? 'pointer-events-none grid-rows-[0fr] -translate-y-2 opacity-0' : 'grid-rows-[1fr] translate-y-0 opacity-100'
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  )
+}
+
 export default function FullPlayer({
   onClose,
   onOpenQueue,
@@ -525,8 +540,8 @@ export default function FullPlayer({
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
-      <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'pb-2'} pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]`}>
-        {!lyricsFullActive && (
+      <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'pb-2'} transition-[padding] duration-500 ease-out motion-reduce:transition-none pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] ${lyricsFullActive ? 'pt-0' : 'pt-[max(0.75rem,env(safe-area-inset-top))]'}`}>
+        <Collapse hidden={lyricsFullActive}>
         <header className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
@@ -551,13 +566,13 @@ export default function FullPlayer({
             <MoreVertical className="h-6 w-6" aria-hidden="true" />
           </button>
         </header>
-        )}
+        </Collapse>
 
         {/* Slot tengah: sampul, atau (saat lirik dibuka) lirik tanpa latar, lebih lebar dan tinggi. */}
-        <div ref={slotRef} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="flex min-h-0 flex-1 items-center justify-center py-2">
+        <div ref={slotRef} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className={`flex min-h-0 flex-1 items-center justify-center ${lyricsFullActive ? 'py-0' : 'py-2'}`}>
           {showLyrics ? (
             <div className="h-full min-h-0 w-full animate-lyrics-up">
-              <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} />
+              <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} fullscreen={lyricsFullActive} />
             </div>
           ) : (
             <div
@@ -572,12 +587,43 @@ export default function FullPlayer({
         </div>
 
         <div className="space-y-3">
-          <div className="fp-item flex items-start gap-3">
+          {lyricsFullActive ? (
+            <div key="fs-row" className="fp-item flex animate-fs-in items-center gap-3 motion-reduce:animate-none">
+              <div {...press} className="h-12 w-12 shrink-0 select-none overflow-hidden rounded-lg shadow-lg shadow-black/50 [-webkit-touch-callout:none]">
+                <CoverArt cover={now.cover} src={now.coverSrc} />
+              </div>
+              <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
+                <h2 title={now.title} className="line-clamp-1 font-display text-lg font-bold leading-tight text-ink">
+                  {now.title}
+                </h2>
+                <p className="mt-0.5 truncate text-sm font-medium text-accent">{now.artists}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLyricsFull(false)}
+                aria-label="Keluar dari lirik layar penuh"
+                title="Keluar dari layar penuh"
+                className={`${iconBtn} text-ink hover:text-accent`}
+              >
+                <Minimize2 className="h-6 w-6" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => openTrackMenu(currentTrack, { place: 'player' })}
+                aria-haspopup="dialog"
+                aria-label="Menu lagu"
+                className={`-mr-2 ${iconBtn} text-ink hover:bg-white/10`}
+              >
+                <MoreVertical className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+          <div key="norm-row" className={`fp-item flex items-start gap-3 ${lyricsFull ? 'animate-fs-in motion-reduce:animate-none' : ''}`}>
             <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
-              <h2 title={now.title} className={`break-words font-display font-bold leading-tight text-ink ${lyricsFullActive ? 'line-clamp-1 text-lg' : 'line-clamp-2 text-[1.65rem]'}`}>
+              <h2 title={now.title} className={`break-words font-display font-bold leading-tight text-ink line-clamp-2 text-[1.65rem]`}>
                 {now.title}
               </h2>
-              <MarqueeText text={now.artists} className={`font-medium uppercase tracking-wide text-ink-muted ${lyricsFullActive ? 'mt-0.5 text-xs' : 'mt-1 text-base'}`} />
+              <MarqueeText text={now.artists} className={`font-medium uppercase tracking-wide text-ink-muted mt-1 text-base`} />
             </div>
             {showLyrics && (
               <button
@@ -606,6 +652,7 @@ export default function FullPlayer({
               <LikeHeart liked={liked} />
             </button>
           </div>
+          )}
 
           <div className="fp-item">
             {isError ? (
@@ -621,7 +668,7 @@ export default function FullPlayer({
           </div>
 
           {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
-          {!lyricsFullActive && (
+          <Collapse hidden={lyricsFullActive}>
           <div className="fp-item">
             <TransportControls
               size="xl"
@@ -634,11 +681,11 @@ export default function FullPlayer({
               trailing={<ShuffleButton size="lg" className="flex" />}
             />
           </div>
-          )}
+          </Collapse>
 
           {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
               putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
-          {!lyricsFullActive && (
+          <Collapse hidden={lyricsFullActive}>
           <div className="fp-item">
           {(() => {
             const lyricsBtn = (
@@ -678,7 +725,7 @@ export default function FullPlayer({
             )
           })()}
           </div>
-          )}
+          </Collapse>
           {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
           {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
 
@@ -702,7 +749,7 @@ export default function FullPlayer({
       </div>
 
       {/* Bar "Berikutnya": membuka antrean (seperti handle sheet di pemutar referensi). */}
-      {!lyricsFullActive && (
+      <Collapse hidden={lyricsFullActive}>
       <button
         type="button"
         data-tour="queue-bar"
@@ -714,7 +761,7 @@ export default function FullPlayer({
         Berikutnya
         <ChevronUp className="h-5 w-5" aria-hidden="true" />
       </button>
-      )}
+      </Collapse>
     </div>
   )
 }

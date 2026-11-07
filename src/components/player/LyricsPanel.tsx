@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { LyricsState } from '../../hooks/useLyrics'
 import type { LyricsResult } from '../../services/lyricsApi'
@@ -16,6 +16,8 @@ interface LyricsPanelProps {
   onRetry: () => void
   /** Identitas lagu (judul|artis) untuk menyimpan penyelarasan manual per lagu. */
   trackKey?: string
+  /** Mode lirik layar penuh: daftar naik sampai ke bawah status bar. */
+  fullscreen?: boolean
 }
 
 function Message({ children }: { children: ReactNode }) {
@@ -35,7 +37,7 @@ const FADE_MASK = {
  *  - tanpa waktu / waktu tak bisa dipercaya → sorotan PERKIRAAN menurut progres lagu.
  * Ketuk baris (jika audio bisa di-seek) untuk loncat ke bagian itu, hanya pada mode berwaktu.
  */
-export default function LyricsPanel({ state, onRetry, trackKey }: LyricsPanelProps) {
+export default function LyricsPanel({ state, onRetry, trackKey, fullscreen = false }: LyricsPanelProps) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <Message>
@@ -57,8 +59,8 @@ export default function LyricsPanel({ state, onRetry, trackKey }: LyricsPanelPro
   const { result } = state
   if (result.kind === 'none') return <Message>Lirik untuk lagu ini tidak ditemukan.</Message>
   if (result.kind === 'instrumental') return <Message>Lagu ini instrumental, tidak ada lirik.</Message>
-  if (result.kind === 'plain') return <PlainLyrics lines={result.lines} />
-  return <SyncedLyrics result={result} trackKey={trackKey} />
+  if (result.kind === 'plain') return <PlainLyrics lines={result.lines} fullscreen={fullscreen} />
+  return <SyncedLyrics result={result} trackKey={trackKey} fullscreen={fullscreen} />
 }
 
 /** Info untuk efek karaoke (isi per baris): cara mengubah waktu audio menjadi waktu lirik. */
@@ -164,6 +166,7 @@ function LineList({
   header,
   timing,
   credit,
+  fullscreen = false,
 }: {
   items: Item[]
   active: number
@@ -172,6 +175,7 @@ function LineList({
   header?: ReactNode
   timing?: FillTiming
   credit?: string
+  fullscreen?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -190,21 +194,37 @@ function LineList({
   }, [items, active])
   const anchor = parent >= 0 ? parent : active
 
+  const centerAnchor = useCallback(
+    (behavior: ScrollBehavior) => {
+      const container = containerRef.current
+      if (!container || anchor < 0) return
+      const node = container.querySelector<HTMLElement>(`[data-line="${anchor}"]`)
+      if (!node) return
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      container.scrollTo({
+        top: node.offsetTop - container.clientHeight / 2 + node.clientHeight / 2,
+        behavior: reduce ? 'auto' : behavior,
+      })
+    },
+    [anchor],
+  )
+
+  useEffect(() => {
+    centerAnchor('smooth')
+  }, [centerAnchor, items])
+
+  // Tinggi daftar berubah (masuk/keluar lirik layar penuh, animasinya berjalan ~0,5 dtk): baris aktif ikut tetap di tengah.
   useEffect(() => {
     const container = containerRef.current
-    if (!container || anchor < 0) return
-    const node = container.querySelector<HTMLElement>(`[data-line="${anchor}"]`)
-    if (!node) return
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    container.scrollTo({
-      top: node.offsetTop - container.clientHeight / 2 + node.clientHeight / 2,
-      behavior: reduce ? 'auto' : 'smooth',
-    })
-  }, [anchor, items])
+    if (!container || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => centerAnchor('auto'))
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [centerAnchor])
 
   return (
     <div className="flex h-full flex-col">
-      {header && <div className="shrink-0 px-4 pt-2 text-center text-[11px] text-ink-faint">{header}</div>}
+      {header && <div className={`shrink-0 px-4 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,env(safe-area-inset-top))]' : 'pt-2'}`}>{header}</div>}
       <div
         ref={containerRef}
         style={FADE_MASK}
@@ -243,16 +263,16 @@ function creditFor(source: string | undefined, wordSynced: boolean | undefined):
 
 const ESTIMATE_NOTE = 'Waktu lirik tidak tersedia, sorotan hanya perkiraan.'
 
-function PlainLyrics({ lines }: { lines: string[] }) {
+function PlainLyrics({ lines, fullscreen }: { lines: string[]; fullscreen?: boolean }) {
   const { currentTime, duration } = usePlaybackTime()
   const display = useLyricDisplayPrefs()
   // Lirik polos tidak punya terjemahan server, tetapi romanisasi lokal tetap bisa (kana / Hangul / Hindi / Sirilik).
   const items = useMemo<Item[]>(() => lines.map((text) => ({ text, ...(display.romanization ? { transliteration: romanize(text) } : {}) })), [lines, display])
   const active = estimateActive(items, currentTime, duration)
-  return <LineList items={items} active={active} header={ESTIMATE_NOTE} />
+  return <LineList items={items} active={active} header={ESTIMATE_NOTE} fullscreen={fullscreen} />
 }
 
-function SyncedLyrics({ result, trackKey }: { result: Extract<LyricsResult, { kind: 'synced' }>; trackKey?: string }) {
+function SyncedLyrics({ result, trackKey, fullscreen }: { result: Extract<LyricsResult, { kind: 'synced' }>; trackKey?: string; fullscreen?: boolean }) {
   const { items, active, mode, offset, setOffset, ratio, lyricTime, lyricsDuration, audioDuration, seekable, storageKey } = useLyricTiming(result, trackKey)
   const { seekTo } = useAudioPlayer()
 
@@ -305,5 +325,6 @@ function SyncedLyrics({ result, trackKey }: { result: Extract<LyricsResult, { ki
       header={header}
       timing={{ mode, ratio, offset }}
       credit={creditFor(result.source, result.wordSynced)}
+      fullscreen={fullscreen}
     />
 }

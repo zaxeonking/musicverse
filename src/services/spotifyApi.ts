@@ -9,6 +9,7 @@ import {
   importSpotifyPlaylist,
   importSpotifyTrack,
   searchSpotifyTrack,
+  searchSpotifyTracks,
   type TrackMeta,
 } from '../plugins/spotifyImporter'
 import type {
@@ -642,6 +643,18 @@ export async function searchTrackByTitle(
     directCtl.abort()
     thirdCtl.abort()
     outer?.removeEventListener('abort', onOuterAbort)
+  }
+}
+
+/**
+ * Lagu-lagu lain yang cocok dengan kata kunci (untuk bagian "Terkait" di bawah hasil teratas). Hanya info lagunya
+ * (judul, artis, sampul); audionya baru dicari saat diputar. Gagal / tidak tersedia (web) = daftar kosong, bukan galat.
+ */
+export async function searchRelatedTracks(query: string, options: FetchPlaylistOptions = {}): Promise<TrackMeta[]> {
+  try {
+    return await withImporterRetry('Pencarian terkait', () => searchSpotifyTracks(query, { signal: options.signal }, 10), options.signal)
+  } catch {
+    return []
   }
 }
 

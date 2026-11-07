@@ -254,7 +254,7 @@ export default function ArtistSearchPanel() {
       <button
         type="button"
         onClick={inAlbum ? artistSearch.closeAlbum : artistSearch.back}
-        className="focus-ring -ml-1 inline-flex items-center gap-1 rounded-md p-1 text-sm text-ink-muted"
+        className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         {inAlbum ? selected.name : 'Artis'}

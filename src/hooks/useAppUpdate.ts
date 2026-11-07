@@ -2,9 +2,7 @@ import { App } from '@capacitor/app'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MusicVerseNative } from '../native/musicVerseNative'
 import { compareVersions, fetchLatestRelease, getInstalledVersion, updatesSupported, type ReleaseInfo } from '../native/appUpdate'
-import { readJson, writeJson } from '../utils/safeStorage'
 
-const DISMISS_KEY = 'musicverse:update-dismissed:v1'
 const RECHECK_MS = 30 * 60 * 1000
 
 export type UpdatePhase = 'available' | 'downloading' | 'ready' | 'failed' | 'needPermission'
@@ -16,15 +14,15 @@ export interface AppUpdateState {
   progress: number | null
   start: () => void
   install: () => void
-  /** Sembunyikan banner sampai ada versi yang lebih baru lagi (pembaruan bersifat opsional). */
+  /** Sembunyikan kartu sampai aplikasi dibuka lagi (pembaruan bersifat opsional; tidak disimpan permanen). */
   dismiss: () => void
 }
 
-function dismissedVersion(): string {
-  const out = readJson(DISMISS_KEY)
-  const v = out.status === 'ok' && typeof out.value === 'object' && out.value !== null ? (out.value as { version?: unknown }).version : ''
-  return typeof v === 'string' ? v : ''
-}
+/**
+ * Versi yang ditutup pengguna SELAMA proses aplikasi ini hidup. Sengaja tidak disimpan ke penyimpanan: begitu aplikasi dibuka lagi
+ * (proses baru), pengingat pembaruan muncul kembali. Berpindah ke aplikasi lain lalu kembali tidak memunculkannya lagi.
+ */
+let dismissedThisRun = ''
 
 /**
  * Cek pembaruan APK lewat GitHub Releases. Opsional: pengguna boleh menutup banner. Saat memperbarui,
@@ -47,7 +45,7 @@ export function useAppUpdate(): AppUpdateState | null {
     const diff = compareVersions(latest.version, installed)
     if (diff === null || diff <= 0) return
     setRelease((current) => (current?.version === latest.version ? current : latest))
-    setHidden(dismissedVersion() === latest.version)
+    setHidden(dismissedThisRun === latest.version)
     try {
       const state = await MusicVerseNative.getUpdateState()
       if (state.downloading) setPhase('downloading')
@@ -107,7 +105,7 @@ export function useAppUpdate(): AppUpdateState | null {
   }, [])
 
   const dismiss = useCallback(() => {
-    if (release) writeJson(DISMISS_KEY, { version: release.version })
+    if (release) dismissedThisRun = release.version
     setHidden(true)
   }, [release])
 

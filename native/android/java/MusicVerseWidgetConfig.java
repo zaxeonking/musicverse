@@ -14,7 +14,7 @@ final class MusicVerseWidgetConfig {
   static final int SIZE_SMALL = 0, SIZE_MEDIUM = 1, SIZE_LARGE = 2;
   static final int PLAY_FILLED = 0, PLAY_PLAIN = 1;
 
-  static final int DEFAULT_ACCENT = 0xFFC2623F;
+  static final int DEFAULT_ACCENT = 0xFF1DB954;
 
   /** Gaya kaca (bergantung pada sampul / latar di belakang). */
   boolean isGlass() {

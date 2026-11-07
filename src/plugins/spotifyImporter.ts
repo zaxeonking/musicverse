@@ -635,6 +635,29 @@ export async function importSpotifyTrack(trackId: string, options: ImportOptions
   })
 }
 
+/** Cari lagu lewat judul (dan artis) di Spotify; mengembalikan banyak kemungkinan sesuai urutan relevansi Spotify (paling relevan dulu). */
+export async function searchSpotifyTracks(query: string, options: ImportOptions = {}, limit = 10): Promise<TrackMeta[]> {
+  const { signal } = options
+  if (!isNativeApp()) throw new ImporterError('Pencarian langsung Spotify hanya tersedia di APK.', { retryable: false })
+  throwIfAborted(signal)
+  const text = query.trim()
+  if (!text) return []
+  const token = await getAccessToken(null, signal)
+  const data = await apiGet(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(text)}&type=track&limit=${Math.min(Math.max(limit, 1), 10)}`,
+    token,
+    signal,
+  )
+  const items = pick(data, ['tracks', 'items'])
+  if (!Array.isArray(items)) return []
+  const found: TrackMeta[] = []
+  for (const item of items) {
+    const meta = trackMetaFromApi(item)
+    if (meta) found.push(meta)
+  }
+  return found
+}
+
 /** Cari lagu lewat judul (dan artis) di Spotify; mengembalikan hasil teratas. */
 export async function searchSpotifyTrack(query: string, options: ImportOptions = {}): Promise<TrackMeta> {
   const { signal } = options

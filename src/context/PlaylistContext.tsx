@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { describeApiError, fetchPlaylist, searchTrackByLink, searchTrackByTitle, SpotifyApiError } from '../services/spotifyApi'
+import { describeApiError, fetchPlaylist, searchRelatedTracks, searchTrackByLink, searchTrackByTitle, SpotifyApiError } from '../services/spotifyApi'
 import type { PlaylistDetail } from '../types/spotify'
 import { clearLastPlaylist, loadLastPlaylist, saveLastPlaylist } from '../utils/playlistStorage'
 import { buildSearchPlaylist } from '../utils/searchPlaylist'
@@ -87,8 +87,21 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
       // Judul lagu / tautan lagu: hasil satu lagu (tidak disimpan sebagai playlist).
       const input = classifyImportInput(playlistUrl)
       let playlist: PlaylistDetail
+      let afterShown: (() => void) | null = null
       if (input.kind === 'search') {
-        playlist = buildSearchPlaylist(input.query, await searchTrackByTitle(input.query, { signal: controller.signal }))
+        // Hasil teratas tampil secepatnya; "Terkait" (banyak kemungkinan lain) dicari bersamaan lalu menyusul tanpa menahan hasil teratas.
+        const relatedPromise = searchRelatedTracks(input.query, { signal: controller.signal })
+        const top = await searchTrackByTitle(input.query, { signal: controller.signal })
+        const query = input.query
+        playlist = buildSearchPlaylist(query, top)
+        const built = playlist
+        afterShown = () => {
+          void relatedPromise.then((metas) => {
+            if (controller.signal.aborted || metas.length === 0) return
+            const withRelated = buildSearchPlaylist(query, top, metas)
+            setState((prev) => (prev.playlist?.id === built.id ? { ...prev, playlist: withRelated } : prev))
+          })
+        }
       } else if (input.kind === 'track') {
         playlist = buildSearchPlaylist(input.url, await searchTrackByLink(input.url, { signal: controller.signal }))
       } else {
@@ -103,6 +116,7 @@ export function PlaylistProvider({ children }: { children: ReactNode }) {
         requestedUrl: playlist.url,
         fromCache: false,
       })
+      afterShown?.()
       return true
     } catch (error) {
       if (controller.signal.aborted) return false

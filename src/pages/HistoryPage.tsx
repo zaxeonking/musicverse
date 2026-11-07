@@ -66,7 +66,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6 px-4 pb-8 pt-2 sm:px-0">
-      <Link to="/library" className="focus-ring -ml-1 inline-flex items-center gap-1 rounded-md p-1 text-sm text-ink-muted">
+      <Link to="/library" className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Playlist
       </Link>

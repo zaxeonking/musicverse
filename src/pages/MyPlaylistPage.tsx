@@ -199,7 +199,7 @@ export default function MyPlaylistPage() {
   if (!playlist) {
     return (
       <div className="space-y-4">
-        <Link to="/library" className="btn-secondary h-10 px-4 text-sm">
+        <Link to="/library" className="back-glass focus-ring inline-flex h-10 items-center gap-2 px-4 text-sm font-medium text-ink">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Koleksi
         </Link>
@@ -277,7 +277,7 @@ export default function MyPlaylistPage() {
 
   return (
     <div className="space-y-6">
-      <Link to="/library" className="btn-secondary h-10 px-4 text-sm">
+      <Link to="/library" className="back-glass focus-ring inline-flex h-10 items-center gap-2 px-4 text-sm font-medium text-ink">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Koleksi
       </Link>

@@ -15,6 +15,7 @@ import { classifyImportInput } from '../../utils/spotifyUrl'
 import { getRowActivity } from '../../utils/playerStatus'
 import { QUEUE_RESULT_TEXT } from '../../utils/queueResultText'
 import EmptyState from '../ui/EmptyState'
+import SectionHeader from '../ui/SectionHeader'
 import ManualSearchSheet from '../library/ManualSearchSheet'
 import AddToPlaylistSheet from './AddToPlaylistSheet'
 import AvailabilityPanel from './AvailabilityPanel'
@@ -105,6 +106,8 @@ export default function PlaylistView() {
 
   // Hanya hasil cari judul / tautan lagu (lagu satuan) yang boleh dicampur ke antrean. Tautan playlist tidak.
   const isSingleSearch = playlist.source === 'search'
+  const related = isSingleSearch ? (playlist.related ?? []) : []
+  const hasRelated = related.length > 0
   const handleAddToQueue = () => {
     const track = playlist.tracks[0]
     if (!track) return
@@ -192,6 +195,7 @@ export default function PlaylistView() {
         />
       )}
 
+      {hasRelated && <SectionHeader title="Hasil teratas" subtitle="Yang paling cocok dengan pencarianmu" />}
       <TrackList
         key={playlist.id}
         tracks={playlist.tracks}
@@ -202,6 +206,21 @@ export default function PlaylistView() {
         searchable={isSingleSearch}
         isLocked={checking ? isLocked : undefined}
       />
+
+      {hasRelated && (
+        <section aria-label="Terkait" className="animate-fade-in border-t border-white/10 pt-6">
+          <SectionHeader title="Terkait" subtitle="Kemungkinan lain yang mirip" />
+          <TrackList
+            key={`${playlist.id}-terkait`}
+            tracks={related}
+            query=""
+            onPlay={player.selectTrack}
+            playingTrack={player.currentTrack}
+            playbackActivity={getRowActivity(player.status)}
+            searchable
+          />
+        </section>
+      )}
     </section>
   )
 }

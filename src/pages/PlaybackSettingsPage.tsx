@@ -17,7 +17,7 @@ export default function PlaybackSettingsPage() {
   if (!isNativeApp()) return <Navigate to="/" replace />
   return (
     <section aria-label="Pemutaran" className="px-4 pb-8 pt-2">
-      <Link to="/settings" className="focus-ring -ml-1 mb-2 inline-flex items-center gap-1 rounded-md p-1 text-sm text-ink-muted">
+      <Link to="/settings" className="back-glass focus-ring mb-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Pengaturan
       </Link>

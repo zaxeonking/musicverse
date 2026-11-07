@@ -41,6 +41,8 @@ export interface PlaylistDetail {
    * ke penyimpanan perangkat dan tidak masuk Koleksi otomatis.
    */
   source?: 'search'
+  /** Hanya hasil cari judul: lagu-lagu lain yang mirip, ditampilkan di bawah hasil teratas (`tracks[0]`). */
+  related?: PlaylistTrack[]
 }
 
 /**

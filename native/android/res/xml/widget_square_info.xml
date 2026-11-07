@@ -10,7 +10,6 @@
     android:targetCellWidth="2"
     android:targetCellHeight="2"
     android:previewImage="@drawable/widget_preview_square"
-    android:previewLayout="@layout/widget_square"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
     android:widgetFeatures="reconfigurable" />
