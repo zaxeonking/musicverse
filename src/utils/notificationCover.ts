@@ -75,7 +75,10 @@ function drawLogoBadge(ctx: CanvasRenderingContext2D) {
   ctx.save()
   ctx.shadowColor = 'rgba(0,0,0,0.45)'
   ctx.shadowBlur = SIZE * 0.025
-  ctx.fillStyle = '#121212'
+  ctx.fillStyle = (() => {
+    const v = typeof document !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--mv-bg').trim() : ''
+    return /^\d+ \d+ \d+$/.test(v) ? `rgb(${v.split(' ').join(',')})` : '#121212'
+  })()
   ctx.beginPath()
   ctx.arc(cx, cy, d / 2, 0, Math.PI * 2)
   ctx.fill()

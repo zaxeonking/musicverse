@@ -45,7 +45,7 @@
   }
 
   ::selection {
-    background: rgba(29, 185, 84, 0.35);
+    background: rgb(var(--mv-accent, 29 185 84) / 0.35);
   }
 
   /* Hormati preferensi "kurangi gerakan": animasi dan transisi praktis dimatikan. */
@@ -100,7 +100,7 @@
   }
 
   .btn-primary {
-    @apply bg-accent text-black hover:bg-accent-soft active:bg-accent-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:hover:bg-accent;
+    @apply bg-accent text-accent-on hover:bg-accent-soft active:bg-accent-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:hover:bg-accent;
   }
   .btn-secondary {
     @apply bg-raised text-ink hover:bg-raised-hover active:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:hover:bg-raised;
@@ -118,9 +118,22 @@
     transform: scale(0.9);
   }
 
+  /* Slider warna (halaman Tema): trek bergradasi diisi lewat style, jempolnya seragam. */
+  .mv-slider {
+    @apply h-4 w-full cursor-pointer appearance-none rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
+  }
+  .mv-slider::-webkit-slider-thumb {
+    @apply h-6 w-6 appearance-none rounded-full border-2 border-white bg-transparent;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.5);
+  }
+  .mv-slider::-moz-range-thumb {
+    @apply h-6 w-6 rounded-full border-2 border-white bg-transparent;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.5);
+  }
+
   /* Placeholder loading. Statis bila pengguna meminta gerakan dikurangi. */
   .skeleton {
-    background-color: theme('colors.raised.DEFAULT');
+    background-color: rgb(var(--mv-raised, 36 36 36));
     background-image: linear-gradient(
       90deg,
       transparent 0%,

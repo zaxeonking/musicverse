@@ -27,6 +27,7 @@ import MyPlaylistPage from './pages/MyPlaylistPage'
 import RecapPage from './pages/RecapPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
+import ThemeSettingsPage from './pages/ThemeSettingsPage'
 import UpdateSettingsPage from './pages/UpdateSettingsPage'
 import { installBackgroundGuard } from './native/backgroundGuard'
 import { installBackGuard, prepareHistory } from './utils/backGuard'
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
       { path: '/settings/playlist', element: <PlaylistSettingsPage /> },
       { path: '/settings/equalizer', element: <EqualizerPage /> },
       { path: '/settings/backup', element: <BackupPage /> },
+      { path: '/settings/theme', element: <ThemeSettingsPage /> },
       { path: '/settings/update', element: <UpdateSettingsPage /> },
       { path: '/settings/privacy', element: <LegalPage kind="privacy" /> },
       { path: '/settings/terms', element: <LegalPage kind="terms" /> },

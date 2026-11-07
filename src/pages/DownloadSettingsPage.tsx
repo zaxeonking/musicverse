@@ -46,7 +46,7 @@ export default function DownloadSettingsPage() {
                 role="radio"
                 aria-checked={active}
                 onClick={() => setDownloadQualityPreference(option.id)}
-                className={`focus-ring rounded-lg px-2 py-2 text-center ${active ? 'bg-accent text-black' : 'bg-white/10 text-ink'}`}
+                className={`focus-ring rounded-lg px-2 py-2 text-center ${active ? 'bg-accent text-accent-on' : 'bg-white/10 text-ink'}`}
               >
                 <span className="block text-sm font-semibold">{option.label}</span>
                 <span className={`block text-[11px] ${active ? 'text-black/70' : 'text-ink-muted'}`}>{option.hint}</span>

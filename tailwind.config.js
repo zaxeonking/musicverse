@@ -6,20 +6,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#121212',
-        card: '#181818',
-        raised: { DEFAULT: '#242424', hover: '#2e2e2e' },
+        bg: 'rgb(var(--mv-bg, 18 18 18) / <alpha-value>)',
+        card: 'rgb(var(--mv-card, 24 24 24) / <alpha-value>)',
+        raised: {
+          DEFAULT: 'rgb(var(--mv-raised, 36 36 36) / <alpha-value>)',
+          hover: 'rgb(var(--mv-raised-hover, 46 46 46) / <alpha-value>)',
+        },
         accent: {
           // Bisa ditimpa per area lewat variabel CSS --mv-accent ("r g b"), mis. pemutar penuh memakai warna sampul.
           DEFAULT: 'rgb(var(--mv-accent, 29 185 84) / <alpha-value>)',
-          soft: '#1ed760',
-          deep: '#169c46',
+          soft: 'rgb(var(--mv-accent-soft, 30 215 96) / <alpha-value>)',
+          deep: 'rgb(var(--mv-accent-deep, 22 156 70) / <alpha-value>)',
+          // Warna teks/ikon di atas latar aksen (hitam atau putih, mengikuti terang-gelapnya aksen).
+          on: 'rgb(var(--mv-on-accent, 0 0 0) / <alpha-value>)',
         },
         ink: {
           DEFAULT: '#ffffff',
-          muted: '#a7a7a7',
+          muted: 'rgb(var(--mv-ink-muted, 167 167 167) / <alpha-value>)',
           // Dinaikkan dari #6a6a6a (±3.3:1) agar teks sekunder lolos kontras AA (≥4.5:1) di atas bg/card.
-          faint: '#8a8a8a',
+          faint: 'rgb(var(--mv-ink-faint, 138 138 138) / <alpha-value>)',
         },
         danger: '#ff6b6b',
         // Halaman web (landing, privasi, ketentuan). Terang, supaya aplikasi gelap di dalamnya jadi satu-satunya benda pekat.
@@ -44,7 +49,7 @@ export default {
       },
       // Skala radius: kontrol = full, permukaan/kartu = lg, thumbnail & baris = md, sheet = 2xl (atas saja).
       boxShadow: {
-        now: 'inset 3px 0 0 0 #1DB954',
+        now: 'inset 3px 0 0 0 rgb(var(--mv-accent, 29 185 84))',
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

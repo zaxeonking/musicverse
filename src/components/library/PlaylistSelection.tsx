@@ -23,7 +23,7 @@ export function SelectableCard({ title, subtitle, cover, layout, selected, locke
     <span
       aria-hidden="true"
       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-        locked ? 'border-line text-ink-muted' : selected ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
+        locked ? 'border-line text-ink-muted' : selected ? 'animate-pop border-accent bg-accent text-accent-on' : 'border-ink-muted text-transparent'
       }`}
     >
       {locked ? <Lock className="h-3 w-3" /> : <Check className="h-4 w-4" strokeWidth={3} />}

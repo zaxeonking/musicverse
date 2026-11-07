@@ -11,7 +11,7 @@ const MAX_OFFSET_PX = 96
 /** Sentuhan yang dimulai sangat dekat tepi layar dibiarkan untuk gestur Kembali Android. */
 const EDGE_PX = 24
 
-const ACCENT = '29, 185, 84'
+const ACCENT = 'var(--mv-accent, 29 185 84)'
 const SPRING = 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease-out, background-color 220ms ease-out'
 
 export type SwipeIcon = 'queue' | 'like' | 'unlike' | 'select' | 'unselect' | 'blocked'
@@ -67,8 +67,8 @@ function paint(item: HTMLElement, dx: number, armed: boolean, hintEl: HTMLElemen
   const progress = Math.min(1, Math.abs(dx) / SWIPE_MIN_PX)
   item.style.transition = 'none'
   item.style.transform = `translateX(${offset}px) scale(${1 - 0.02 * progress})`
-  item.style.boxShadow = `0 0 0 2px rgba(${ACCENT}, ${0.15 + 0.85 * progress * progress})`
-  item.style.backgroundColor = `rgba(${ACCENT}, ${armed ? 0.16 : 0.1 * progress})`
+  item.style.boxShadow = `0 0 0 2px rgb(${ACCENT} / ${0.15 + 0.85 * progress * progress})`
+  item.style.backgroundColor = `rgb(${ACCENT} / ${armed ? 0.16 : 0.1 * progress})`
   if (hintEl) {
     // Celah yang terbuka ada di sisi awal baris: ikon diam di tepi asal baris (baris bergeser `offset`), muncul makin jelas.
     const right = dx > 0

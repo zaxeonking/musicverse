@@ -535,7 +535,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-white/10 bg-[#242424]/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
+      className="pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-white/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]"
     >
       {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
       <button

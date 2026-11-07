@@ -652,7 +652,8 @@ export async function searchTrackByTitle(
  */
 export async function searchRelatedTracks(query: string, options: FetchPlaylistOptions = {}): Promise<TrackMeta[]> {
   try {
-    return await withImporterRetry('Pencarian terkait', () => searchSpotifyTracks(query, { signal: options.signal }, 10), options.signal)
+    const tracks = await withImporterRetry('Pencarian terkait', () => searchSpotifyTracks(query, { signal: options.signal }, 10), options.signal)
+    return tracks ?? []
   } catch {
     return []
   }

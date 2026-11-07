@@ -50,7 +50,7 @@ export default function RecapPage() {
             aria-selected={period === item.id}
             onClick={() => setPeriod(item.id)}
             className={`focus-ring h-9 rounded-full px-4 text-sm font-semibold transition-colors ${
-              period === item.id ? 'bg-accent text-black' : 'bg-raised text-ink'
+              period === item.id ? 'bg-accent text-accent-on' : 'bg-raised text-ink'
             }`}
           >
             {item.label}

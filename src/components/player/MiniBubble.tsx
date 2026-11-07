@@ -31,7 +31,7 @@ function ProgressRing({ error, loading }: { error: boolean; loading: boolean }) 
             cy="28"
             r={RING_R}
             fill="none"
-            stroke="#1DB954"
+            stroke="rgb(var(--mv-accent, 29 185 84))"
             strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={`${CIRC * 0.28} ${CIRC}`}
@@ -48,7 +48,7 @@ function ProgressRing({ error, loading }: { error: boolean; loading: boolean }) 
         cy="28"
         r={RING_R}
         fill="none"
-        stroke={error ? '#ff6b6b' : '#1DB954'}
+        stroke={error ? '#ff6b6b' : 'rgb(var(--mv-accent, 29 185 84))'}
         strokeWidth="3"
         strokeLinecap="round"
         strokeDasharray={CIRC}
@@ -184,7 +184,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
           transition: drag ? 'none' : 'transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
-        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-[#242424]/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl focus-ring"
+        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl focus-ring"
       >
         {/* Piringan: berputar saat playing, berhenti di posisi terakhir saat jeda. */}
         <span
@@ -199,7 +199,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
         {/* Lubang tengah piringan; berubah jadi ikon play saat jeda. */}
         <span
           aria-hidden="true"
-          className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-[#121212] transition-all ${
+          className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-bg transition-all ${
             paused || loading ? 'h-6 w-6 bg-black/70' : 'h-3 w-3'
           }`}
         >

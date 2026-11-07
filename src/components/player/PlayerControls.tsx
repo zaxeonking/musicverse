@@ -139,7 +139,7 @@ export function RepeatButton({ size = 'md', className = '' }: { size?: 'md' | 'l
       {badge && (
         <span
           aria-hidden="true"
-          className={`absolute flex items-center justify-center rounded-full bg-accent font-bold leading-none text-black ${
+          className={`absolute flex items-center justify-center rounded-full bg-accent font-bold leading-none text-accent-on ${
             big ? 'right-2 top-2 h-4 min-w-4 px-1 text-[10px]' : 'right-1.5 top-1.5 h-3.5 min-w-3.5 px-0.5 text-[9px] lg:right-0.5 lg:top-0.5'
           }`}
         >

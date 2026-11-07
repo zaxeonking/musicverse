@@ -256,7 +256,7 @@ export default function BottomNav() {
             WebkitBackdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
             backdropFilter: 'blur(16px) saturate(120%) brightness(0.55)',
           }}
-          className={`relative w-full max-w-md rounded-full border border-white/[0.12] bg-[#161616]/85 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),inset_0_0_18px_rgba(255,255,255,0.05)] supports-[backdrop-filter]:bg-[#161616]/60 ${
+          className={`relative w-full max-w-md rounded-full border border-white/[0.12] bg-card/85 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45),0_2px_8px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.06),inset_0_0_18px_rgba(255,255,255,0.05)] supports-[backdrop-filter]:bg-card/60 ${
             keyboardOpen ? 'pointer-events-none' : 'pointer-events-auto'
           }`}
         >
@@ -280,7 +280,7 @@ export default function BottomNav() {
                   width: '4.5rem',
                   opacity: active >= 0 || pressed ? 1 : 0,
                   backgroundImage:
-                    'radial-gradient(circle at 50% 38%, rgba(29,185,84,0.38) 0%, rgba(29,185,84,0.12) 38%, transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
+                    'radial-gradient(circle at 50% 38%, rgb(var(--mv-accent, 29 185 84) / 0.38) 0%, rgb(var(--mv-accent, 29 185 84) / 0.12) 38%, transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
                 }}
                 className={`h-full rounded-2xl border bg-accent/[0.12] transition-[opacity,box-shadow,border-color] duration-300 will-change-transform motion-reduce:transition-none ${
                   pressed

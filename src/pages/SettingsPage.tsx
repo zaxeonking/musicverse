@@ -1,4 +1,4 @@
-import { Award, ChevronRight, CircleHelp, Download, FileText, HardDriveDownload, ListMusic, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Award, ChevronRight, CircleHelp, Download, FileText, HardDriveDownload, ListMusic, Palette, Play, RefreshCw, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { isQuizPassed, startTour } from '../tour/tourStore'
 import { isNativeApp } from '../native/platform'
@@ -15,6 +15,7 @@ const CATEGORIES: readonly Category[] = [
   { to: '/settings/downloads', label: 'Unduhan', hint: 'Syarat unduhan: Wi-Fi, saat dicas', icon: Download },
   { to: '/settings/playback', label: 'Pemutaran', hint: 'Mode langsung (eksperimen)', icon: Play },
   { to: '/settings/playlist', label: 'Playlist', hint: 'Tambah otomatis, konfirmasi pindah lagu', icon: ListMusic },
+  { to: '/settings/theme', label: 'Tema', hint: 'Warna aksen dan latar, tema siap pakai atau kustom', icon: Palette },
   { to: '/settings/equalizer', label: 'Equalizer', hint: '10-band dengan preset', icon: SlidersHorizontal },
   { to: '/settings/backup', label: 'Cadangan', hint: 'Simpan dan pulihkan Koleksi, playlist, riwayat', icon: HardDriveDownload },
   { to: '/settings/update', label: 'Pembaruan', hint: 'Cek apakah ada versi aplikasi yang baru', icon: RefreshCw },

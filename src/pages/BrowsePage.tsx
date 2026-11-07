@@ -145,7 +145,7 @@ export default function BrowsePage() {
                 role="tab"
                 aria-selected={tab === t}
                 onClick={() => setTab(t)}
-                className={`focus-ring h-9 rounded-full px-4 text-sm font-medium ${tab === t ? 'bg-accent text-black' : 'bg-raised text-ink'}`}
+                className={`focus-ring h-9 rounded-full px-4 text-sm font-medium ${tab === t ? 'bg-accent text-accent-on' : 'bg-raised text-ink'}`}
               >
                 {t === 'artist' ? 'Artis' : 'Album'}
               </button>

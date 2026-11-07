@@ -8,6 +8,7 @@ import { initOffline } from './native/offline'
 import { initNativeStorage } from './native/nativeStorage'
 import { startLyricsBackfill } from './native/offlineLyrics'
 import { isNativeApp } from './native/platform'
+import { initTheme } from './utils/theme'
 
 /**
  * MusicVerse hanya berupa aplikasi (APK). Di dalam APK: muat data dari Android/data/<paket>/files/data sebelum render
@@ -45,6 +46,7 @@ async function bootstrap() {
     document.documentElement.classList.add('native-app')
     installNativeBackButton()
     await initNativeStorage()
+    initTheme()
     void initOffline().then(initDownloads).then(startLyricsBackfill)
     const { default: App } = await import('./App')
     root.render(

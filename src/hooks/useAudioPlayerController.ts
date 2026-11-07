@@ -104,7 +104,7 @@ interface Preload {
 /** Berapa lagu di depan yang URL-nya di-resolve lebih awal dan diserahkan ke native (pindah lagu tanpa JS saat WebView beku). */
 const NATIVE_UPCOMING_DEPTH = 20
 /** Berapa lagu sebelum lagu aktif yang diserahkan ke native untuk tombol Sebelumnya saat JS beku. */
-const NATIVE_PREVIOUS_DEPTH = 3
+const NATIVE_PREVIOUS_DEPTH = 20
 /** URL hasil resolve yang lebih tua dari ini tidak diserahkan lagi ke native (link YouTube kedaluwarsa setelah beberapa jam). */
 const UPCOMING_MAX_AGE_MS = 90 * 60_000
 
@@ -1728,32 +1728,43 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       publish([], currentIndex)
       return
     }
+    type PrevItem = Parameters<typeof audioEngine.setUpcoming>[1][number]
+    const buildPrevItem = (prev: number, track: PlaylistTrack, info: PlaybackInfo): PrevItem => ({
+      index: prev,
+      url: info.audioUrl,
+      cacheKey: diskCacheKey(track, info),
+      title: track.title,
+      artist: track.artists ?? '',
+      album: track.album ?? '',
+      cover: track.cover ?? '',
+      durationMs: Math.round((info.probedDuration ?? parseDurationText(track.duration ?? '') ?? 0) * 1000),
+      norm: normGainFor(info.loudnessDb),
+      trackId: track.id,
+      trackUrl: track.url,
+      ytId: info.ytVideoId,
+    })
+    // Lagu sebelumnya yang tautannya kedaluwarsa / belum ada di cache: di-resolve ulang di latar (urut dari yang terdekat).
+    const prevPending: Array<{ index: number; track: PlaylistTrack }> = []
     {
       let back: number | null = currentIndex
       const seen = new Set<number>([currentIndex])
       const collected: typeof previousItems = []
+      let stillFresh = true
       for (let i = 0; i < NATIVE_PREVIOUS_DEPTH; i += 1) {
         const prev: number | null = getPreviousIndex(queue, back, shuffleOrder)
         if (prev === null || seen.has(prev) || !queue[prev]) break
         const track = queue[prev]
-        const cachedPrev = upcomingCacheRef.current.get(track.id)
-        if (!cachedPrev || Date.now() - cachedPrev.at > UPCOMING_MAX_AGE_MS) break // tanpa tautan yang masih segar: berhenti di sini
         seen.add(prev)
-        collected.unshift({
-          index: prev,
-          url: cachedPrev.info.audioUrl,
-          cacheKey: diskCacheKey(track, cachedPrev.info),
-          title: track.title,
-          artist: track.artists ?? '',
-          album: track.album ?? '',
-          cover: track.cover ?? '',
-          durationMs: Math.round((cachedPrev.info.probedDuration ?? parseDurationText(track.duration ?? '') ?? 0) * 1000),
-          norm: normGainFor(cachedPrev.info.loudnessDb),
-          trackId: track.id,
-          trackUrl: track.url,
-          ytId: cachedPrev.info.ytVideoId,
-        })
         back = prev
+        if (stillFresh) {
+          const cachedPrev = upcomingCacheRef.current.get(track.id)
+          if (cachedPrev && Date.now() - cachedPrev.at <= UPCOMING_MAX_AGE_MS) {
+            collected.unshift(buildPrevItem(prev, track, cachedPrev.info))
+            continue
+          }
+          stillFresh = false
+        }
+        prevPending.push({ index: prev, track })
       }
       previousItems = collected
     }
@@ -1839,6 +1850,23 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
           publish([], currentIndex, tail)
         } else {
           publish([...items], currentIndex, tail)
+        }
+        // Lagu sebelumnya yang kedaluwarsa: ambil tautan barunya satu per satu, lalu serahkan ulang ke native.
+        for (const { index, track } of prevPending) {
+          if (controller.signal.aborted) return
+          let cached = upcomingCacheRef.current.get(track.id)
+          if (!cached || Date.now() - cached.at > UPCOMING_MAX_AGE_MS) {
+            try {
+              const info = await fetchPlaybackInfo(track, { signal: controller.signal })
+              cached = { info, at: Date.now() }
+              upcomingCacheRef.current.set(track.id, cached)
+            } catch {
+              break // yang gagal menghentikan daftar di situ; dicoba lagi pada pemicu berikutnya
+            }
+          }
+          if (controller.signal.aborted) return
+          previousItems = [buildPrevItem(index, track, cached.info), ...previousItems]
+          publish(items.length === 0 ? [] : [...items], currentIndex, tail)
         }
       }
     })()

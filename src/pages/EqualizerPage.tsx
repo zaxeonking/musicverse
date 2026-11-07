@@ -46,7 +46,7 @@ export default function EqualizerPage() {
               aria-checked={eq.preset === name}
               onClick={() => setEqPreset(name)}
               className={`focus-ring h-9 shrink-0 rounded-full px-4 text-sm font-medium ${
-                eq.preset === name ? 'bg-accent text-black' : 'bg-raised text-ink'
+                eq.preset === name ? 'bg-accent text-accent-on' : 'bg-raised text-ink'
               }`}
             >
               {name}

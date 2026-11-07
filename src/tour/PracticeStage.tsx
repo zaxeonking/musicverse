@@ -158,7 +158,7 @@ function SwipePlaylistPractice({ onComplete }: { onComplete: () => void }) {
           <span
             aria-hidden="true"
             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-              selected ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
+              selected ? 'animate-pop border-accent bg-accent text-accent-on' : 'border-ink-muted text-transparent'
             }`}
           >
             <Check className="h-4 w-4" strokeWidth={3} />
@@ -374,7 +374,7 @@ function SelectTracksPractice({ onComplete }: { onComplete: () => void }) {
                   <span
                     aria-hidden="true"
                     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                      on ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
+                      on ? 'animate-pop border-accent bg-accent text-accent-on' : 'border-ink-muted text-transparent'
                     }`}
                   >
                     <Check className="h-4 w-4" strokeWidth={3} />
