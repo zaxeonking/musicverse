@@ -265,22 +265,12 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
   })
 
-  /** Kartu meluncur ke atas sambil memudar, bersamaan dengan pemutar penuh yang naik menutupinya. */
+  /**
+   * Buka pemutar penuh: kartu tetap di tempat (sampulnya "terbang" membesar jadi pemutar penuh, lihat FullPlayer).
+   * Bila dibuka lewat seretan ke atas, kartu kembali halus ke posisinya selagi pemutar penuh memudar masuk.
+   */
   const openFull = () => {
-    const el = cardRef.current
-    if (el) {
-      el.style.transition = 'transform 260ms cubic-bezier(0.22,1,0.36,1), opacity 220ms ease-in'
-      el.style.transform = 'translate3d(0, -48px, 0) scale(1.06)'
-      el.style.opacity = '0'
-      window.clearTimeout(resetTimer.current)
-      // Setelah pemutar penuh menutupi layar, kembalikan kartu agar muncul lagi saat pemutar ditutup.
-      resetTimer.current = window.setTimeout(() => {
-        if (!cardRef.current) return
-        cardRef.current.style.transition = 'none'
-        cardRef.current.style.transform = ''
-        cardRef.current.style.opacity = ''
-      }, 600)
-    }
+    springBack()
     onOpen()
   }
 
@@ -420,7 +410,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           aria-label={`Buka pemutar penuh (tahan lama untuk opsi lagu): ${now.title}${now.artists ? `, ${now.artists}` : ''}`}
           className="flex min-w-0 items-center gap-3 rounded-md text-left transition-opacity active:opacity-80 focus-ring lg:row-span-2"
         >
-          <div className="w-11 shrink-0 lg:w-14">
+          <div data-mini-cover className="w-11 shrink-0 lg:w-14">
             <CoverArt cover={now.cover} src={now.coverSrc} />
           </div>
           <span className="min-w-0">

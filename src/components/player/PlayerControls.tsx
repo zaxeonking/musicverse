@@ -45,6 +45,34 @@ export function describeMainButton(status: PlaybackStatus): { kind: ButtonKind; 
 
 const FOCUS = 'focus-ring'
 
+/**
+ * Ikon tombol utama: semua ikon ditumpuk, yang aktif memudar + membesar masuk, yang lain memudar + mengecil + berputar tipis.
+ * Jadi Play <-> Pause berganti halus (bukan loncat), termasuk ke/dari spinner.
+ */
+function MainIcon({ kind, className }: { kind: ButtonKind; className: string }) {
+  const layer = (on: boolean) =>
+    `absolute inset-0 flex items-center justify-center transition-[opacity,transform] duration-200 ease-in-out motion-reduce:transition-none ${
+      on ? 'scale-100 rotate-0 opacity-100' : 'scale-50 -rotate-90 opacity-0'
+    }`
+  const svg = 'h-full w-full'
+  return (
+    <span className={`relative block ${className}`} aria-hidden="true">
+      <span className={layer(kind === 'play')}>
+        <Play className={svg} fill="currentColor" />
+      </span>
+      <span className={layer(kind === 'pause')}>
+        <Pause className={svg} fill="currentColor" />
+      </span>
+      <span className={layer(kind === 'busy')}>
+        <Loader2 className={`${svg} animate-spin motion-reduce:animate-none`} />
+      </span>
+      <span className={layer(kind === 'retry')}>
+        <RotateCw className={svg} />
+      </span>
+    </span>
+  )
+}
+
 interface TransportControlsProps {
   /** `lg` dipakai di FullPlayer lama; `xl` = tombol putar besar bercahaya. */
   size?: 'md' | 'lg' | 'xl'
@@ -80,7 +108,7 @@ export function ShuffleButton({ size = 'md', className = '' }: { size?: 'md' | '
       aria-pressed={shuffle}
       aria-label={shuffle ? 'Acak aktif, ketuk untuk menonaktifkan' : 'Acak nonaktif, ketuk untuk mengaktifkan'}
       title={shuffle ? 'Acak: aktif' : 'Acak: nonaktif'}
-      className={`relative items-center justify-center rounded-full transition-colors active:bg-white/10 ${
+      className={`relative items-center justify-center rounded-full press active:bg-white/10 ${
         big ? 'h-12 w-12' : 'h-11 w-11 lg:h-9 lg:w-9'
       } ${shuffle ? 'text-accent' : 'text-ink-muted hover:text-ink'} ${FOCUS} ${className}`}
     >
@@ -103,7 +131,7 @@ export function RepeatButton({ size = 'md', className = '' }: { size?: 'md' | 'l
       aria-label={label}
       title={label}
       data-repeat-mode={repeat}
-      className={`relative items-center justify-center rounded-full transition-colors active:bg-white/10 ${
+      className={`relative items-center justify-center rounded-full press active:bg-white/10 ${
         big ? 'h-12 w-12' : 'h-11 w-11 lg:h-9 lg:w-9'
       } ${active ? 'text-accent' : 'text-ink-muted hover:text-ink'} ${FOCUS} ${className}`}
     >
@@ -134,7 +162,6 @@ export function TransportControls({ size = 'md', className = '', leading, traili
   const middle = xl ? 'h-20 w-20' : big ? 'h-16 w-16' : 'h-12 w-12 lg:h-10 lg:w-10'
   const icon = xl ? 'h-9 w-9' : big ? 'h-7 w-7' : 'h-5 w-5'
   const sideIcon = xl ? 'h-8 w-8' : big ? 'h-7 w-7' : 'h-5 w-5'
-  const MainIcon = main.kind === 'pause' ? Pause : main.kind === 'busy' ? Loader2 : main.kind === 'retry' ? RotateCw : Play
 
   // Previous tetap berguna di lagu pertama bila bisa mengulang dari 0:00.
   const canPrevious = hasPrevious || (seekable && (status === 'playing' || status === 'paused' || status === 'buffering'))
@@ -148,7 +175,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         onClick={playPrevious}
         disabled={!canPrevious}
         aria-label="Lagu sebelumnya"
-        className={`flex ${side} items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
+        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
       >
         <SkipBack className={sideIcon} fill="currentColor" aria-hidden="true" />
       </button>
@@ -160,13 +187,9 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         aria-label={main.label}
         aria-busy={main.kind === 'busy'}
         data-player-status={status}
-        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black ${xl ? 'shadow-[0_0_36px_rgba(255,255,255,0.35)]' : ''} transition-transform hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
+        className={`flex ${middle} items-center justify-center rounded-full bg-ink text-black ${xl ? 'shadow-[0_0_36px_rgba(255,255,255,0.35)]' : ''} transition-[transform,box-shadow] duration-150 ease-in-out hover:scale-105 active:scale-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:active:scale-100 motion-reduce:transition-none ${FOCUS}`}
       >
-        <MainIcon
-          className={`${icon} ${main.kind === 'busy' ? 'animate-spin motion-reduce:animate-none' : ''}`}
-          fill={main.kind === 'busy' || main.kind === 'retry' ? 'none' : 'currentColor'}
-          aria-hidden="true"
-        />
+        <MainIcon kind={main.kind} className={icon} />
       </button>
 
       <button
@@ -174,7 +197,7 @@ export function TransportControls({ size = 'md', className = '', leading, traili
         onClick={playNext}
         disabled={!hasNext}
         aria-label="Lagu berikutnya"
-        className={`flex ${side} items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
+        className={`flex ${side} items-center justify-center rounded-full text-ink-muted press hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-ink-muted ${FOCUS}`}
       >
         <SkipForward className={sideIcon} fill="currentColor" aria-hidden="true" />
       </button>
@@ -236,7 +259,7 @@ export function QueueButton({ onClick, size = 'sm', className = '' }: QueueButto
       title="Antrean"
       className={`${
         size === 'lg' ? 'h-11 w-11 hover:bg-white/10 hover:text-ink active:bg-white/15' : 'h-11 w-11 hover:text-accent active:bg-white/10 lg:h-9 lg:w-9'
-      } items-center justify-center rounded-full text-ink-muted transition-colors ${FOCUS} ${className}`}
+      } press items-center justify-center rounded-full text-ink-muted ${FOCUS} ${className}`}
     >
       <ListMusic className={size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'} aria-hidden="true" />
     </button>

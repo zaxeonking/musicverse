@@ -1,5 +1,7 @@
-import { Download, ListChecks, ListEnd, ListPlus, Play, RotateCw } from 'lucide-react'
+import { Download, ListChecks, ListEnd, ListPlus, RotateCw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { usePlaylistPlayback } from '../../hooks/usePlaylistPlayback'
+import type { PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isSafeHttpUrl } from '../../utils/spotifyUrl'
 import CoverArt from '../ui/CoverArt'
@@ -29,6 +31,8 @@ interface PlaylistHeaderProps {
   title: string
   cover: string
   trackCount: number
+  /** Lagu playlist ini: tombol utama menjadi Jeda / Lanjutkan saat lagu aktif ada di daftar ini. */
+  tracks: readonly PlaylistTrack[]
   /** True jika playlist dipulihkan dari penyimpanan perangkat. */
   fromCache?: boolean
   /** Play All: memutar seluruh lagu playlist berurutan (lihat `playAll` di audio engine). */
@@ -53,6 +57,7 @@ export default function PlaylistHeader({
   title,
   cover,
   trackCount,
+  tracks,
   onPlayAll,
   playAllDisabled = false,
   onReload,
@@ -63,6 +68,7 @@ export default function PlaylistHeader({
   onAddToQueue,
 }: PlaylistHeaderProps) {
   const fallback = useMemo(() => fallbackCover(title), [title])
+  const playback = usePlaylistPlayback(tracks)
 
   return (
     <header className="relative isolate overflow-hidden rounded-lg bg-card p-4 sm:p-6">
@@ -80,7 +86,7 @@ export default function PlaylistHeader({
             {trackCount} lagu
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
-            <RoundAction primary fill icon={Play} label="Putar semua" onClick={onPlayAll} disabled={trackCount === 0 || playAllDisabled} />
+            <RoundAction primary fill icon={playback.icon} label={playback.label} onClick={() => playback.onPress(onPlayAll)} disabled={trackCount === 0 || playAllDisabled} />
             {onAddAsPlaylist && (
               <RoundAction
                 icon={addedAsPlaylist ? ListChecks : ListPlus}

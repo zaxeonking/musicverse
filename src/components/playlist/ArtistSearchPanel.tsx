@@ -1,8 +1,9 @@
-import { ArrowLeft, ChevronRight, ListPlus, Loader2, Play, Plus, Shuffle, UserRound } from 'lucide-react'
+import { ArrowLeft, ChevronRight, ListPlus, Loader2, Plus, Shuffle, UserRound } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { usePlaylistPlayback } from '../../hooks/usePlaylistPlayback'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import type { AlbumHit } from '../../services/artistApi'
 import type { PlaylistTrack } from '../../types/spotify'
@@ -69,6 +70,8 @@ export default function ArtistSearchPanel() {
     () => (sort === 'az' ? [...songs].sort((a, b) => a.title.localeCompare(b.title, 'id', { sensitivity: 'base' })) : songs),
     [songs, sort],
   )
+  // Hook harus dipanggil sebelum return dini di bawah.
+  const playback = usePlaylistPlayback(album !== null ? albumSongs : sorted)
 
   // Back (termasuk Back Android): dari album kembali ke daftar album, dari halaman artis kembali ke daftar artis.
   // Dua lapis; hanya yang paling atas yang menanggapi.
@@ -149,7 +152,7 @@ export default function ArtistSearchPanel() {
   const disabled = viewSongs.length === 0
   const actions = (
     <div className="flex items-center gap-3">
-      <RoundAction primary fill icon={Play} label="Putar semua" disabled={disabled} onClick={() => player.playList(viewSongs, 0)} />
+      <RoundAction primary fill icon={playback.icon} label={playback.label} disabled={disabled} onClick={() => playback.onPress(() => player.playList(viewSongs, 0))} />
       <RoundAction
         icon={Shuffle}
         label="Acak"

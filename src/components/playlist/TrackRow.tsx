@@ -105,7 +105,10 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         {number}
       </span>
 
-      <CoverArt cover={fallback} src={track.cover} />
+      {/* Lagu yang sudah ada di playlist: sampul ikut sedikit redup (tetap jelas), judul abu-abu terang. */}
+      <div className={inPlaylists.length > 0 && !highlighted ? 'opacity-70' : undefined}>
+        <CoverArt cover={fallback} src={track.cover} />
+      </div>
 
       <button
         type="button"
@@ -114,7 +117,12 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         disabled={locked}
         className="min-w-0 rounded-sm text-left focus-ring"
       >
-        <p title={track.title} className={`truncate text-base font-medium ${highlighted ? 'text-accent' : 'text-ink'}`}>
+        <p
+          title={track.title}
+          className={`truncate text-base ${
+            highlighted ? 'font-medium text-accent' : inPlaylists.length > 0 ? 'font-normal text-ink-muted' : 'font-medium text-ink'
+          }`}
+        >
           {inPlaylists.length > 0 && (
             <CheckCircle2 className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" aria-label="Sudah ada di playlist" />
           )}
@@ -150,7 +158,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         disabled={locked}
         aria-label={playLabel}
         aria-busy={activity === 'loading'}
-        className={`flex h-11 w-11 items-center justify-center justify-self-end rounded-full transition-colors hover:bg-white/10 active:bg-white/15 focus-ring ${
+        className={`flex h-11 w-11 items-center justify-center justify-self-end rounded-full press hover:bg-white/10 active:bg-white/15 focus-ring ${
           highlighted ? 'text-accent' : 'text-ink-muted hover:text-accent'
         }`}
       >

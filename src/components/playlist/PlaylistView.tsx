@@ -158,6 +158,7 @@ export default function PlaylistView() {
         title={playlist.title}
         cover={playlist.cover}
         trackCount={playlist.tracks.length}
+        tracks={playlist.tracks}
         fromCache={fromCache}
         onPlayAll={() => player.playAll(playlist.tracks)}
         playAllDisabled={checking}

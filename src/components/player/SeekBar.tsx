@@ -68,6 +68,15 @@ export default function SeekBar({ size = 'md', stacked = false, className = '' }
   const shown = dragValue ?? held ?? currentTime
   const percent = duration && duration > 0 ? Math.min(100, Math.max(0, (shown / duration) * 100)) : 0
   const trackHeight = size === 'sm' ? 'h-1' : 'h-1.5'
+  // Progres bergerak mulus: waktu datang ~4x/detik, jadi tiap pembaruan di-interpolasi linear selama ~satu selang.
+  // Tanpa transisi saat digeser jari atau saat posisi mundur jauh (ganti lagu / seek ke belakang), supaya tidak "menyapu" balik.
+  const lastPercent = useRef(percent)
+  const smooth = dragValue === null && percent >= lastPercent.current - 0.5
+  useEffect(() => {
+    lastPercent.current = percent
+  }, [percent])
+  const glide = smooth ? 'transition-[width] duration-300 ease-linear motion-reduce:transition-none' : ''
+  const glideLeft = smooth ? 'transition-[left,opacity] duration-300 ease-linear motion-reduce:transition-none' : 'transition-opacity'
 
   const commit = () => {
     const target = dragRef.current
@@ -99,7 +108,7 @@ export default function SeekBar({ size = 'md', stacked = false, className = '' }
         <div
           className={`${trackHeight} w-full overflow-hidden rounded-full bg-raised group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-accent`}
         >
-          <div className="h-full rounded-full bg-ink group-focus-within:bg-accent group-hover:bg-accent" style={{ width: `${percent}%` }} />
+          <div className={`h-full rounded-full bg-ink group-focus-within:bg-accent group-hover:bg-accent ${glide}`} style={{ width: `${percent}%` }} />
         </div>
 
         {/* Pegangan terlihat: selalu di pemutar penuh (sentuh), saat hover/fokus di mini player. */}
@@ -107,7 +116,7 @@ export default function SeekBar({ size = 'md', stacked = false, className = '' }
           <span
             aria-hidden="true"
             style={{ left: `${percent}%` }}
-            className={`pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
+            className={`pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ${glideLeft} group-focus-within:opacity-100 group-hover:opacity-100 ${
               size === 'sm' ? 'opacity-0 [@media(hover:none)]:opacity-100' : 'opacity-100'
             }`}
           />

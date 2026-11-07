@@ -3,6 +3,13 @@
 @tailwind utilities;
 
 @layer base {
+  /* Satu easing untuk seluruh gerakan UI (ease-in-out halus); --ease-hero untuk gerakan besar (cover mini <-> penuh). */
+  :root {
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-hero: cubic-bezier(0.45, 0, 0.15, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
   html {
     color-scheme: dark;
     -webkit-tap-highlight-color: transparent;
@@ -81,7 +88,11 @@
 
   /* Tombol ikon bulat 44px. */
   .icon-btn {
-    @apply inline-flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
+    @apply inline-flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-full text-ink-muted hover:text-ink active:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
+    transition: transform 150ms var(--ease), color 150ms var(--ease), background-color 150ms var(--ease), opacity 150ms var(--ease);
+  }
+  .icon-btn:not(:disabled):active {
+    transform: scale(0.9);
   }
 
   /* Placeholder loading. Statis bila pengguna meminta gerakan dikurangi. */
@@ -96,6 +107,172 @@
     background-size: 200% 100%;
     @apply animate-shimmer;
   }
+}
+
+/* ---------- Animasi UI ---------- */
+@layer components {
+  /* Tombol dengan umpan balik tekan: mengecil sedikit saat ditekan, kembali halus saat dilepas. */
+  .press {
+    transition:
+      transform 150ms var(--ease),
+      color 150ms var(--ease),
+      background-color 150ms var(--ease),
+      opacity 150ms var(--ease);
+  }
+  .press:not(:disabled):active {
+    transform: scale(0.9);
+  }
+
+  /* Pemutar penuh: elemen masuk bertahap (fade + naik sedikit); keluar lebih cepat, tanpa jeda. */
+  .fp-item {
+    animation: fp-rise 380ms var(--ease) both;
+    animation-delay: var(--fp-delay, 0ms);
+  }
+  [data-closing='true'] .fp-item {
+    animation: fp-out 160ms var(--ease) both;
+    animation-delay: 0ms;
+  }
+  .fp-bg {
+    animation: fp-bg-in 360ms var(--ease) both;
+  }
+
+  /* Perpindahan halaman: geser horizontal lembut. --page-dx = +1 (maju, dari kanan) atau -1 (mundur, dari kiri). */
+  .page-enter {
+    animation: page-enter 260ms var(--ease) both;
+  }
+  .page-exit {
+    animation: page-exit 130ms var(--ease) both;
+    pointer-events: none;
+  }
+}
+
+@keyframes fp-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fp-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+@keyframes fp-bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(var(--page-dx, 1) * 28px), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes page-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(calc(var(--page-dx, 1) * -20px), 0, 0);
+  }
+}
+@keyframes heart-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  55% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Mini player: sampulnya disembunyikan selama pemutar penuh terbuka (sampul "terbang" dari/ke posisi ini). */
+html[data-fp-open] [data-mini-cover] {
+  visibility: hidden;
+}
+
+/* ---------- Splash ---------- */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #121212;
+  transition: opacity 420ms var(--ease);
+}
+#splash.splash-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+#splash svg {
+  width: 84px;
+  height: 84px;
+  animation: splash-logo 520ms var(--ease) both;
+}
+#splash rect {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: splash-bar 640ms var(--ease) both;
+}
+#splash rect:nth-child(2) {
+  animation-delay: 60ms;
+}
+#splash rect:nth-child(3) {
+  animation-delay: 120ms;
+}
+#splash rect:nth-child(4) {
+  animation-delay: 180ms;
+}
+@keyframes splash-logo {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes splash-bar {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: none;
+  }
+}
+/* Beranda muncul dengan fade-in begitu splash mulai memudar. */
+html.has-splash #root {
+  opacity: 0;
+}
+html.has-splash.app-ready #root {
+  opacity: 1;
+  transition: opacity 480ms var(--ease) 80ms;
+}
+html.no-splash #splash {
+  display: none;
 }
 
 @layer utilities {

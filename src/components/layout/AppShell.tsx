@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { useCallback, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useEnterClosesKeyboard } from '../../hooks/useEnterClosesKeyboard'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import OfflineBanner from './OfflineBanner'
+import PageTransition from './PageTransition'
 import UpdateBanner from './UpdateBanner'
 import PlayerDock from '../player/PlayerDock'
 import BottomNav from './BottomNav'
@@ -30,10 +31,10 @@ export default function AppShell() {
   const mainRef = useRef<HTMLElement>(null)
   useEnterClosesKeyboard()
 
-  // Area scroll ada di <main>, bukan window: kembalikan ke atas saat pindah halaman.
-  useEffect(() => {
+  // Area scroll ada di <main>, bukan window: kembalikan ke atas saat halaman baru terpasang (lihat PageTransition).
+  const scrollToTop = useCallback(() => {
     mainRef.current?.scrollTo({ top: 0 })
-  }, [pathname])
+  }, [])
 
   return (
     // --dock-offset = ruang yang dipesan bottom nav melayang di dasar layar (bar 4rem + jarak 0,5rem / safe area). Dipakai padding
@@ -63,16 +64,18 @@ export default function AppShell() {
           tabIndex={-1}
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] outline-none lg:pr-0"
         >
-          {/* key = pathname: transisi ringan hanya saat berpindah halaman. */}
-          <div key={pathname} className={`mx-auto w-full max-w-6xl animate-page-in px-4 pt-2 lg:px-8 lg:pt-8 ${
+          {/* Transisi geser horizontal antar halaman (halaman lama memudar, lalu halaman baru masuk). */}
+          <PageTransition
+            pathname={pathname}
+            onSwap={scrollToTop}
+            className={`mx-auto w-full max-w-6xl px-4 pt-2 lg:px-8 lg:pt-8 ${
               playerActive
                 ? compactDock
                   ? 'pb-[calc(6rem+var(--dock-offset))] lg:pb-28'
                   : 'pb-[calc(13rem+var(--dock-offset))] lg:pb-56'
                 : 'pb-[calc(1.5rem+var(--dock-offset))] lg:pb-10'
-            }`}>
-            <Outlet />
-          </div>
+            }`}
+          />
         </main>
         <PlayerDock />
         <BottomNav />

@@ -20,8 +20,42 @@
       rel="stylesheet"
     />
     <title>MusicVerse | Pemutar musik untuk Android</title>
+    <style>
+      /* Splash tampil sebelum CSS/JS aplikasi dimuat (hanya di APK, lihat skrip di bawah). */
+      html.has-splash body { background: #121212; }
+    </style>
+    <script>
+      // Splash hanya untuk APK; situs web biasa tidak memakainya. Pengaman: bila aplikasi gagal memudarkannya, hilang sendiri setelah 10 detik.
+      try {
+        var c = window.Capacitor
+        var native = !!(c && c.isNativePlatform && c.isNativePlatform())
+        document.documentElement.classList.add(native ? 'has-splash' : 'no-splash')
+        if (native) {
+          setTimeout(function () {
+            var s = document.getElementById('splash')
+            document.documentElement.classList.add('app-ready')
+            if (s) {
+              s.classList.add('splash-hide')
+              setTimeout(function () { s.remove() }, 600)
+            }
+          }, 10000)
+        }
+      } catch (e) {
+        document.documentElement.classList.add('no-splash')
+      }
+    </script>
   </head>
   <body>
+    <div id="splash" aria-hidden="true">
+      <svg viewBox="0 0 32 32">
+        <g fill="#1DB954">
+          <rect x="6" y="14" width="3.5" height="8" rx="1.75" />
+          <rect x="11.5" y="9" width="3.5" height="18" rx="1.75" />
+          <rect x="17" y="5" width="3.5" height="22" rx="1.75" />
+          <rect x="22.5" y="11" width="3.5" height="12" rx="1.75" />
+        </g>
+      </svg>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

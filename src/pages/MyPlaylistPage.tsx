@@ -11,6 +11,7 @@ import { useLibrary } from '../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsContext'
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
+import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback'
 import { useLongPress } from '../hooks/useLongPress'
 import { OFFLINE_BLOCK_TEXT, useOfflineBlock } from '../hooks/useOfflineBlock'
 import { useTrackSwipe } from '../hooks/useTrackSwipe'
@@ -141,6 +142,7 @@ export default function MyPlaylistPage() {
   const { removePlaylist: removeSaved } = useLibrary()
   const { showToast } = useTrackMenu()
   const player = useAudioPlayer()
+  const playback = usePlaylistPlayback(getPlaylist(id)?.tracks ?? [])
   const playlist = getPlaylist(id)
   const builtIn = playlist ? isLikedId(playlist.id) : false
   const [renaming, setRenaming] = useState(false)
@@ -326,7 +328,7 @@ export default function MyPlaylistPage() {
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
-        <RoundAction primary fill icon={Play} label="Putar semua" onClick={() => player.playList(tracks, 0)} disabled={tracks.length === 0} />
+        <RoundAction primary fill icon={playback.icon} label={playback.label} onClick={() => playback.onPress(() => player.playList(tracks, 0))} disabled={tracks.length === 0} />
         {isNativeApp() && (
           <RoundAction
             icon={Download}

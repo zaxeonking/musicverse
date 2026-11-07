@@ -37,3 +37,9 @@
 ## Teknis
 - Baru: `src/native/radioExtras.ts`. Diubah: `useAudioPlayerController.ts`, `AutoRadioSync.tsx`, `musicVerseNative.ts` (`NativeRadioExtra`, 2 metode), `MusicVerseNativePlugin.java` (2 metode), `package.json` (0.5.55).
 - **Perlu build APK baru** (metode plugin baru). APK lama dengan JS baru: `radioExtrasRead` UNIMPLEMENTED -> daftar kosong, perilaku lama. Belum dibuild / diuji di perangkat; sintaks TS dicek (transpile), Java hanya keseimbangan kurung.
+
+# 0.5.42 (UI) — Tombol utama playlist ikut keadaan pemutar
+- Tombol hijau besar (Putar semua) kini ikut keadaan pemutar: bila lagu yang sedang aktif ada di daftar itu, ikonnya menjadi **Jeda** saat memutar (ketuk = jeda) dan kembali **Putar** saat dijeda (ketuk = lanjut dari posisi terakhir, bukan mengulang dari awal). Daftar lain / pemutar berhenti / selesai / galat: Putar semua seperti biasa.
+- Berlaku di: halaman Playlist saya (`MyPlaylistPage`), hasil pencarian / playlist di Beranda (`PlaylistHeader` lewat `PlaylistView`), dan halaman artis / album (`ArtistSearchPanel`).
+- Baru: `src/hooks/usePlaylistPlayback.ts`. Label tombol (pembaca layar) ikut berubah: Jeda / Lanjutkan / Putar semua.
+- Catatan: penentuan "daftar ini sedang diputar" memakai id lagu aktif; lagu yang sama di dua playlist membuat kedua tombol ikut menjadi Jeda. Hanya sintaks TS yang dicek; belum dicoba di perangkat.

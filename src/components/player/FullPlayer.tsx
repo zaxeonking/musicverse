@@ -1,6 +1,6 @@
 import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { AlertCircle, ChevronDown, ChevronUp, Heart, ListMusic, Mic2, MoreVertical } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type TouchEvent } from 'react'
 import { useLibrary } from '../../context/LibraryContext'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
@@ -20,13 +20,72 @@ import CrossfadeSheet, { CrossfadeButton } from './CrossfadeSheet'
 import { isNativeApp } from '../../native/platform'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
+/** Durasi & easing gerakan pemutar penuh <-> mini player (satu animasi berkelanjutan). */
+const OPEN_MS = 440
+const CLOSE_MS = 380
+const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+const EASE_HERO = 'cubic-bezier(0.45, 0, 0.15, 1)'
+
+const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+/** Jeda masuk bertahap (ms) untuk elemen pemutar penuh. */
+const delay = (ms: number) => ({ '--fp-delay': `${ms}ms` }) as CSSProperties
+/** Sampul kecil di mini player: titik awal/akhir terbang sampul. */
+const miniCoverRect = () => {
+  const rect = document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect()
+  return rect && rect.width > 0 ? rect : null
+}
+
+/** Ikon hati: outline <-> terisi berganti halus, plus membal kecil saat baru disukai. */
+function LikeHeart({ liked }: { liked: boolean }) {
+  const first = useRef(true)
+  const [changed, setChanged] = useState(false)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    setChanged(true)
+  }, [liked])
+  return (
+    <span className="relative block h-7 w-7">
+      <Heart
+        className={`absolute inset-0 h-7 w-7 transition-[opacity,transform] duration-200 ease-in-out ${liked ? 'scale-50 opacity-0' : 'scale-100 opacity-100'}`}
+        fill="none"
+        aria-hidden="true"
+      />
+      <span
+        className="absolute inset-0 block"
+        style={changed && liked ? { animation: 'heart-pop 420ms var(--ease-spring) both' } : undefined}
+      >
+        <Heart
+          className={`h-7 w-7 transition-[opacity,transform] duration-200 ease-in-out ${liked ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}
+          fill="currentColor"
+          aria-hidden="true"
+        />
+      </span>
+    </span>
+  )
+}
+
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
  * Pemutar penuh (dialog modal). Memakai state dan aksi yang sama dengan MiniPlayer,
  * sehingga keduanya selalu sinkron. Esc / tombol turun menutupnya.
  */
-export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => void; onOpenQueue: () => void }) {
+export default function FullPlayer({
+  onClose,
+  onOpenQueue,
+  closing = false,
+  onClosed,
+}: {
+  onClose: () => void
+  onOpenQueue: () => void
+  /** Riwayat sudah mundur (tombol tutup, seret, atau tombol Kembali): jalankan animasi kembali ke mini player. */
+  closing?: boolean
+  /** Animasi tutup selesai: PlayerDock boleh melepas komponen ini. */
+  onClosed?: () => void
+}) {
   const { status, currentTrack, playbackInfo } = useAudioPlayer()
   const now = useNowPlaying()
   const { notice, dismissNotice } = useLibrary()
@@ -40,6 +99,10 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   })
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const coverRef = useRef<HTMLDivElement>(null)
+  const bgRef = useRef<HTMLDivElement>(null)
+  const openedRef = useRef(false)
+  const [bgFailed, setBgFailed] = useState(false)
   // Tampilan tengah: sampul atau lirik. Lirik baru diminta ke server saat tampilannya dibuka.
   const [showLyrics, setShowLyrics] = useState(false)
   // Ukuran sampul diukur dari ruang yang tersisa di slot tengah supaya seluruh pemutar muat satu layar tanpa scroll.
@@ -51,7 +114,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   // Geser di area sampul/lirik: sampul digeser ke atas atau samping -> lirik; di lirik, geser samping -> kembali ke sampul.
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = slotRef.current
     if (!el) return
     const measure = () => {
@@ -65,6 +128,41 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
     ro.observe(el)
     return () => ro.disconnect()
   }, [hasTrack])
+  // Sampul mini player disembunyikan selama pemutar penuh terbuka (sampul pemutar penuh "terbang" dari/ke posisinya).
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute('data-fp-open', '')
+    return () => document.documentElement.removeAttribute('data-fp-open')
+  }, [])
+
+  // Buka: sampul membesar bertahap dari posisi sampul di mini player (FLIP). Dijalankan sekali, setelah ukuran sampul diukur.
+  useLayoutEffect(() => {
+    const el = coverRef.current
+    if (!el || openedRef.current || coverSize === 0) return
+    openedRef.current = true
+    if (prefersReducedMotion()) return
+    const to = el.getBoundingClientRect()
+    const from = miniCoverRect()
+    if (from && to.width > 0) {
+      el.style.transformOrigin = 'top left'
+      el.animate(
+        [
+          { transform: `translate3d(${from.left - to.left}px, ${from.top - to.top}px, 0) scale(${from.width / to.width})` },
+          { transform: 'none' },
+        ],
+        { duration: OPEN_MS, easing: EASE_HERO },
+      )
+    } else {
+      // Mini player berupa gelembung / belum ada: sampul naik pelan dari bawah.
+      el.animate(
+        [
+          { opacity: 0, transform: 'translate3d(0, 36px, 0) scale(0.9)' },
+          { opacity: 1, transform: 'none' },
+        ],
+        { duration: OPEN_MS, easing: EASE },
+      )
+    }
+  }, [coverSize])
+
   const onSwipeStart = (event: TouchEvent) => {
     const t = event.touches[0]
     swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null
@@ -85,28 +183,69 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const lyricsTrack = useMemo(() => lyricsTrackFor(currentTrack, playbackInfo, looksLikeSameTrack), [currentTrack, playbackInfo])
   const { state: lyrics, retry: retryLyrics } = useLyrics(lyricsTrack, showLyrics)
 
-  // Tutup dengan animasi: pemutar meluncur turun ke mini player, baru riwayat dimundurkan.
+  // Menutup = mundurkan riwayat segera; animasi kembali ke mini player dijalankan oleh efek `closing` di bawah
+  // (jadi tombol Kembali Android, tombol turun, Esc, dan seret ke bawah semuanya memakai animasi yang sama).
   const onCloseRef = useRef(onClose)
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+  const onClosedRef = useRef(onClosed)
+  useEffect(() => {
+    onClosedRef.current = onClosed
+  }, [onClosed])
   const closingRef = useRef(false)
   const animateClose = useCallback(() => {
-    const el = dialogRef.current
     if (closingRef.current) return
     closingRef.current = true
+    onCloseRef.current()
+  }, [])
+
+  // Tutup: animasi berjalan terbalik. Sampul mengecil kembali ke posisi mini player, info & kontrol memudar,
+  // lalu latar memudar membuka Beranda (yang tidak pernah dilepas, jadi posisi scroll-nya tetap).
+  useEffect(() => {
+    if (!closing) return
+    closingRef.current = true
+    const el = dialogRef.current
     if (!el) {
-      onCloseRef.current()
+      onClosedRef.current?.()
       return
     }
-    el.style.animation = 'none'
-    el.style.transformOrigin = 'top center'
-    el.style.transition = 'transform 280ms cubic-bezier(0.5,0,0.75,0), border-radius 280ms, opacity 240ms ease-in 60ms'
-    el.style.borderRadius = '28px'
-    el.style.transform = `translate3d(0, ${window.innerHeight}px, 0) scale(0.92)`
-    el.style.opacity = '0.6'
-    window.setTimeout(() => onCloseRef.current(), 250)
-  }, [])
+    el.dataset.closing = 'true'
+    const ms = prefersReducedMotion() ? 0 : CLOSE_MS
+    const cover = coverRef.current
+    const mini = miniCoverRect()
+    // Sisa seretan (turun + mengecil) dikembalikan halus ke posisi normal bersamaan dengan sampul terbang.
+    const residue = el.style.transform
+    let natural = cover?.getBoundingClientRect() ?? null
+    if (residue && cover) {
+      el.style.transition = 'none'
+      el.style.transform = ''
+      natural = cover.getBoundingClientRect()
+      el.style.transform = residue
+      void el.offsetHeight
+    }
+    if (residue) {
+      el.style.transition = `transform ${ms}ms ${EASE}`
+      el.style.transform = ''
+      el.style.borderRadius = ''
+    }
+    if (cover && natural) {
+      cover.style.transformOrigin = 'top left'
+      const target =
+        mini && natural.width > 0
+          ? [{ transform: 'none' }, { transform: `translate3d(${mini.left - natural.left}px, ${mini.top - natural.top}px, 0) scale(${mini.width / natural.width})` }]
+          : [
+              { opacity: 1, transform: 'none' },
+              { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.92)' },
+            ]
+      cover.animate(target, { duration: ms, easing: EASE_HERO, fill: 'forwards' })
+    } else {
+      slotRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.5, easing: EASE, fill: 'forwards' })
+    }
+    bgRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms * 0.75, delay: ms * 0.3, easing: EASE, fill: 'forwards' })
+    const timer = window.setTimeout(() => onClosedRef.current?.(), ms + 40)
+    return () => window.clearTimeout(timer)
+  }, [closing])
 
   // Seret ke bawah dari mana saja (selama konten di posisi paling atas) = tutup. Pakai event sentuh
   // native karena touchmove harus bisa di-preventDefault agar halaman tidak ikut tergulung.
@@ -259,7 +398,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
   const isError = status === 'error'
   const mismatch = playbackInfo !== null && !looksLikeSameTrack(currentTrack, playbackInfo)
   const iconBtn =
-    'flex h-12 w-12 items-center justify-center rounded-full transition-colors active:bg-white/10 focus-ring'
+    'press flex h-12 w-12 items-center justify-center rounded-full active:bg-white/10 focus-ring'
 
   return (
     <div
@@ -268,22 +407,36 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
       aria-modal="true"
       aria-label="Pemutar penuh"
       onKeyDown={onKeyDown}
-      className="fixed inset-0 z-50 flex animate-sheet-expand flex-col overflow-hidden bg-bg"
-      style={
-        {
-          '--mv-accent': coverColor.replace(/,/g, ' '),
-          backgroundImage: `linear-gradient(180deg, rgba(${coverColor},0.38) 0%, #0b080c 62%, #0b080c 100%)`,
-          transition: 'background-image 400ms ease',
-        } as CSSProperties
-      }
+      className={`fixed inset-0 z-50 isolate flex flex-col overflow-hidden ${closing ? 'pointer-events-none' : ''}`}
+      style={{ '--mv-accent': coverColor.replace(/,/g, ' ') } as CSSProperties}
     >
+      {/* Latar: artwork diburamkan + gradient gelap. Memudar masuk/keluar sebagai satu lapisan (di atas Beranda). */}
+      <div ref={bgRef} aria-hidden="true" className="fp-bg pointer-events-none absolute inset-0 -z-10 overflow-hidden bg-[#0b080c]">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(${coverColor},0.38) 0%, #0b080c 62%, #0b080c 100%)`,
+            transition: 'background-image 400ms ease',
+          }}
+        />
+        {now.coverSrc && !bgFailed && (
+          <img
+            src={now.coverSrc}
+            alt=""
+            onError={() => setBgFailed(true)}
+            className="absolute inset-0 h-full w-full scale-150 object-cover opacity-60"
+            style={{ filter: 'blur(36px) saturate(1.3)' }}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/55 to-[#0b080c]" />
+      </div>
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
       <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pb-2 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <header className="grid grid-cols-[3rem_1fr_3rem] items-center">
+        <header style={delay(120)} className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
             type="button"
@@ -316,6 +469,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
             </div>
           ) : (
             <div
+              ref={coverRef}
               {...press}
               style={{ width: coverSize, height: coverSize }}
               className="shrink-0 select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 [-webkit-touch-callout:none]"
@@ -326,7 +480,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         </div>
 
         <div className="space-y-3">
-          <div className="flex items-start gap-3">
+          <div style={delay(190)} className="fp-item flex items-start gap-3">
             <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
               <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
                 {now.title}
@@ -345,35 +499,40 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               title={liked ? 'Hapus dari Lagu Disukai' : 'Tambahkan ke Lagu Disukai'}
               className={`-mr-1 mt-0.5 ${iconBtn} ${liked ? 'text-accent' : 'text-ink hover:text-accent'}`}
             >
-              <Heart className={`h-7 w-7 transition-transform duration-200 ${liked ? 'scale-110' : ''}`} fill={liked ? 'currentColor' : 'none'} aria-hidden="true" />
+              <LikeHeart liked={liked} />
             </button>
           </div>
 
-          {isError ? (
-            <PlayerError />
-          ) : (
-            <>
-              <SeekBar stacked />
-              <p role="status" className="min-h-4 text-center text-xs text-ink-muted" aria-live="polite">
-                {status === 'playing' ? '' : STATUS_TEXT[status]}
-              </p>
-            </>
-          )}
+          <div style={delay(250)} className="fp-item">
+            {isError ? (
+              <PlayerError />
+            ) : (
+              <>
+                <SeekBar stacked />
+                <p role="status" className="min-h-4 text-center text-xs text-ink-muted" aria-live="polite">
+                  {status === 'playing' ? '' : STATUS_TEXT[status]}
+                </p>
+              </>
+            )}
+          </div>
 
           {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
-          <TransportControls
-            size="xl"
-            className="!justify-between"
-            leading={
-              <span data-tour="sleep-timer" className="flex">
-                <SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />
-              </span>
-            }
-            trailing={<ShuffleButton size="lg" className="flex" />}
-          />
+          <div style={delay(300)} className="fp-item">
+            <TransportControls
+              size="xl"
+              className="!justify-between"
+              leading={
+                <span data-tour="sleep-timer" className="flex">
+                  <SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />
+                </span>
+              }
+              trailing={<ShuffleButton size="lg" className="flex" />}
+            />
+          </div>
 
           {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
               putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
+          <div style={delay(350)} className="fp-item">
           {(() => {
             const lyricsBtn = (
               <button
@@ -411,6 +570,7 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
               </div>
             )
           })()}
+          </div>
           {timerOpen && <SleepTimerSheet onClose={() => setTimerOpen(false)} />}
           {crossfadeOpen && <CrossfadeSheet onClose={() => setCrossfadeOpen(false)} />}
 
@@ -439,7 +599,8 @@ export default function FullPlayer({ onClose, onOpenQueue }: { onClose: () => vo
         data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        className="mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
+        style={delay(400)}
+        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya

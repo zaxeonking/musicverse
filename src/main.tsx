@@ -15,6 +15,23 @@ import { isNativeApp } from './native/platform'
  * Di peramban: render situs informasi saja (landing untuk memasang APK, Kebijakan Privasi, Ketentuan Layanan); kode
  * pemutar tidak dimuat sama sekali (import dinamis), jadi tidak ada versi web yang bisa dipakai.
  */
+/** Splash (index.html) memudar setelah aplikasi tampil dan minimal ±0,8 dtk sejak dibuka; Beranda memudar masuk bersamaan. */
+const SPLASH_MIN_MS = 800
+function dismissSplash() {
+  const html = document.documentElement
+  const splash = document.getElementById('splash')
+  const reveal = () => {
+    html.classList.add('app-ready')
+    if (!splash) return
+    splash.classList.add('splash-hide')
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true })
+    window.setTimeout(() => splash.remove(), 900)
+  }
+  const wait = Math.max(0, SPLASH_MIN_MS - performance.now())
+  // Dua frame supaya render pertama sudah digambar di balik splash sebelum fade dimulai.
+  window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(reveal)), wait)
+}
+
 async function bootstrap() {
   const root = createRoot(document.getElementById('root')!)
   if (isNativeApp()) {
@@ -28,6 +45,7 @@ async function bootstrap() {
         <App />
       </StrictMode>,
     )
+    dismissSplash()
     // Pembaruan tampilan tanpa APK baru (hanya APK): cek paket OTA di latar belakang setelah UI tampil.
     startLiveUpdate()
     return
