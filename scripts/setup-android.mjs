@@ -43,6 +43,38 @@ for (const file of readdirSync(join(nativeDir, 'java'))) {
 // 2. Resource
 cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
 
+// 2b. Splash native & tema: splash bawaan (ikon launcher besar di tengah / gambar splash Capacitor) diganti layar polos
+// sewarna aplikasi, layar penuh sampai ke area poni. Logo beranimasi ada di splash web (index.html). Diubah lewat patch pada
+// styles.xml hasil `cap add android` (bukan ditimpa), jadi tahan terhadap perbedaan versi template Capacitor.
+const stylesPath = join(androidMain, 'res', 'values', 'styles.xml')
+if (existsSync(stylesPath)) {
+  let styles = readFileSync(stylesPath, 'utf8')
+  if (!styles.includes('mv_splash_bg')) {
+    // Tema peluncuran (dipakai saat proses dimulai, sampai WebView siap).
+    styles = styles.replace(/<style name="AppTheme\.NoActionBarLaunch"\s+parent="([^"]+)"\s*>[\s\S]*?<\/style>/, (_m, parent) => {
+      const items = [
+        '        <item name="android:background">@color/mv_splash_bg</item>',
+        '        <item name="android:windowBackground">@color/mv_splash_bg</item>',
+        '        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>',
+      ]
+      if (/SplashScreen/.test(parent)) {
+        items.push(
+          '        <item name="windowSplashScreenBackground">@color/mv_splash_bg</item>',
+          '        <item name="windowSplashScreenAnimatedIcon">@drawable/mv_splash_empty</item>',
+          '        <item name="windowSplashScreenIconBackgroundColor">@color/mv_splash_bg</item>',
+          '        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>',
+        )
+      }
+      return `<style name="AppTheme.NoActionBarLaunch" parent="${parent}">\n${items.join('\n')}\n    </style>`
+    })
+    // Tema utama: latar jendela gelap + konten sampai ke area poni, jadi tidak ada pita terang/hitam saat membuka.
+    styles = styles.replace(/(<style name="AppTheme\.NoActionBar"\s+parent="[^"]+"\s*>)/, (m) =>
+      `${m}\n        <item name="android:windowBackground">@color/mv_splash_bg</item>\n        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>`,
+    )
+    writeFileSync(stylesPath, styles)
+  }
+}
+
 // 3. Versi aplikasi: versionName = package.json "appVersion" (atau "version") (dibandingkan dengan tag GitHub Release saat cek
 // pembaruan), versionCode = ((major*100 + minor)*100 + patch)*100 + revisi (selalu naik saat versi naik; skala baru, jauh di atas skala lama).
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))

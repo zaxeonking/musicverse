@@ -143,13 +143,13 @@ export default function UpdateSettingsPage() {
           </div>
 
           {phase === 'available' && release?.notes && (
-            <p className="mt-3 max-h-40 select-text overflow-y-auto whitespace-pre-line rounded-md bg-black/20 p-3 text-xs text-ink-muted">
+            <p className="mv-drop mt-3 max-h-40 select-text overflow-y-auto whitespace-pre-line rounded-md bg-black/20 p-3 text-xs text-ink-muted">
               {release.notes}
             </p>
           )}
 
           {phase === 'downloading' && (
-            <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
+            <div className="mv-drop mt-3 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
               <div
                 className={`h-full rounded-full bg-accent ${percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}
                 style={percent === null ? undefined : { width: `${percent}%` }}

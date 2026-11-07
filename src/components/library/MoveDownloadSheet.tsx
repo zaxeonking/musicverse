@@ -89,7 +89,7 @@ export default function MoveDownloadSheet({ track, fromPlaylistId, onClose, onTo
           <p className="text-sm font-semibold text-ink">Pindahkan ke playlist</p>
           <p className="truncate text-xs text-ink-muted">{track.title} · {track.artists}</p>
         </div>
-        <ul className="max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
+        <ul className="mv-list max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
           {fromPlaylistId && <Action icon={Music2} label="Lagu satuan" hint="Keluarkan dari playlist ini" onClick={detach} />}
           {targets.map((playlist) => {
             const has = playlist.tracks.some((item) => trackIdentity(item) === identity)

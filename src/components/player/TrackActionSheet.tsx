@@ -7,6 +7,7 @@ import { extractTrackId } from '../../utils/spotifyUrl'
 import CoverArt from '../ui/CoverArt'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import Action from './SheetAction'
+import { useExitGhost } from '../../hooks/useExitGhost'
 
 const FOCUS = 'focus-ring'
 
@@ -39,6 +40,7 @@ export default function TrackActionSheet({
   onMore,
   onClose,
 }: TrackActionSheetProps) {
+  const exitRef = useExitGhost()
   useOverlayHistory(true, onClose)
   const sheetRef = useRef<HTMLDivElement>(null)
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
@@ -71,7 +73,7 @@ export default function TrackActionSheet({
   }
 
   return (
-    <div className="absolute inset-0 z-10">
+    <div ref={exitRef} className="absolute inset-0 z-10">
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/50" />
       <div
         ref={sheetRef}
@@ -90,7 +92,7 @@ export default function TrackActionSheet({
             <span className="block truncate text-xs text-ink-muted">{track.artists}</span>
           </span>
         </div>
-        <ul className="border-t border-line px-2 pt-2">
+        <ul className="mv-list border-t border-line px-2 pt-2">
           <Action icon={Play} label="Putar sekarang" onClick={onPlayNow} />
           <Action icon={ArrowUpToLine} label="Putar berikutnya" onClick={onPlayNext} disabled={position === 0} />
           <Action icon={ArrowDownToLine} label="Pindah ke akhir antrean" onClick={onMoveToEnd} disabled={position >= count - 1} />
@@ -101,7 +103,7 @@ export default function TrackActionSheet({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={onClose}
-                className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 text-sm font-medium text-ink transition-colors hover:bg-raised active:bg-raised ${FOCUS}`}
+                className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 text-sm font-medium text-ink tap-row hover:bg-raised active:bg-raised ${FOCUS}`}
               >
                 <ExternalLink className="h-5 w-5 shrink-0" aria-hidden="true" />
                 Buka di Spotify

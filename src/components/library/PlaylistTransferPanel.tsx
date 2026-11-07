@@ -89,7 +89,7 @@ export default function PlaylistTransferPanel({ source, trackIds, mode, onBack, 
         </button>
         <p className="text-sm font-semibold text-ink">{title}</p>
       </div>
-      <ul className="max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
+      <ul className="mv-list max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
         {others.map((item) => (
           <Action key={item.id} icon={ListMusic} label={item.name} hint={`${item.tracks.length} lagu`} onClick={() => choose(item)} />
         ))}

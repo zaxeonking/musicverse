@@ -90,7 +90,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         openFullPlayer()
       }}
       {...(locked ? {} : longPress)}
-      className={`grid ${TRACK_GRID} select-none rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] ${
+      className={`grid ${TRACK_GRID} select-none rounded-md px-2 py-2 tap-row [-webkit-touch-callout:none] ${
         locked
           ? 'cursor-not-allowed opacity-50'
           : offlineBlocked
@@ -134,7 +134,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
           {activity === 'error' && <span className="text-danger"> · Gagal diputar</span>}
         </p>
         {inPlaylistsText && (
-          <p title={inPlaylists.join(', ')} className="mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-accent">
+          <p title={inPlaylists.join(', ')} className="mv-in mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-accent">
             <ListMusic className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="truncate">Sudah ada di {inPlaylistsText}</span>
           </p>

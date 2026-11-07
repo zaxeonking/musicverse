@@ -46,7 +46,7 @@ export default function SettingsPage() {
           <span className="block text-sm font-semibold">Tutorial</span>
           <span className="block text-xs text-ink-muted">Ulangi panduan penggunaan aplikasi</span>
           {isQuizPassed() && (
-            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
+            <span className="mv-pop mt-1.5 inline-flex items-center gap-1 rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
               <Award className="h-3.5 w-3.5" aria-hidden="true" />
               Lulus tutorial
             </span>
@@ -62,7 +62,7 @@ export default function SettingsPage() {
 
 function CategoryList({ items }: { items: readonly Category[] }) {
   return (
-    <ul className="space-y-2">
+    <ul className="mv-list space-y-2">
       {items.map(({ to, label, hint, icon: Icon }) => (
         <li key={to}>
           <Link to={to} className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 text-ink focus-ring">

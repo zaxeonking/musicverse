@@ -669,3 +669,9 @@ End of Project Structure Documentation
 Project: MusicVerse
 Reference Version: v0.4.17
 Document: PROJECT_STRUCTURE.md
+## Lirik per kata (0.5.54 – 0.5.56)
+- `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`
+- `src/services/`: `wordLyrics.ts` (provider LyricsPlus / BetterLyrics), `lyricsApi.ts` (`fetchLyrics`)
+- `src/native/lyricsCache.ts`: cache lirik persisten (IndexedDB, LRU 500, TTL 30 hari)
+- `src/components/player/LyricsPanel.tsx`, `LyricLine.tsx`: tampilan; `src/components/settings/LyricProviderSettings.tsx`: pengaturan provider
+- `api/proxy.js`: upstream `lyricsplus` dan `boidu` untuk web; `scripts/test-lyrics.mjs`: `npm run test:lyrics`

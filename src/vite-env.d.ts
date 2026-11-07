@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_GITHUB_REPO?: string
   /** Base URL NetEase untuk lirik. Default: /netease (proxy) di web, https://music.163.com di APK. */
   readonly VITE_LYRICS_NETEASE_BASE?: string
+  readonly VITE_LYRICS_PLUS_BASE?: string
+  readonly VITE_LYRICS_BETTER_BASE?: string
   /** Email kontak yang tampil di Kebijakan Privasi dan Ketentuan Layanan. Opsional. */
   readonly VITE_CONTACT_EMAIL?: string
 }

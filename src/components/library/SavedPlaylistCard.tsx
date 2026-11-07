@@ -88,7 +88,7 @@ export default function SavedPlaylistCard({ playlist, layout, active, onOpen, on
 
   if (layout === 'list') {
     return (
-      <li {...press} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-2 py-2 transition-colors hover:bg-raised">
+      <li {...press} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-2 py-2 tap-row hover:bg-raised">
         <div className="w-14 shrink-0">
           <CoverArt cover={fallback} src={playlist.cover} />
         </div>
@@ -105,7 +105,7 @@ export default function SavedPlaylistCard({ playlist, layout, active, onOpen, on
   }
 
   return (
-    <li {...press} className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised">
+    <li {...press} className="flex flex-col rounded-lg bg-card p-3 tap-card hover:bg-raised">
       <button
         type="button"
         tabIndex={-1}

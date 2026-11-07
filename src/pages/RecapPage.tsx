@@ -90,7 +90,7 @@ export default function RecapPage() {
 
           <section aria-label="Lagu teratas" className="rounded-lg bg-card p-4">
             <h2 className="mb-3 text-sm font-semibold text-ink">Lagu teratas</h2>
-            <ol className="space-y-3">
+            <ol className="mv-list space-y-3">
               {recap.topTracks.map(({ track, count }, i) => (
                 <li key={track.url} className="flex items-center gap-3">
                   <span className="w-4 text-center text-sm font-bold text-ink-muted">{i + 1}</span>
@@ -109,7 +109,7 @@ export default function RecapPage() {
 
           <section aria-label="Artis teratas" className="rounded-lg bg-card p-4">
             <h2 className="mb-3 text-sm font-semibold text-ink">Artis teratas</h2>
-            <ol className="space-y-2">
+            <ol className="mv-list space-y-2">
               {recap.topArtists.map(({ name, count }, i) => (
                 <li key={name} className="flex items-center gap-3 text-sm">
                   <span className="w-4 text-center font-bold text-ink-muted">{i + 1}</span>

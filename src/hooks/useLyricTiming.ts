@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { audioEngine } from '../services/audioEngine'
 import { usePlaybackTime, useAudioPlayer } from './useAudioPlayer'
 import type { LyricsResult, SyncedVersion } from '../services/lyricsApi'
-import { findActiveLine } from '../utils/lrc'
+import { findActiveLine, type LyricWord } from '../utils/lrc'
 import { readJson } from '../utils/safeStorage'
+import { subTextsFor } from '../utils/lyricSubtext'
+import { useLyricDisplayPrefs } from './useLyricDisplayPrefs'
 
 /** Baris disorot sedikit lebih awal: posisi audio selalu mendahului suara yang terdengar (latensi keluaran, apalagi Bluetooth). */
 export const LEAD_S = 0.45
@@ -18,6 +20,17 @@ export interface LyricItem {
   text: string
   /** Detik pada versi lirik; ada hanya untuk mode berwaktu. */
   time?: number
+  /** Waktu per kata ASLI dari sumber (eLRC / TTML / LyricsPlus); kosong untuk LRC biasa. */
+  words?: LyricWord[]
+  /** Penyanyi (mis. "v1" / "v2") untuk duet; kosong = satu penyanyi. */
+  agent?: string
+  /** Vokal latar: tampil lebih kecil dan redup, menempel pada baris induknya. */
+  background?: boolean
+  /** Terjemahan dan romanisasi baris (bila sumber menyediakan). */
+  translation?: string
+  transliteration?: string
+  /** Romanisasi per kata (waktu asli dari server) untuk sorotan karaoke di baris romanisasi; hanya dari server, bukan lokal. */
+  transliterationWords?: LyricWord[]
 }
 
 /** Baris aktif menurut PROGRES lagu (tanpa waktu per baris). Hanya perkiraan, tetapi tetap bergerak. */
@@ -55,7 +68,11 @@ export function useLyricTiming(result: Extract<LyricsResult, { kind: 'synced' }>
   }, [picked, primary, alternatives, audioDuration])
   const { lines, duration: lyricsDuration } = picked ?? primary
 
-  const items = useMemo<LyricItem[]>(() => lines.map((line) => ({ text: line.text, time: line.time })), [lines])
+  const display = useLyricDisplayPrefs()
+  const items = useMemo<LyricItem[]>(
+    () => lines.map((line) => ({ text: line.text, time: line.time, words: line.words, agent: line.agent, background: line.background, ...(line.background ? {} : subTextsFor(line, display)) })),
+    [lines, display],
+  )
 
   // Penyelarasan manual (detik): positif = lirik maju. Disimpan per lagu.
   const storageKey = offsetStorageKey(trackKey)

@@ -1,6 +1,7 @@
 import { ArrowLeft, PhoneCall, Radio, Volume2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import LyricProviderSettings from '../components/settings/LyricProviderSettings'
 import SettingSwitch from '../components/ui/SettingSwitch'
 import { getAutoResume, getDirectMode, setAutoResume, setDirectMode } from '../native/engineSettings'
 import { isNativeApp } from '../native/platform'
@@ -55,6 +56,7 @@ export default function PlaybackSettingsPage() {
         label="Mode langsung (eksperimen)"
         hint="Berlaku mulai lagu berikutnya. Matikan jika sering buffering."
       />
+      <LyricProviderSettings />
     </section>
   )
 }

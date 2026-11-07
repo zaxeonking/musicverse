@@ -30,7 +30,7 @@ function Loading({ text }: { text: string }) {
 /** Diskografi: satu baris per album/single (cover kotak, judul, tahun dan jenis). */
 function AlbumList({ albums, onOpen }: { albums: readonly AlbumHit[]; onOpen: (album: AlbumHit) => void }) {
   return (
-    <ul className="space-y-1" aria-label="Album">
+    <ul className="mv-list space-y-1" aria-label="Album">
       {albums.map((album) => (
         <li key={album.id}>
           <button
@@ -271,7 +271,7 @@ export default function ArtistSearchPanel() {
       </header>
 
       {!inAlbum && (
-        <div className="flex gap-2" role="group" aria-label="Isi halaman artis">
+        <div className="mv-in flex gap-2" role="group" aria-label="Isi halaman artis">
           <Chip active={tab === 'songs'} onClick={() => artistSearch.setTab('songs')}>
             Lagu
           </Chip>

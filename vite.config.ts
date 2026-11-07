@@ -32,6 +32,17 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/netease/, ''),
         headers: { Referer: 'https://music.163.com/' },
       },
+      // Lirik per kata.
+      '/lyricsplus': {
+        target: 'https://lyricsplus.prjktla.my.id',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/lyricsplus/, ''),
+      },
+      '/boidu': {
+        target: 'https://lyrics-api.boidu.dev',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/boidu/, ''),
+      },
     },
   },
 })

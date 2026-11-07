@@ -62,7 +62,7 @@ export default function NewPlaylistForm({ onCreate, onCancel, autoFocus = true, 
         )}
       </div>
       {error && (
-        <p id="new-playlist-error" role="alert" className="mt-1.5 pl-4 text-xs text-danger">
+        <p id="new-playlist-error" role="alert" className="mv-drop mt-1.5 pl-4 text-xs text-danger">
           {error}
         </p>
       )}

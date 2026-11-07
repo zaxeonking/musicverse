@@ -191,7 +191,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
             <ul
               role="listbox"
               aria-label="Saran judul"
-              className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl bg-raised py-1 shadow-lg ring-1 ring-white/10"
+              className="mv-drop absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-2xl bg-raised py-1 shadow-lg ring-1 ring-white/10"
             >
               {suggestions.map((text) => (
                 <li key={text} role="option" aria-selected={false}>
@@ -238,7 +238,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
         </Chip>
       </div>
       {validationError && (
-        <p id={errorId} role="alert" className="text-sm text-danger">
+        <p id={errorId} role="alert" className="mv-drop text-sm text-danger">
           {validationError}
         </p>
       )}

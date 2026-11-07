@@ -45,7 +45,7 @@ export function SelectableCard({ title, subtitle, cover, layout, selected, locke
             locked ? 'opacity-50' : selected ? 'bg-accent/10' : 'hover:bg-raised'
           }`}
         >
-          {box}
+          <span className="mv-slide-x flex shrink-0">{box}</span>
           <span className="w-14 shrink-0">
             <CoverArt cover={fallback} src={cover} />
           </span>
@@ -71,7 +71,7 @@ export function SelectableCard({ title, subtitle, cover, layout, selected, locke
           locked ? 'bg-card opacity-50' : selected ? 'bg-accent/15 ring-2 ring-accent' : 'bg-card hover:bg-raised'
         }`}
       >
-        <span className="absolute right-4 top-4 z-10">{box}</span>
+        <span className="mv-pop absolute right-4 top-4 z-10">{box}</span>
         <span className="mb-3 block">
           <CoverArt cover={fallback} src={cover} className="shadow-lg shadow-black/40" />
         </span>
@@ -104,7 +104,7 @@ export function SelectionBar({ count, total, onSelectAll, onClear, onCancel, onD
     <div
       role="region"
       aria-label="Mode pilih playlist"
-      className="sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8"
+      className="mv-drop sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8"
     >
       <div className="rounded-lg bg-card px-3 py-2">
         {confirming ? (

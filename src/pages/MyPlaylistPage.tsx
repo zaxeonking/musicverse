@@ -75,13 +75,15 @@ function TrackLine({
           onClick={onToggle}
           className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors focus-ring ${selected ? 'bg-accent/10' : 'hover:bg-raised'}`}
         >
-          <span
-            aria-hidden="true"
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-              selected ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
-            }`}
-          >
-            <Check className="h-4 w-4" strokeWidth={3} />
+          <span className="mv-slide-x flex shrink-0">
+            <span
+              aria-hidden="true"
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                selected ? 'animate-pop border-accent bg-accent text-black' : 'border-ink-muted text-transparent'
+              }`}
+            >
+              <Check className="h-4 w-4" strokeWidth={3} />
+            </span>
           </span>
           <span className="w-12 shrink-0">
             <CoverArt cover={fallback} src={track.cover} />
@@ -99,7 +101,7 @@ function TrackLine({
     <li
       {...press}
       aria-disabled={offlineBlocked || undefined}
-      className={`flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-raised ${current ? 'bg-raised' : ''} ${offlineBlocked ? 'opacity-50' : ''}`}
+      className={`flex items-center gap-2 rounded-md px-2 py-2 tap-row hover:bg-raised ${current ? 'bg-raised' : ''} ${offlineBlocked ? 'opacity-50' : ''}`}
     >
       <button
         type="button"
@@ -447,7 +449,7 @@ export default function MyPlaylistPage() {
           title="Playlist ini masih kosong"
         />
       ) : (
-        <ul {...swipeHandlers} className="touch-pan-y">
+        <ul {...swipeHandlers} className="mv-list touch-pan-y">
           {tracks.map((track, index) => (
             <TrackLine
               key={track.id}

@@ -57,7 +57,7 @@ export default function EqualizerPage() {
           )}
         </div>
 
-        <ul className="mt-4 space-y-1 rounded-lg bg-card px-4 py-3">
+        <ul className="mv-list mt-4 space-y-1 rounded-lg bg-card px-4 py-3">
           {EQ_FREQS.map((freq, i) => (
             <li key={freq} className="flex items-center gap-3">
               <span className="w-14 shrink-0 text-xs text-ink-muted">{label(freq)}</span>

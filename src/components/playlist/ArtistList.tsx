@@ -22,7 +22,7 @@ export default function ArtistList({ title, artists, onOpen, action }: ArtistLis
         <h2 className="font-display text-xl font-bold tracking-tight text-ink">{title}</h2>
         {action}
       </div>
-      <ul className="space-y-1">
+      <ul className="mv-list space-y-1">
         {artists.map((artist) => (
           <li key={artist.id}>
             <button

@@ -2,12 +2,14 @@ import { lyricsTrackFor } from '../../utils/lyricsTrack'
 import { Music2 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePlaybackTime } from '../../hooks/useAudioPlayer'
-import { estimateActive, LEAD_S, useLyricTiming } from '../../hooks/useLyricTiming'
+import { estimateActive, useLyricTiming } from '../../hooks/useLyricTiming'
 import { useLyrics } from '../../hooks/useLyrics'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { audioEngine } from '../../services/audioEngine'
 import type { LyricsResult } from '../../services/lyricsApi'
 import { looksLikeSameTrack } from '../../utils/playerStatus'
+import type { LyricWord } from '../../utils/lrc'
+import { wordsFor } from '../../utils/wordSync'
+import KaraokeWords, { type SweepTiming } from './KaraokeWords'
 import MarqueeText from '../ui/MarqueeText'
 
 /** Bingkai strip lirik: WAJIB satu baris, tidak membungkus. */
@@ -30,14 +32,15 @@ function Strip({ text, dim }: { text: string; dim?: boolean }) {
 }
 
 /**
- * Baris lirik dengan sorotan per kata: kata yang sudah/sedang dinyanyikan terang, sisanya redup.
+ * Baris lirik dengan sorotan menyapu halus (per huruf, tepi lembut), sama dengan pemutar penuh lewat `KaraokeWords`.
+ * Teks tiap kata membawa spasinya sendiri ("kata "), supaya suku kata asli dari sumber ("Hel" + "lo") tidak terpisah.
  * Baris yang lebih lebar dari strip digeser supaya kata aktif tetap di tengah. Komponen ini dipasang
  * ulang (key) tiap baris baru, jadi posisi awalnya selalu di kata pertama tanpa animasi mundur.
  */
-function WordStrip({ words, wordIdx }: { words: string[]; wordIdx: number }) {
+function WordStrip({ words, timing }: { words: LyricWord[]; timing: SweepTiming }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLSpanElement>(null)
-  const wordRefs = useRef<Array<HTMLSpanElement | null>>([])
+  const [wordIdx, setWordIdx] = useState(0)
   const [shift, setShift] = useState(0)
 
   const recalc = () => {
@@ -46,7 +49,8 @@ function WordStrip({ words, wordIdx }: { words: string[]; wordIdx: number }) {
     if (!box || !inner) return
     const overflow = inner.scrollWidth - box.clientWidth
     if (overflow <= 1) return setShift(0)
-    const el = wordRefs.current[Math.max(0, wordIdx)]
+    // inner > KaraokeWords > kata-kata
+    const el = inner.firstElementChild?.children[Math.max(0, wordIdx)] as HTMLElement | undefined
     if (!el) return
     const center = el.offsetLeft + el.offsetWidth / 2
     setShift(Math.min(0, Math.max(-overflow, box.clientWidth / 2 - center)))
@@ -70,88 +74,41 @@ function WordStrip({ words, wordIdx }: { words: string[]; wordIdx: number }) {
           className="relative inline-block transition-transform duration-300 ease-out will-change-transform motion-reduce:transition-none"
           style={{ transform: `translateX(${shift}px)` }}
         >
-          {words.map((word, i) => (
-            <span key={i}>
-              {i > 0 && ' '}
-              <span
-                ref={(el) => {
-                  wordRefs.current[i] = el
-                }}
-                className={`transition-colors duration-150 ${i <= wordIdx ? 'text-ink' : 'text-ink-muted'}`}
-              >
-                {word}
-              </span>
-            </span>
-          ))}
+          <KaraokeWords words={words} timing={timing} onIndex={setWordIdx} />
         </span>
       </div>
     </Frame>
   )
 }
 
-/** Lama (detik) menyanyikan satu baris: dibatasi jarak ke baris berikutnya dan perkiraan dari panjang teks. */
-function singingSpan(chars: number, gap: number): number {
-  return Math.min(gap, Math.max(2, chars * 0.14))
-}
-
-/** Indeks kata yang sedang dinyanyikan; kata dibobot menurut panjangnya (LRC hanya punya waktu per baris). */
-function wordAt(words: readonly string[], fraction: number): number {
-  const weights = words.map((w) => w.length + 1)
-  const total = weights.reduce((a, b) => a + b, 0)
-  let acc = 0
-  for (let i = 0; i < words.length; i += 1) {
-    acc += weights[i]
-    if (fraction < acc / total) return i
-  }
-  return words.length - 1
-}
-
 function SyncedLine({ result, trackKey }: { result: Extract<LyricsResult, { kind: 'synced' }>; trackKey: string }) {
   const { items, active, mode, offset, ratio } = useLyricTiming(result, trackKey)
-  const { status } = useAudioPlayer()
-  const playing = status === 'playing'
   const text = active >= 0 ? items[active]?.text.trim() ?? '' : ''
-  const words = useMemo(() => (text ? text.split(/\s+/) : []), [text])
   // Mode "estimated" tidak punya waktu baris yang bisa dipercaya, jadi tidak ada sorotan per kata.
-  const timed = mode !== 'estimated' && active >= 0 && words.length > 0
+  const timed = mode !== 'estimated' && active >= 0 && text !== ''
 
   const start = timed ? items[active].time ?? 0 : 0
-  let gap = 6
+  let nextTime: number | undefined
   if (timed) {
     for (let i = active + 1; i < items.length; i += 1) {
       const t = items[i].time
       if (t !== undefined && t > start) {
-        gap = t - start
+        nextTime = t
         break
       }
     }
   }
-  const span = singingSpan(text.length, gap)
-
-  const [wordIdx, setWordIdx] = useState(0)
-  useEffect(() => {
-    if (!timed) return
-    let frame = 0
-    let last = -2
-    const tick = () => {
-      const t = audioEngine.getLiveTime()
-      if (t !== null) {
-        const lyricTime = (mode === 'scaled' ? t / ratio : t) + offset + LEAD_S
-        const idx = wordAt(words, Math.max(0, (lyricTime - start) / span))
-        if (idx !== last) {
-          last = idx
-          setWordIdx(idx)
-        }
-      }
-      if (playing) frame = requestAnimationFrame(tick)
-    }
-    tick()
-    return () => cancelAnimationFrame(frame)
-  }, [timed, playing, words, mode, ratio, offset, start, span])
+  // Waktu kata ASLI bila sumber memberinya (eLRC / TTML / LyricsPlus); kalau tidak, perkiraan dari panjang kata (seperti sebelumnya).
+  const activeWords = timed ? items[active].words : undefined
+  const timedWords = useMemo(
+    () => (timed ? wordsFor({ time: start, text, words: activeWords }, nextTime).words : []),
+    [timed, start, text, activeWords, nextTime],
+  )
+  const timing = useMemo<SweepTiming>(() => ({ mode, ratio, offset }), [mode, ratio, offset])
 
   if (!text) return <Strip text="♪" dim />
-  if (!timed) return <Strip text={text} />
-  return <WordStrip key={`${active}|${text}`} words={words} wordIdx={Math.min(wordIdx, words.length - 1)} />
+  if (!timed || timedWords.length === 0) return <Strip text={text} />
+  return <WordStrip key={`${active}|${text}`} words={timedWords} timing={timing} />
 }
 
 function PlainLine({ lines }: { lines: string[] }) {

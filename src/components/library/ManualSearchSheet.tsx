@@ -8,6 +8,7 @@ import { searchManualCandidates } from '../../plugins/registry'
 import type { ManualCandidate } from '../../plugins/types'
 import { formatTime } from '../../utils/formatTime'
 import Action from '../player/SheetAction'
+import { useExitGhost } from '../../hooks/useExitGhost'
 
 interface ManualSearchSheetProps {
   /** Kunci unduhan yang gagal (mode Unduhan). Kosongkan dan isi `track` untuk memilih sumber lagu di playlist. */
@@ -56,6 +57,7 @@ type SearchState = { status: 'loading' } | { status: 'error'; message: string } 
  * Pengguna yang menentukan mana yang benar; audionya tetap diperiksa (terbaca, bukan cuplikan, durasi sesuai pilihan).
  */
 export default function ManualSearchSheet({ transferKey, track, onPicked, title, onClose, onToast }: ManualSearchSheetProps) {
+  const exitRef = useExitGhost()
   useOverlayHistory(true, onClose)
   const [state, setState] = useState<SearchState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -98,7 +100,7 @@ export default function ManualSearchSheet({ transferKey, track, onPicked, title,
 
   // Portal ke <body>: lepas dari wadah halaman (transform / overflow) yang bisa menyembunyikan sheet di luar layar.
   return createPortal(
-    <div className="fixed inset-0 z-[80]" style={{ position: 'fixed', inset: 0 }}>
+    <div ref={exitRef} className="fixed inset-0 z-[80]" style={{ position: 'fixed', inset: 0 }}>
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-black/60" />
       <div
         role="dialog"
@@ -136,7 +138,7 @@ export default function ManualSearchSheet({ transferKey, track, onPicked, title,
           )}
           {state.status === 'ready' && state.results.length > 0 && (
             <>
-              <ul className="max-h-[50dvh] overflow-y-auto px-2 pt-2">
+              <ul className="mv-list max-h-[50dvh] overflow-y-auto px-2 pt-2">
                 {state.results.map((hit) => (
                   <Action
                     key={`${hit.pluginId}:${hit.id}`}

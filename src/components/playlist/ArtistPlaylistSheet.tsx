@@ -114,7 +114,7 @@ export default function ArtistPlaylistSheet({ artist, songs, onClose, onDone }: 
           {status}
         </p>
         {playlists.length > 0 && (
-          <ul className="max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
+          <ul className="mv-list max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
             {playlists.map((playlist) => {
               const have = haveIn(playlist.tracks)
               const all = songs.length > 0 && have >= songs.length

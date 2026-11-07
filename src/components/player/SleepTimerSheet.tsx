@@ -5,6 +5,7 @@ import { useSleepTimer } from '../../context/SleepTimerContext'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import { formatTime } from '../../utils/formatTime'
 import Action from './SheetAction'
+import { useExitGhost } from '../../hooks/useExitGhost'
 
 const OPTIONS_MINUTES = [15, 30, 45, 60] as const
 /** Batas menit untuk timer buatan sendiri (12 jam). */
@@ -71,6 +72,7 @@ export function SleepTimerButton({ onClick, variant = 'pill' }: { onClick: () =>
  * transformasi/animasi pemutar penuh.
  */
 export default function SleepTimerSheet({ onClose }: { onClose: () => void }) {
+  const exitRef = useExitGhost()
   const { endsAt, atTrackEnd, active, startMinutes, startAtTrackEnd, cancel } = useSleepTimer()
   const remaining = useRemainingSeconds(endsAt)
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -128,7 +130,7 @@ export default function SleepTimerSheet({ onClose }: { onClose: () => void }) {
         : 'Musik berhenti sendiri setelah waktu yang kamu pilih'
 
   return createPortal(
-    <div className="fixed inset-0 z-[70]" onKeyDown={onKeyDown}>
+    <div ref={exitRef} className="fixed inset-0 z-[70]" onKeyDown={onKeyDown}>
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={sheetRef}
@@ -143,7 +145,7 @@ export default function SleepTimerSheet({ onClose }: { onClose: () => void }) {
             {status}
           </p>
         </div>
-        <ul className="border-t border-line px-2 pt-2">
+        <ul className="mv-list border-t border-line px-2 pt-2">
           {OPTIONS_MINUTES.map((minutes) => (
             <Action key={minutes} icon={Moon} label={`${minutes} menit`} onClick={() => choose(() => startMinutes(minutes))} />
           ))}

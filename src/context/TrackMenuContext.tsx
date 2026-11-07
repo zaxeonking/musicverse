@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import TrackMenuSheet from '../components/player/TrackMenuSheet'
 import type { PlaylistTrack } from '../types/spotify'
+import Presence from '../components/ui/Presence'
 
 /** Dari mana menu dibuka; menu menyesuaikan opsinya dengan tempat (selain kondisi lagunya). */
 export type TrackMenuPlace =
@@ -104,10 +105,11 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
         aria-live="polite"
         className="pointer-events-none fixed inset-x-0 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] z-[65] flex justify-center px-4 lg:bottom-28"
       >
-        {toast && (
+        <Presence show={toast !== null} mode="float">
+          {toast && (
           <div
             key={toast.id}
-            className="flex max-w-sm animate-fade-in items-center gap-2 rounded-full bg-raised py-2.5 pl-4 pr-4 text-center text-sm font-medium text-ink shadow-xl shadow-black/50"
+            className="mv-pop flex max-w-sm items-center gap-2 rounded-full bg-raised py-2.5 pl-4 pr-4 text-center text-sm font-medium text-ink shadow-xl shadow-black/50"
           >
             <p className="min-w-0">{toast.message}</p>
             {toast.action && (
@@ -125,7 +127,8 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
               </button>
             )}
           </div>
-        )}
+          )}
+        </Presence>
       </div>
     </TrackMenuContext.Provider>
   )

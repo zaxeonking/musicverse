@@ -24,7 +24,7 @@ function NoticeBar({
   onDismiss?: () => void
 }) {
   return (
-    <div role={role} className="flex items-start gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
+    <div role={role} className="mv-drop flex items-start gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
       <p className="min-w-0 flex-1">{children}</p>
       {onDismiss && (

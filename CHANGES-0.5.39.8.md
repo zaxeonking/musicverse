@@ -142,7 +142,7 @@ Bila proses aplikasi sudah mati (widget tampil "siap"), tombol **Putar** di widg
 - JS: `App.tsx`, `musicVerseNative.ts`, `audioEngine.ts` (`resume`), `useAudioPlayerController.ts` (`togglePlayPause`), `FullPlayer.tsx`, `LyricsPanel.tsx`, `TrackMenuSheet.tsx`, `useCoverGlow.ts` (`resolveCoverGlow`), `HistoryPage.tsx`, `PlaybackSettingsPage.tsx`, `plugins/ytmusic.ts` / `registry.ts` / `types.ts`, `types/spotify.ts`, `artistApi.ts` (`fetchArtistRadio`), `utils/playLog.ts`, `tailwind.config.js` (`accent` lewat `--mv-accent`)
 - `scripts/setup-android.mjs`, `package.json` (`version` 0.5.39, `appVersion` 0.5.39.8)
 
-**Catatan versi**: catatan per versi 0.5.39 sampai 0.5.45 masih ada sebagai `CHANGES-0.5.39.md` sampai `CHANGES-0.5.45.md`; berkas ini menggabungkannya bersama 0.5.46.
+**Catatan versi**: catatan per versi 0.5.39 sampai 0.5.43 masih ada sebagai `CHANGES-0.5.39.md` sampai `CHANGES-0.5.43.md`; 0.5.44 dan 0.5.45 kini ada di `CHANGES-0.5.46.md`; berkas ini menggabungkannya bersama 0.5.46.
 
 **Catatan build**
 - 📦 **Butuh APK baru** (Java + manifest + resource). Sidik jari native berubah, jadi paket OTA tidak akan terpasang di APK lama. Di APK lama, `setAutoBrowse` / `consumeAutoRequest` melempar UNIMPLEMENTED dan diabaikan, `AutoSync` tidak berbuat apa pun.

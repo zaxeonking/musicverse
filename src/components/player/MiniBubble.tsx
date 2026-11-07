@@ -69,6 +69,8 @@ interface MiniBubbleProps {
   rise?: boolean
   /** Hanya bersama `rise`: jarak (px) disc mulai di bawah posisi akhirnya, yaitu tempat kartu tadi di belakang keyboard. */
   riseFrom?: number
+  /** Muncul menyatu di bawah kartu yang sedang menutup jadi disc (lihat MiniPlayer.flyToBubble), bukan membesar dari kecil. */
+  morph?: boolean
 }
 
 /**
@@ -77,7 +79,9 @@ interface MiniBubbleProps {
  *  - seret ke kiri/kanan    = pindah sisi layar (menempel otomatis, ada getar kecil),
  *  - tahan                  = putar / jeda.
  */
-export default function MiniBubble({ now, side, width, onExpand, onSideChange, rise = false, riseFrom = 0 }: MiniBubbleProps) {
+export default function MiniBubble({ now, side, width, onExpand, onSideChange, rise = false, riseFrom = 0, morph = false }: MiniBubbleProps) {
+  // Dikunci saat dipasang: `morph` kembali false setelah kartu hantu hilang, dan itu tidak boleh memutar ulang animasi masuk.
+  const [morphEntry] = useState(morph)
   const { status, togglePlayPause } = useAudioPlayer()
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
   const gesture = useRef({ id: -1, x: 0, y: 0, moved: false, held: false, timer: 0 })
@@ -159,7 +163,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
   return (
     <div
       style={rise && riseFrom > 0 ? ({ '--rise-from': `${Math.round(riseFrom)}px` } as CSSProperties) : undefined}
-      className={`pointer-events-none relative h-14 ${rise ? 'animate-bubble-rise' : 'animate-bubble-in'} motion-reduce:animate-none ${
+      className={`pointer-events-none relative h-14 ${rise ? 'animate-bubble-rise' : morphEntry ? 'animate-bubble-morph' : 'animate-bubble-in'} motion-reduce:animate-none ${
         side === 'right' ? 'origin-bottom-right' : 'origin-bottom-left'
       }`}
     >

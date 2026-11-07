@@ -36,7 +36,7 @@
             document.documentElement.classList.add('app-ready')
             if (s) {
               s.classList.add('splash-hide')
-              setTimeout(function () { s.remove() }, 600)
+              setTimeout(function () { s.remove() }, 1400)
             }
           }, 10000)
         }
@@ -47,14 +47,19 @@
   </head>
   <body>
     <div id="splash" aria-hidden="true">
-      <svg viewBox="0 0 32 32">
-        <g fill="#1DB954">
-          <rect x="6" y="14" width="3.5" height="8" rx="1.75" />
-          <rect x="11.5" y="9" width="3.5" height="18" rx="1.75" />
-          <rect x="17" y="5" width="3.5" height="22" rx="1.75" />
-          <rect x="22.5" y="11" width="3.5" height="12" rx="1.75" />
-        </g>
-      </svg>
+      <div class="splash-zoom">
+        <div class="splash-group">
+          <svg viewBox="0 0 32 32">
+            <g fill="#1DB954">
+              <rect x="6" y="14" width="3.5" height="8" rx="1.75" />
+              <rect x="11.5" y="9" width="3.5" height="18" rx="1.75" />
+              <rect x="17" y="5" width="3.5" height="22" rx="1.75" />
+              <rect x="22.5" y="11" width="3.5" height="12" rx="1.75" />
+            </g>
+          </svg>
+          <p class="splash-name"><span>M</span><span>u</span><span>s</span><span>i</span><span>c</span><span>V</span><span>e</span><span>r</span><span>s</span><span>e</span></p>
+        </div>
+      </div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

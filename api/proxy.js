@@ -1,6 +1,7 @@
 // Proxy server-side ke API pihak ketiga (menghindari CORS di browser).
 // vercel.json: /nexa/<path>  -> /api/proxy?upstream=nexa&path=<path>
 //              /netease/<path> -> /api/proxy?upstream=netease&path=<path>
+//              /lyricsplus/<path>, /boidu/<path> -> idem (lirik per kata)
 const UPSTREAMS = {
   nexa: { base: 'https://api.nexadev.my.id', allowed: ['api/spotifypl', 'api/spotifyplay', 'api/spotify'] },
   // Lirik NetEase (bertanda waktu). Butuh header Referer agar tidak ditolak.
@@ -9,6 +10,9 @@ const UPSTREAMS = {
     allowed: ['api/search/get', 'api/song/lyric'],
     headers: { Referer: 'https://music.163.com/' },
   },
+  // Lirik per kata (best-effort; lihat docs/HANDOFF-lyrics-wordsync.md).
+  lyricsplus: { base: 'https://lyricsplus.prjktla.my.id', allowed: ['v2/lyrics/get'] },
+  boidu: { base: 'https://lyrics-api.boidu.dev', allowed: ['getLyrics'] },
 }
 const TIMEOUT_MS = 25000
 // Cloudflare 52x (mis. 525 SSL handshake) dan 502-504 sering sementara / tergantung edge: coba ulang.

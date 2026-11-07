@@ -17,7 +17,7 @@ function PlaylistCard({ playlist }: { playlist: MyPlaylist }) {
     <li>
       <Link
         to={`/my/${playlist.id}`}
-        className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised focus-ring"
+        className="flex flex-col rounded-lg bg-card p-3 tap-card hover:bg-raised focus-ring"
       >
         <span className="mb-3 block">
           <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
@@ -62,11 +62,11 @@ export default function MyPlaylistsSection() {
         }
       />
       {creating && (
-        <div className="mb-4 rounded-lg bg-card p-3">
+        <div className="mv-drop mb-4 rounded-lg bg-card p-3">
           <NewPlaylistForm onCreate={create} onCancel={() => setCreating(false)} />
         </div>
       )}
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+      <ul className="mv-list grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {playlists.map((playlist) => (
           <PlaylistCard key={playlist.id} playlist={playlist} />
         ))}

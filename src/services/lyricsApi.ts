@@ -3,6 +3,8 @@ import { parseDuration } from '../utils/formatTime'
 import { parseLrc, type LyricLine } from '../utils/lrc'
 import { stripArtistPrefix } from '../utils/trackTitle'
 import { fetchYtMusicLyrics } from '../plugins/ytLyrics'
+import { fetchTrackIsrc, findDeezerTrackId } from './artistApi'
+import { fetchWordLyrics, normalizeIsrc, type WordLyricsHit } from './wordLyrics'
 
 /**
  * Lirik dari LRCLIB (https://lrclib.net): gratis, tanpa kunci API. Dipanggil langsung dari browser;
@@ -21,7 +23,16 @@ export interface SyncedVersion {
 
 export type LyricsResult =
   /** `duration`: durasi lagu pada data lirik (detik), untuk mendeteksi versi audio yang berbeda. */
-  | { kind: 'synced'; lines: LyricLine[]; duration: number | null; alternatives: SyncedVersion[] }
+  | {
+      kind: 'synced'
+      lines: LyricLine[]
+      duration: number | null
+      alternatives: SyncedVersion[]
+      /** Provider kata (mis. "lyricsplus") bila lirik ini dari sana; kosong = sumber lama (LRCLIB dkk.). */
+      source?: string
+      /** true = baris-barisnya punya waktu kata ASLI (karaoke tepat), bukan perkiraan. */
+      wordSynced?: boolean
+    }
   | { kind: 'plain'; lines: string[]; duration: number | null }
   | { kind: 'instrumental' }
   | { kind: 'none' }
@@ -325,7 +336,7 @@ const SOURCE_GRACE_MS = 1500
  * sebagai `alternatives` supaya pemutar bisa memilih ulang memakai durasi audio yang benar-benar terdengar.
  * Sumber yang gagal/diblokir tidak menggagalkan yang lain; galat baru dilaporkan jika SEMUA sumber gagal.
  */
-export async function fetchLyrics(track: PlaylistTrack, options: { signal: AbortSignal }): Promise<LyricsResult> {
+async function fetchLegacyLyrics(track: PlaylistTrack, options: { signal: AbortSignal }): Promise<LyricsResult> {
   const { signal } = options
   const durationS = parseDuration(track.duration)
   const artist = primaryArtist(track.artists)
@@ -401,4 +412,77 @@ export async function fetchLyrics(track: PlaylistTrack, options: { signal: Abort
   // Tidak ada hasil DAN semua sumber gagal: laporkan galatnya, jangan bilang "tidak ditemukan".
   if (errors.length === jobs.length) throw errors[0]
   return { kind: 'none' }
+}
+
+/** Hasil provider kata menang atas sumber lama hanya bila benar-benar lebih baik. */
+export function shouldPreferWord(word: Pick<WordLyricsHit, 'lines' | 'wordSynced'>, legacy: LyricsResult | null): boolean {
+  if (!legacy) return true
+  if (legacy.kind === 'instrumental') return false // LRCLIB menandai instrumental: jangan dibantah oleh hasil kata yang meragukan
+  if (legacy.kind === 'synced') {
+    // Hasil per baris dari provider kata tidak menambah apa-apa di atas sumber lama; hasil per kata menang bila cukup lengkap.
+    return word.wordSynced && word.lines.length >= legacy.lines.length * 0.6
+  }
+  return true // sumber lama hanya lirik polos / tidak ada: lirik berwaktu dari provider kata lebih baik
+}
+
+const isrcCache = new Map<string, string | undefined>()
+
+/**
+ * ISRC lagu: dari `track.isrc`; untuk lagu asal Deezer (`id` = `dz-<angka>`) dari `/track/{id}`; untuk lagu lain (mis. playlist
+ * Spotify, yang sumbernya tanpa ISRC) dicari di Deezer lewat judul + artis + durasi, hanya bila rekamannya cocok persis
+ * (`pickDeezerTrackId`). Di-cache per sesi; "tidak ketemu" di-cache, galat / lambat tidak (dicoba lagi lain kali).
+ * Hanya dicari di APK karena hanya Binimum (APK) yang memakainya.
+ */
+export async function resolveIsrc(track: PlaylistTrack, signal: AbortSignal): Promise<string | undefined> {
+  const own = normalizeIsrc(track.isrc)
+  if (own) return own
+  const cap = typeof window !== 'undefined' ? (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor : undefined
+  if (cap?.isNativePlatform?.() !== true) return undefined
+  const dz = /^dz-(\d+)$/.exec(track.id)?.[1]
+  const title = cleanTitle(stripArtistPrefix(track.title, track.artists)) || track.title
+  const artist = primaryArtist(track.artists)
+  const durationS = parseDuration(track.duration)
+  const key = dz ?? (title && artist ? `q:${normalizeName(title)}|${normalizeName(artist)}|${Math.round((durationS ?? 0) / 4)}` : '')
+  if (!key) return undefined
+  if (isrcCache.has(key)) return isrcCache.get(key)
+  try {
+    const dzId = dz ?? (await findDeezerTrackId(title, artist, durationS, signal))
+    const found = dzId ? normalizeIsrc(await fetchTrackIsrc(dzId, signal)) : undefined
+    isrcCache.set(key, found)
+    return found
+  } catch {
+    return undefined // tidak di-cache: coba lagi lain kali
+  }
+}
+
+/**
+ * Titik masuk lirik. Provider per kata (LyricsPlus / BetterLyrics; lihat wordLyrics.ts) dijalankan BERSAMAAN dengan
+ * rantai sumber lama; hasil per kata dipakai bila lebih baik (`shouldPreferWord`), kalau tidak sumber lama seperti biasa.
+ * Provider kata tidak pernah menggagalkan pencarian: galat hanya dilaporkan dari sumber lama.
+ */
+export async function fetchLyrics(track: PlaylistTrack, options: { signal: AbortSignal }): Promise<LyricsResult> {
+  const { signal } = options
+  const baseTitle = stripArtistPrefix(track.title, track.artists)
+  const wordJob = resolveIsrc(track, signal).then((isrc) =>
+    fetchWordLyrics(
+      { title: cleanTitle(baseTitle) || baseTitle, artist: primaryArtist(track.artists), album: track.album || undefined, isrc, durationS: parseDuration(track.duration) },
+      signal,
+    ),
+  )
+  let legacy: LyricsResult | null = null
+  let legacyError: unknown
+  try {
+    legacy = await fetchLegacyLyrics(track, options)
+  } catch (error) {
+    legacyError = error
+  }
+  if (signal.aborted) throw new LyricsError('aborted', 'Permintaan lirik dibatalkan.')
+  const word = await wordJob
+  if (word && shouldPreferWord(word, legacy)) {
+    // duration: null = anggap waktu lirik cocok dengan audio ("exact"). Waktu akhir baris terakhir BUKAN durasi lagu,
+    // dan mengisinya akan memaksa useLyricTiming masuk mode "scaled" / "estimated" yang salah.
+    return { kind: 'synced', lines: word.lines, duration: null, alternatives: [], source: word.provider, wordSynced: word.wordSynced }
+  }
+  if (legacy) return legacy
+  throw legacyError
 }

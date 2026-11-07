@@ -46,7 +46,7 @@ export default function RefreshChoiceSheet({ onClose, onRefresh, onSync }: Refre
         className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
       >
         <p className="px-4 pb-3 pt-4 text-sm font-semibold text-ink">Perbarui playlist</p>
-        <ul className="border-t border-line px-2 pt-2">
+        <ul className="mv-list border-t border-line px-2 pt-2">
           <Action icon={RefreshCw} label="Muat data terbaru" hint="Tambahkan lagu baru dari Spotify, tanpa mengunduh" onClick={choose(onRefresh)} />
           <Action icon={Download} label="Unduh yang baru" hint="Tambahkan lagu baru dan unduh yang belum terunduh" onClick={choose(onSync)} />
         </ul>

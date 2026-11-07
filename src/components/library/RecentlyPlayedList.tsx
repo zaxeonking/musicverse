@@ -115,7 +115,7 @@ export default function RecentlyPlayedList({
   onPlay,
 }: RecentlyPlayedListProps) {
   return (
-    <ul className="-mx-2" aria-label="Lagu yang baru diputar">
+    <ul className="mv-list -mx-2" aria-label="Lagu yang baru diputar">
       {items.map((entry) => (
         <RecentRow
           key={recentKey(entry.track)}

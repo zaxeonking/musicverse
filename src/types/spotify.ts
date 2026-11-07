@@ -11,6 +11,8 @@ export interface SpotifyApiTrack {
   album: string
   duration: string
   url: string
+  /** ISRC bila sumbernya menyediakan (playlist Spotify biasanya TIDAK; lagu Deezer lewat /track/{id}). */
+  isrc?: string
 }
 
 export interface SpotifyApiPlaylistResponse {

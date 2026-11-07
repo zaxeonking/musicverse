@@ -13,3 +13,7 @@ judul abu-abu terang (tetap terbaca, kontras >7:1), sampul sedikit redup, ikon c
 Lagu yang sedang diputar/dipilih tetap berwarna aksen.
 
 File: src/components/playlist/TrackRow.tsx
+
+## Splash native (butuh APK baru, tidak bisa lewat OTA)
+- Splash bawaan Android (ikon launcher besar di tengah) diganti layar polos #121212 layar penuh; logo beranimasi hanya tampil sekali, di splash web.
+- Dipasang oleh scripts/setup-android.mjs (patch styles.xml) + native/android/res/values/mv_splash.xml, drawable/mv_splash_empty.xml.

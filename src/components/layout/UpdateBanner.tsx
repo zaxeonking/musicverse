@@ -1,5 +1,6 @@
 import { RefreshCw, X } from 'lucide-react'
-import { useAppUpdate } from '../../hooks/useAppUpdate'
+import { useAppUpdate, type AppUpdateState } from '../../hooks/useAppUpdate'
+import Presence from '../ui/Presence'
 
 /**
  * Banner pembaruan di dalam APK. Opsional: "Nanti" menutupnya sampai ada versi yang lebih baru.
@@ -7,7 +8,10 @@ import { useAppUpdate } from '../../hooks/useAppUpdate'
  */
 export default function UpdateBanner() {
   const update = useAppUpdate()
-  if (!update) return null
+  return <Presence show={update !== null}>{update && <BannerBody update={update} />}</Presence>
+}
+
+function BannerBody({ update }: { update: AppUpdateState }) {
   const { phase, release, progress } = update
   const percent = progress === null ? null : Math.round(progress * 100)
   const busy = phase === 'downloading'

@@ -23,7 +23,7 @@ export default function TrackSelectionBar({ count, total, onSelectAll, onClear, 
   const allSelected = total > 0 && count >= total
 
   return (
-    <div role="region" aria-label="Mode pilih lagu" className="sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8">
+    <div role="region" aria-label="Mode pilih lagu" className="mv-drop sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8">
       <div className="rounded-lg bg-card px-3 py-2">
         {confirming ? (
           <div role="group" aria-label={`Konfirmasi hapus ${count} lagu`}>

@@ -115,7 +115,7 @@ export default function TrackList({
               type="button"
               onClick={() => setQuery('')}
               aria-label="Hapus pencarian"
-              className="icon-btn absolute right-0 top-1/2 h-11 w-11 -translate-y-1/2"
+              className="mv-pop icon-btn absolute right-0 top-1/2 h-11 w-11 -translate-y-1/2"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -155,7 +155,7 @@ export default function TrackList({
             <span className="text-right">Durasi</span>
             <span />
           </div>
-          <ul {...swipeHandlers} className="-mx-2 touch-pan-y">
+          <ul {...swipeHandlers} className="mv-list -mx-2 touch-pan-y">
             {visible.map(({ track, index }) => (
               <TrackRow
                 key={track.id}

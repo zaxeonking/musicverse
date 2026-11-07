@@ -15,8 +15,11 @@ import { isNativeApp } from './native/platform'
  * Di peramban: render situs informasi saja (landing untuk memasang APK, Kebijakan Privasi, Ketentuan Layanan); kode
  * pemutar tidak dimuat sama sekali (import dinamis), jadi tidak ada versi web yang bisa dipakai.
  */
-/** Splash (index.html) memudar setelah aplikasi tampil dan minimal ±0,8 dtk sejak dibuka; Beranda memudar masuk bersamaan. */
-const SPLASH_MIN_MS = 800
+/**
+ * Splash (index.html): logo -> nama -> zoom pelan, jadi tampil minimal ±2,2 dtk sejak dibuka (setelah itu zoom menembus keluar,
+ * Beranda masuk bersamaan). Tanpa gerakan (preferensi "kurangi gerakan"): cukup ±0,5 dtk.
+ */
+const SPLASH_MIN_MS = 2200
 function dismissSplash() {
   const html = document.documentElement
   const splash = document.getElementById('splash')
@@ -24,10 +27,14 @@ function dismissSplash() {
     html.classList.add('app-ready')
     if (!splash) return
     splash.classList.add('splash-hide')
-    splash.addEventListener('transitionend', () => splash.remove(), { once: true })
-    window.setTimeout(() => splash.remove(), 900)
+    // transitionend dari anak (zoom keluar) ikut naik ke sini: hanya opacity splash sendiri yang menghapusnya.
+    splash.addEventListener('transitionend', (event) => {
+      if (event.target === splash) splash.remove()
+    })
+    window.setTimeout(() => splash.remove(), 1400)
   }
-  const wait = Math.max(0, SPLASH_MIN_MS - performance.now())
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const wait = Math.max(0, (reduced ? 500 : SPLASH_MIN_MS) - performance.now())
   // Dua frame supaya render pertama sudah digambar di balik splash sebelum fade dimulai.
   window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(reveal)), wait)
 }

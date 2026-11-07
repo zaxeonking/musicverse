@@ -20,7 +20,7 @@ export default function SheetAction({ icon: Icon, label, hint, onClick, disabled
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 py-1.5 text-left text-sm font-medium transition-colors hover:bg-raised active:bg-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+        className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 py-1.5 text-left text-sm font-medium tap-row hover:bg-raised active:bg-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
           danger ? 'text-danger' : 'text-ink'
         } focus-ring`}
       >

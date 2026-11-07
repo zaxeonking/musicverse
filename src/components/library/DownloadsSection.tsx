@@ -219,7 +219,7 @@ export default function DownloadsSection() {
   const renderRows = (rows: readonly DownloadedTrack[], fromPlaylistId?: string) => {
     const list = rows.map(toPlaylistTrack)
     return (
-      <ul className="-mx-2">
+      <ul className="mv-list -mx-2">
         {rows.map((item, index) => (
           <DownloadedRow
             key={`${fromPlaylistId ?? 'single'}-${item.key}`}
@@ -293,7 +293,7 @@ export default function DownloadsSection() {
       </Link>
 
       {(waiting > 0 || failed > 0) && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="mv-drop mb-2 flex flex-wrap items-center gap-2">
           {waiting > 0 && (
             <button
               type="button"
@@ -332,7 +332,7 @@ export default function DownloadsSection() {
       )}
 
       {pending.length > 0 && (
-        <ul className="mb-3 space-y-2">
+        <ul className="mv-list mb-3 space-y-2">
           {pending.map((transfer) => {
             const name = transfer.title ?? tracks.find((t) => t.id === transfer.key)?.title
             const active = transfer.status === 'downloading' || transfer.status === 'resolving'
@@ -380,7 +380,7 @@ export default function DownloadsSection() {
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={transfer.percent ?? undefined}
-                      className="mt-2 block h-1 overflow-hidden rounded-full bg-white/10"
+                      className="mv-pop mt-2 block h-1 overflow-hidden rounded-full bg-white/10"
                     >
                       <span
                         className={`block h-full rounded-full bg-accent ${transfer.percent === null ? 'w-1/3 animate-pulse' : 'transition-[width] duration-300'}`}
@@ -474,7 +474,7 @@ export default function DownloadsSection() {
           })}
           {singles.length > 0 && (
             <section aria-label="Lagu satuan">
-              <div className="flex items-center gap-1">
+              <div className="mv-in flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => toggleGroup('__single')}

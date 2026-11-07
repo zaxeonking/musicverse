@@ -16,7 +16,7 @@ export default function EmptyState({ icon: Icon, title, description, action, com
   return (
     <div
       role={tone === 'error' ? 'alert' : undefined}
-      className={`flex flex-col items-center rounded-lg bg-card px-6 text-center ${compact ? 'py-8' : 'py-14'}`}
+      className={`mv-pop flex flex-col items-center rounded-lg bg-card px-6 text-center ${compact ? 'py-8' : 'py-14'}`}
     >
       <Icon className={`${tone === 'error' ? 'text-danger' : 'text-ink-faint'} ${compact ? 'mb-3 h-8 w-8' : 'mb-4 h-10 w-10'}`} aria-hidden="true" />
       <p className="text-balance font-display text-lg font-bold text-ink">{title}</p>

@@ -56,7 +56,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
       <li {...press}>
         <Link
           to={`/my/${playlist.id}`}
-          className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-raised focus-ring"
+          className="flex items-center gap-3 rounded-md px-2 py-2 tap-row hover:bg-raised focus-ring"
         >
           <span className="w-14 shrink-0">
             <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} />
@@ -77,7 +77,7 @@ function MyPlaylistCard({ playlist, layout, onMenu }: { playlist: MyPlaylist; la
     <li {...press}>
       <Link
         to={`/my/${playlist.id}`}
-        className="flex flex-col rounded-lg bg-card p-3 transition-colors hover:bg-raised focus-ring"
+        className="flex flex-col rounded-lg bg-card p-3 tap-card hover:bg-raised focus-ring"
       >
         <span className="mb-3 block">
           <CoverArt cover={fallback} src={playlist.tracks[0]?.cover} className="shadow-lg shadow-black/40" />
@@ -253,7 +253,7 @@ export default function PlaylistsSection() {
       </div>
 
       {creating && (
-        <div className="mb-4 rounded-lg bg-card p-3">
+        <div className="mv-drop mb-4 rounded-lg bg-card p-3">
           <NewPlaylistForm onCreate={create} onCancel={() => setCreating(false)} />
         </div>
       )}
@@ -312,7 +312,7 @@ export default function PlaylistsSection() {
           <ul
             data-tour="playlist-list"
             {...swipeHandlers}
-            className={`touch-pan-y ${
+            className={`mv-list touch-pan-y ${
               prefs.view === 'grid'
                 ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5'
                 : '-mx-2'

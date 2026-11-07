@@ -123,7 +123,7 @@ export default function BrowsePage() {
               Acak
             </button>
           </div>
-          <ul className="space-y-1">
+          <ul className="mv-list space-y-1">
             {active.tracks.map((track, i) => (
               <BrowseTrackRow
                 key={recentKey(track)}
@@ -167,7 +167,7 @@ export default function BrowsePage() {
               title="Belum ada data"
             />
           ) : (
-            <ul className="space-y-1">
+            <ul className="mv-list space-y-1">
               {filtered.map((g) => (
                 <li key={g.name}>
                   <button

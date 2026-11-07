@@ -91,7 +91,7 @@ export default function AddToPlaylistPicker({ track, onBack, onDone }: AddToPlay
           Selesai
         </button>
       </div>
-      <ul className="max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
+      <ul className="mv-list max-h-[40dvh] overflow-y-auto border-t border-line px-2 pt-2">
         {playlists.map((playlist) => {
           const has = playlist.tracks.some((item) => trackIdentity(item) === identity)
           return (

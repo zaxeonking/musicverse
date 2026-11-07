@@ -181,7 +181,7 @@ export default function LocalFolder() {
       </div>
 
       {open && (
-        <div className="mt-1">
+        <div className="mv-in mt-1">
           {status === 'denied' && (
             <div className="rounded-lg bg-card px-4 py-3 text-sm text-ink">
               <p>
@@ -222,7 +222,7 @@ export default function LocalFolder() {
           )}
           {tracks.length > 0 && (
             <>
-              <ul className="-mx-2">
+              <ul className="mv-list -mx-2">
                 {tracks.slice(0, shown).map((item, index) => (
                   <LocalRow
                     key={item.id}

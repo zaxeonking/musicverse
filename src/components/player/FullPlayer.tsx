@@ -21,10 +21,12 @@ import { isNativeApp } from '../../native/platform'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
 /** Durasi & easing gerakan pemutar penuh <-> mini player (satu animasi berkelanjutan). */
-const OPEN_MS = 440
+const OPEN_MS = 560
 const CLOSE_MS = 380
 const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 const EASE_HERO = 'cubic-bezier(0.45, 0, 0.15, 1)'
+/** Buka: melesat dulu lalu mengendap pelan di posisi akhir (ease-out kuat), seperti sampul "ditarik" ke atas. */
+const EASE_OPEN = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
 const prefersReducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 /** Jeda masuk bertahap (ms) untuk elemen pemutar penuh. */
@@ -33,6 +35,41 @@ const delay = (ms: number) => ({ '--fp-delay': `${ms}ms` }) as CSSProperties
 const miniCoverRect = () => {
   const rect = document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect()
   return rect && rect.width > 0 ? rect : null
+}
+
+/** Radius sudut sampul mini player (px), dibatasi setengah lebarnya; cadangan 8 bila tak terbaca. */
+const miniCoverRadius = (width: number) => {
+  const root = document.querySelector<HTMLElement>('[data-mini-cover]')
+  const target = root?.firstElementChild ?? root
+  const r = target ? parseFloat(getComputedStyle(target).borderTopLeftRadius) : Number.NaN
+  return Math.min(Number.isFinite(r) ? r : 8, width / 2)
+}
+
+const FLY_STEPS = 10
+const SHADOW = '0 25px 50px -12px'
+
+/**
+ * Keyframe sampul terbang antara kotak kecil `from` dan kotak besar `to` (FLIP, asal sudut kiri atas).
+ * Skala murni ikut mengecilkan radius sudut (28px x 0,15 ~ 4px), jadi sudut tampak melompat. Di sini radius tiap
+ * langkah dihitung ulang supaya radius TAMPAK berubah mulus dari `rFrom` ke `rTo`, dan bayangan memudar masuk
+ * selama sampul naik. `reverse` = dari besar ke kecil (menutup); offset tetap menaik, hanya isinya yang dibalik.
+ */
+function flyKeyframes(from: DOMRect, to: DOMRect, rFrom: number, rTo: number, reverse = false): Keyframe[] {
+  const s0 = from.width / to.width
+  const frames: Keyframe[] = []
+  for (let i = 0; i <= FLY_STEPS; i += 1) {
+    const offset = i / FLY_STEPS
+    const p = reverse ? 1 - offset : offset
+    const scale = s0 + (1 - s0) * p
+    const visual = rFrom + (rTo - rFrom) * p
+    frames.push({
+      offset,
+      transform: `translate3d(${(from.left - to.left) * (1 - p)}px, ${(from.top - to.top) * (1 - p)}px, 0) scale(${scale})`,
+      borderRadius: `${visual / scale}px`,
+      boxShadow: `${SHADOW} rgba(0,0,0,${(0.6 * p).toFixed(3)})`,
+    })
+  }
+  return frames
 }
 
 /** Ikon hati: outline <-> terisi berganti halus, plus membal kecil saat baru disukai. */
@@ -144,13 +181,8 @@ export default function FullPlayer({
     const from = miniCoverRect()
     if (from && to.width > 0) {
       el.style.transformOrigin = 'top left'
-      el.animate(
-        [
-          { transform: `translate3d(${from.left - to.left}px, ${from.top - to.top}px, 0) scale(${from.width / to.width})` },
-          { transform: 'none' },
-        ],
-        { duration: OPEN_MS, easing: EASE_HERO },
-      )
+      const rTo = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 28
+      el.animate(flyKeyframes(from, to, miniCoverRadius(from.width), rTo), { duration: OPEN_MS, easing: EASE_OPEN })
     } else {
       // Mini player berupa gelembung / belum ada: sampul naik pelan dari bawah.
       el.animate(
@@ -231,9 +263,10 @@ export default function FullPlayer({
     }
     if (cover && natural) {
       cover.style.transformOrigin = 'top left'
-      const target =
+      const rFull = parseFloat(getComputedStyle(cover).borderTopLeftRadius) || 28
+      const target: Keyframe[] =
         mini && natural.width > 0
-          ? [{ transform: 'none' }, { transform: `translate3d(${mini.left - natural.left}px, ${mini.top - natural.top}px, 0) scale(${mini.width / natural.width})` }]
+          ? flyKeyframes(mini, natural, miniCoverRadius(mini.width), rFull, true)
           : [
               { opacity: 1, transform: 'none' },
               { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.92)' },
@@ -436,7 +469,7 @@ export default function FullPlayer({
         className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-white/25"
       />
       <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col pb-2 pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <header style={delay(120)} className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
+        <header style={delay(60)} className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
             ref={closeRef}
             type="button"
@@ -480,7 +513,7 @@ export default function FullPlayer({
         </div>
 
         <div className="space-y-3">
-          <div style={delay(190)} className="fp-item flex items-start gap-3">
+          <div style={delay(240)} className="fp-item flex items-start gap-3">
             <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
               <h2 title={now.title} className="line-clamp-2 break-words font-display text-[1.65rem] font-bold leading-tight text-ink">
                 {now.title}
@@ -503,7 +536,7 @@ export default function FullPlayer({
             </button>
           </div>
 
-          <div style={delay(250)} className="fp-item">
+          <div style={delay(290)} className="fp-item">
             {isError ? (
               <PlayerError />
             ) : (
@@ -517,7 +550,7 @@ export default function FullPlayer({
           </div>
 
           {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
-          <div style={delay(300)} className="fp-item">
+          <div style={delay(340)} className="fp-item">
             <TransportControls
               size="xl"
               className="!justify-between"
@@ -532,7 +565,7 @@ export default function FullPlayer({
 
           {/* Baris 2. Di APK (tanpa tautan Spotify) cuma tiga tombol: ulang kiri, lirik tepat di tengah (sejajar tombol
               putar), crossfade kanan. Di web: ulang · lirik di kiri; crossfade · buka di Spotify di kanan. */}
-          <div style={delay(350)} className="fp-item">
+          <div style={delay(390)} className="fp-item">
           {(() => {
             const lyricsBtn = (
               <button
@@ -599,7 +632,7 @@ export default function FullPlayer({
         data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        style={delay(400)}
+        style={delay(430)}
         className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-white/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted backdrop-blur-xl transition-colors hover:text-ink active:bg-white/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />

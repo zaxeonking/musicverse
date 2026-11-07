@@ -46,6 +46,14 @@
       "destination": "/api/proxy?upstream=netease&path=:path*"
     },
     {
+      "source": "/lyricsplus/:path*",
+      "destination": "/api/proxy?upstream=lyricsplus&path=:path*"
+    },
+    {
+      "source": "/boidu/:path*",
+      "destination": "/api/proxy?upstream=boidu&path=:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

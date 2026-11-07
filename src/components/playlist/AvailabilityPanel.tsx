@@ -74,7 +74,7 @@ export default function AvailabilityPanel({ availability, onManual }: Availabili
         </button>
       </div>
       {open && missing.length > 0 && (
-        <ul className="border-t border-line">
+        <ul className="mv-list border-t border-line">
           {missing.map((track) => (
             <li key={track.id} className="flex items-center gap-3 px-4 py-2">
               <span className="min-w-0 flex-1">

@@ -133,7 +133,7 @@
     animation-delay: 0ms;
   }
   .fp-bg {
-    animation: fp-bg-in 360ms var(--ease) both;
+    animation: fp-bg-in 480ms var(--ease) both;
   }
 
   /* Perpindahan halaman: geser horizontal lembut. --page-dx = +1 (maju, dari kanan) atau -1 (mundur, dari kiri). */
@@ -206,12 +206,134 @@
   }
 }
 
+/* ---------- Animasi muncul / bergerak (umum) ---------- */
+/* Semua animasi masuk memakai fill-mode `backwards` (bukan `both`): setelah selesai tidak menahan `transform`/`opacity`,
+   jadi gestur geser baris dan transisi lain yang memakai properti yang sama tetap bekerja. */
+@layer components {
+  /* Muncul: memudar masuk + naik sedikit. */
+  .mv-in {
+    animation: mv-in 340ms var(--ease) var(--mv-delay, 0ms) backwards;
+  }
+  /* Muncul dengan membal kecil (kartu, ikon, penanda). */
+  .mv-pop {
+    animation: mv-pop 380ms var(--ease-spring) var(--mv-delay, 0ms) backwards;
+  }
+  /* Turun dari atas (banner, bilah pilih): tinggi tidak dianimasikan, jadi tidak ada layout ulang tiap frame. */
+  .mv-drop {
+    transform-origin: top center;
+    animation: mv-drop 360ms var(--ease-spring) backwards;
+  }
+  .mv-drop-out {
+    transform-origin: top center;
+    animation: mv-drop-out 200ms var(--ease) forwards;
+    pointer-events: none;
+  }
+  /* Naik dari bawah (toast, aksi melayang). */
+  .mv-rise {
+    animation: mv-rise 320ms var(--ease-spring) backwards;
+  }
+  .mv-rise-out {
+    animation: mv-rise-out 180ms var(--ease) forwards;
+    pointer-events: none;
+  }
+  /* Muncul dari kiri/kanan (kotak centang yang muncul saat mode pilih). */
+  .mv-slide-x {
+    animation: mv-slide-x 300ms var(--ease-spring) backwards;
+  }
+
+  /* Daftar: anak langsung masuk bergantian (maks. 14 pertama; sisanya muncul bersamaan agar daftar panjang tidak lambat). */
+  .mv-list > * {
+    animation: mv-in 360ms var(--ease) backwards;
+  }
+  .mv-list > :nth-child(1) { animation-delay: 0ms; }
+  .mv-list > :nth-child(2) { animation-delay: 35ms; }
+  .mv-list > :nth-child(3) { animation-delay: 70ms; }
+  .mv-list > :nth-child(4) { animation-delay: 105ms; }
+  .mv-list > :nth-child(5) { animation-delay: 140ms; }
+  .mv-list > :nth-child(6) { animation-delay: 175ms; }
+  .mv-list > :nth-child(7) { animation-delay: 210ms; }
+  .mv-list > :nth-child(8) { animation-delay: 245ms; }
+  .mv-list > :nth-child(9) { animation-delay: 280ms; }
+  .mv-list > :nth-child(10) { animation-delay: 315ms; }
+  .mv-list > :nth-child(11) { animation-delay: 350ms; }
+  .mv-list > :nth-child(12) { animation-delay: 385ms; }
+  .mv-list > :nth-child(n + 13) { animation-delay: 420ms; }
+
+  /* Kartu / baris yang bisa diketuk: mengecil sedikit saat ditekan, kembali membal saat dilepas. */
+  .tap-card {
+    transition:
+      transform 220ms var(--ease-spring),
+      background-color 150ms var(--ease),
+      box-shadow 200ms var(--ease);
+  }
+  .tap-card:active {
+    transform: scale(0.97);
+    transition-duration: 90ms;
+  }
+  /* Versi halus untuk baris selebar layar (menekan sedikit saja, supaya tidak terasa melompat). */
+  .tap-row {
+    transition:
+      transform 220ms var(--ease-spring),
+      background-color 150ms var(--ease);
+  }
+  .tap-row:active {
+    transform: scale(0.985);
+    transition-duration: 90ms;
+  }
+
+}
+
+@keyframes mv-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}
+@keyframes mv-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+@keyframes mv-drop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0) scale(0.96);
+  }
+}
+@keyframes mv-drop-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0) scale(0.97);
+  }
+}
+@keyframes mv-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.94);
+  }
+}
+@keyframes mv-rise-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.96);
+  }
+}
+@keyframes mv-slide-x {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0) scale(0.6);
+  }
+}
+
 /* Mini player: sampulnya disembunyikan selama pemutar penuh terbuka (sampul "terbang" dari/ke posisi ini). */
 html[data-fp-open] [data-mini-cover] {
   visibility: hidden;
 }
 
 /* ---------- Splash ---------- */
+/* Urutan: logo (batang naik) -> nama muncul huruf per huruf di bawahnya -> seluruhnya membesar pelan (zoom) ->
+   saat siap, zoom menembus ke depan sambil memudar dan aplikasi masuk dari sedikit mengecil ke ukuran normal. */
 #splash {
   position: fixed;
   inset: 0;
@@ -219,16 +341,32 @@ html[data-fp-open] [data-mini-cover] {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background: #121212;
-  transition: opacity 420ms var(--ease);
+  transition: opacity 560ms var(--ease) 60ms;
 }
 #splash.splash-hide {
   opacity: 0;
   pointer-events: none;
 }
+/* Zoom pelan selama splash tampil (tahan di ukuran akhir). */
+.splash-zoom {
+  animation: splash-zoom 2600ms cubic-bezier(0.22, 0.6, 0.3, 1) both;
+}
+/* Saat keluar: membesar cepat menembus layar (transisi, karena animasi zoom di atasnya masih berjalan). */
+.splash-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  transition: transform 640ms cubic-bezier(0.55, 0, 0.85, 0.4);
+}
+#splash.splash-hide .splash-group {
+  transform: scale(2.2);
+}
 #splash svg {
-  width: 84px;
-  height: 84px;
+  width: 104px;
+  height: 104px;
   animation: splash-logo 520ms var(--ease) both;
 }
 #splash rect {
@@ -245,10 +383,53 @@ html[data-fp-open] [data-mini-cover] {
 #splash rect:nth-child(4) {
   animation-delay: 180ms;
 }
+.splash-name {
+  display: flex;
+  margin: 0;
+  font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #fff;
+}
+.splash-name span {
+  display: inline-block;
+  animation: splash-letter 560ms var(--ease-spring) both;
+  animation-delay: calc(560ms + var(--i, 0) * 45ms);
+}
+.splash-name span:nth-child(1) { --i: 0; }
+.splash-name span:nth-child(2) { --i: 1; }
+.splash-name span:nth-child(3) { --i: 2; }
+.splash-name span:nth-child(4) { --i: 3; }
+.splash-name span:nth-child(5) { --i: 4; }
+.splash-name span:nth-child(6) { --i: 5; }
+.splash-name span:nth-child(7) { --i: 6; }
+.splash-name span:nth-child(8) { --i: 7; }
+.splash-name span:nth-child(9) { --i: 8; }
+.splash-name span:nth-child(10) { --i: 9; }
+@keyframes splash-zoom {
+  from {
+    transform: scale(0.9);
+  }
+  to {
+    transform: scale(1.32);
+  }
+}
+@keyframes splash-letter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes splash-logo {
   from {
     opacity: 0;
-    transform: scale(0.88);
+    transform: scale(0.8);
   }
   to {
     opacity: 1;
@@ -263,13 +444,17 @@ html[data-fp-open] [data-mini-cover] {
     transform: none;
   }
 }
-/* Beranda muncul dengan fade-in begitu splash mulai memudar. */
+/* Aplikasi masuk: dari sedikit mengecil + transparan ke ukuran normal, bersamaan dengan splash yang zoom keluar. */
 html.has-splash #root {
   opacity: 0;
+  transform: scale(0.94);
 }
 html.has-splash.app-ready #root {
   opacity: 1;
-  transition: opacity 480ms var(--ease) 80ms;
+  transform: none;
+  transition:
+    opacity 560ms var(--ease) 140ms,
+    transform 760ms var(--ease-hero) 100ms;
 }
 html.no-splash #splash {
   display: none;

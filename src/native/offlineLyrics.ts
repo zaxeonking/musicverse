@@ -3,6 +3,7 @@ import { fetchLyrics, type LyricsResult } from '../services/lyricsApi'
 import type { PlaylistTrack } from '../types/spotify'
 import { findDownloaded, getOfflineState, LYRICS_DIR, toPlaylistTrack } from './offline'
 import { isNativeApp } from './platform'
+import type { LyricLine, LyricWord } from '../utils/lrc'
 
 /**
  * Lirik offline (APK). Lirik lagu yang diunduh disimpan sebagai berkas JSON di
@@ -24,12 +25,44 @@ function isStorable(result: LyricsResult): boolean {
   return result.kind === 'synced' || result.kind === 'plain' || result.kind === 'instrumental'
 }
 
-function isLine(value: unknown): boolean {
-  return typeof value === 'object' && value !== null && typeof (value as { time?: unknown }).time === 'number' && typeof (value as { text?: unknown }).text === 'string'
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+function cleanWord(value: unknown): LyricWord | null {
+  if (typeof value !== 'object' || value === null) return null
+  const w = value as Record<string, unknown>
+  return finite(w.time) && finite(w.end) && typeof w.text === 'string' ? { time: w.time, end: w.end, text: w.text } : null
+}
+
+/** Baris valid + field opsional (kata, penyanyi, vokal latar) yang bentuknya benar; yang rusak dibuang, bukan dipercaya. */
+function cleanLine(value: unknown): LyricLine | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  if (!finite(v.time) || typeof v.text !== 'string') return null
+  const line: LyricLine = { time: v.time, text: v.text }
+  if (finite(v.end)) line.end = v.end
+  if (typeof v.agent === 'string') line.agent = v.agent
+  if (v.background === true) line.background = true
+  if (typeof v.translation === 'string' && v.translation !== '') line.translation = v.translation
+  if (typeof v.transliteration === 'string' && v.transliteration !== '') line.transliteration = v.transliteration
+  if (Array.isArray(v.transliterationWords)) {
+    const tw = v.transliterationWords.map(cleanWord)
+    if (tw.length > 0 && tw.every((w): w is LyricWord => w !== null)) line.transliterationWords = tw
+  }
+  if (Array.isArray(v.words)) {
+    const words = v.words.map(cleanWord)
+    if (words.length > 0 && words.every((w): w is LyricWord => w !== null)) line.words = words
+  }
+  return line
+}
+
+function cleanLines(value: unknown): LyricLine[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const lines = value.map(cleanLine)
+  return lines.every((l): l is LyricLine => l !== null) ? lines : null
 }
 
 /** Memastikan isi berkas masih bentuk LyricsResult yang valid (berkas bisa rusak / diubah manual). */
-function parseResult(value: unknown): LyricsResult | null {
+export function parseResult(value: unknown): LyricsResult | null {
   if (typeof value !== 'object' || value === null) return null
   const v = value as Record<string, unknown>
   if (v.kind === 'instrumental') return { kind: 'instrumental' }
@@ -39,17 +72,20 @@ function parseResult(value: unknown): LyricsResult | null {
     return { kind: 'plain', lines: v.lines as string[], duration }
   }
   if (v.kind === 'synced') {
-    if (!Array.isArray(v.lines) || v.lines.length === 0 || !v.lines.every(isLine)) return null
+    const lines = cleanLines(v.lines)
+    if (!lines) return null
     const alternatives = Array.isArray(v.alternatives)
-      ? v.alternatives
-          .filter((a): a is { lines: unknown[]; duration: unknown } => typeof a === 'object' && a !== null && Array.isArray((a as { lines?: unknown }).lines))
-          .filter((a) => a.lines.length > 0 && a.lines.every(isLine))
-          .map((a) => ({
-            lines: a.lines as { time: number; text: string }[],
-            duration: typeof a.duration === 'number' && Number.isFinite(a.duration) ? a.duration : null,
-          }))
+      ? v.alternatives.flatMap((a) => {
+          if (typeof a !== 'object' || a === null) return []
+          const alt = cleanLines((a as { lines?: unknown }).lines)
+          const d = (a as { duration?: unknown }).duration
+          return alt ? [{ lines: alt, duration: finite(d) ? d : null }] : []
+        })
       : []
-    return { kind: 'synced', lines: v.lines as { time: number; text: string }[], duration, alternatives }
+    const result: Extract<LyricsResult, { kind: 'synced' }> = { kind: 'synced', lines, duration, alternatives }
+    if (typeof v.source === 'string') result.source = v.source
+    if (typeof v.wordSynced === 'boolean') result.wordSynced = v.wordSynced
+    return result
   }
   return null
 }

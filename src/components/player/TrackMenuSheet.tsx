@@ -228,7 +228,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
               </p>
             )}
 
-            <ul className="border-t border-line px-2 pt-2">
+            <ul className="mv-list border-t border-line px-2 pt-2">
               <Action
                 icon={isCurrent ? RotateCcw : Play}
                 label={isCurrent ? 'Putar ulang dari awal' : 'Putar sekarang'}
@@ -374,7 +374,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={onClose}
-                    className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 text-sm font-medium text-ink transition-colors hover:bg-raised active:bg-raised ${FOCUS}`}
+                    className={`flex min-h-[3rem] w-full items-center gap-4 rounded-md px-3 text-sm font-medium text-ink tap-row hover:bg-raised active:bg-raised ${FOCUS}`}
                   >
                     <ExternalLink className="h-5 w-5 shrink-0" aria-hidden="true" />
                     Buka di Spotify

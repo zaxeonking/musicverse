@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import type { Cover } from '../../types'
 import { isSafeHttpUrl } from '../../utils/spotifyUrl'
 
@@ -52,10 +52,18 @@ function Shape({ shape }: { shape: Cover['shape'] }) {
 export default function CoverArt({ cover, src, round = false, className = '' }: CoverArtProps) {
   const gradientId = useId()
   const [failed, setFailed] = useState(false)
+  // Gambar memudar masuk (dan mengendap dari sedikit lebih besar) begitu selesai dimuat, bukan muncul mendadak.
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     setFailed(false)
+    setLoaded(false)
   }, [src])
+
+  // Gambar dari cache bisa sudah selesai sebelum onLoad terpasang.
+  const imgRef = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setLoaded(true)
+  }, [])
 
   const showImage = isSafeHttpUrl(src) && !failed
   return (
@@ -67,13 +75,17 @@ export default function CoverArt({ cover, src, round = false, className = '' }: 
     >
       {showImage ? (
         <img
+          ref={imgRef}
           src={src}
           alt=""
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
+          onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${
+            loaded ? 'scale-100 opacity-100' : 'scale-[1.04] opacity-0'
+          }`}
         />
       ) : (
       <svg

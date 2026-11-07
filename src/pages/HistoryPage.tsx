@@ -94,7 +94,7 @@ export default function HistoryPage() {
           <section aria-label="Statistik" className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg bg-card p-4">
               <h2 className="mb-2 text-sm font-semibold text-ink">Lagu terbanyak</h2>
-              <ol className="space-y-1 text-sm">
+              <ol className="mv-list space-y-1 text-sm">
                 {stats.topTracks.map(({ track, count }) => (
                   <li key={track.url} className="flex justify-between gap-3">
                     <span className="min-w-0 truncate text-ink">{track.title}</span>
@@ -105,7 +105,7 @@ export default function HistoryPage() {
             </div>
             <div className="rounded-lg bg-card p-4">
               <h2 className="mb-2 text-sm font-semibold text-ink">Artis terbanyak</h2>
-              <ol className="space-y-1 text-sm">
+              <ol className="mv-list space-y-1 text-sm">
                 {stats.topArtists.map(({ name, count }) => (
                   <li key={name} className="flex justify-between gap-3">
                     <Link to={`/browse?tab=artist&g=${encodeURIComponent(name)}`} className="min-w-0 truncate text-ink">
@@ -121,7 +121,7 @@ export default function HistoryPage() {
           {groups.map((group) => (
             <section key={group.label} aria-label={group.label}>
               <SectionHeader title={group.label} />
-              <ul className="space-y-1">
+              <ul className="mv-list space-y-1">
                 {group.items.map((entry) => (
                   <HistoryRow key={`${entry.at}-${entry.track.url}`} entry={entry} onPlay={() => player.playAll([entry.track])} />
                 ))}

@@ -3,10 +3,13 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { LyricsState } from '../../hooks/useLyrics'
 import type { LyricsResult } from '../../services/lyricsApi'
-import { estimateActive, LEAD_S, useLyricTiming, type LyricItem as Item } from '../../hooks/useLyricTiming'
-import { audioEngine } from '../../services/audioEngine'
+import { estimateActive, useLyricTiming, type LyricItem as Item } from '../../hooks/useLyricTiming'
+import { useLyricDisplayPrefs } from '../../hooks/useLyricDisplayPrefs'
+import { romanize } from '../../utils/romanize'
 import { useLongPress } from '../../hooks/useLongPress'
 import { removeKey, writeJson } from '../../utils/safeStorage'
+import { wordsFor } from '../../utils/wordSync'
+import KaraokeWords, { REST_COLOR, REST_COLOR_DIM, type SweepTiming } from './KaraokeWords'
 
 interface LyricsPanelProps {
   state: LyricsState
@@ -59,66 +62,10 @@ export default function LyricsPanel({ state, onRetry, trackKey }: LyricsPanelPro
 }
 
 /** Info untuk efek karaoke (isi per baris): cara mengubah waktu audio menjadi waktu lirik. */
-interface FillTiming {
-  mode: 'exact' | 'scaled' | 'estimated'
-  ratio: number
-  offset: number
-}
+type FillTiming = SweepTiming
 
 /** Baris isi terlama dianggap sepanjang ini bila baris berikutnya jauh (jeda instrumental). */
 const FILL_MAX_S = 7
-const FILL_MIN_S = 0.6
-
-/**
- * Teks baris aktif yang "terisi" dari kiri ke kanan mengikuti lagu. Lebar isi dihitung dari posisi audio langsung
- * tiap frame dan ditulis lewat variabel CSS, tanpa render ulang React. Mati bila gerak dikurangi atau waktu hanya perkiraan.
- */
-function FilledText({ text, start, end, timing }: { text: string; start: number; end: number; timing: FillTiming }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  const { status } = useAudioPlayer()
-  const playing = status === 'playing'
-  const animate = timing.mode !== 'estimated' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const span = Math.min(FILL_MAX_S, Math.max(FILL_MIN_S, end - start))
-
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return undefined
-    if (!animate) {
-      node.style.setProperty('--fill', '100%')
-      return undefined
-    }
-    const paint = () => {
-      const live = audioEngine.getLiveTime()
-      if (live === null) return
-      const lyricTime = (timing.mode === 'scaled' ? live / timing.ratio : live) + timing.offset + LEAD_S
-      const p = Math.min(1, Math.max(0, (lyricTime - start) / span))
-      node.style.setProperty('--fill', `${(p * 100).toFixed(1)}%`)
-    }
-    paint()
-    if (!playing) return undefined
-    let frame = 0
-    const tick = () => {
-      paint()
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [animate, playing, start, span, timing.mode, timing.ratio, timing.offset])
-
-  return (
-    <span
-      ref={ref}
-      style={{
-        backgroundImage: 'linear-gradient(90deg, #fff var(--fill, 0%), rgba(255,255,255,0.45) var(--fill, 0%))',
-        WebkitBackgroundClip: 'text',
-        backgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-      }}
-    >
-      {text}
-    </span>
-  )
-}
 
 /** Satu baris lirik. Tahan lama = "baris ini yang sedang dinyanyikan sekarang" (penyelarasan manual). */
 function Row({
@@ -128,6 +75,7 @@ function Row({
   onCalibrate,
   index,
   fill,
+  side,
 }: {
   item: Item
   state: 'active' | 'past' | 'next'
@@ -136,27 +84,70 @@ function Row({
   index: number
   /** Hanya untuk baris aktif bertext pada lirik berwaktu: isi karaoke. */
   fill?: { start: number; end: number; timing: FillTiming }
+  /** Duet: 'left' penyanyi utama, 'right' penyanyi lain. Tanpa duet: tengah. */
+  side: 'center' | 'left' | 'right'
 }) {
   const handlers = useLongPress(() => {
     if (onCalibrate && item.time !== undefined) onCalibrate(item)
   })
-  const className = `block w-full origin-center select-none rounded-md px-1 py-1.5 text-xl font-bold leading-snug transition-all duration-300 ${
-    state === 'active' ? 'scale-105 text-ink' : state === 'past' ? 'text-white/30' : 'text-white/50'
-  }`
+  const bg = item.background === true
+  const align = side === 'left' ? 'text-left origin-left' : side === 'right' ? 'text-right origin-right' : 'text-center origin-center'
+  const size = bg ? 'text-base font-semibold py-0.5' : 'text-xl font-bold py-1.5'
+  const tone = bg
+    ? state === 'active' ? 'scale-[1.03] text-ink/80' : state === 'past' ? 'text-white/20' : 'text-white/35'
+    : state === 'active' ? 'scale-105 text-ink' : state === 'past' ? 'text-white/30' : 'text-white/50'
+  const className = `block w-full select-none rounded-md px-1 leading-snug transition-all duration-300 ${align} ${size} ${tone}`
   const text = item.text || '♪'
-  const content = fill && state === 'active' && item.text ? <FilledText text={text} start={fill.start} end={fill.end} timing={fill.timing} /> : text
+  const reliable = !!fill && fill.timing.mode !== 'estimated'
+  const realWords = item.words && item.words.length > 0 && reliable ? item.words : null
+  // Tanpa waktu kata dari sumber: waktu kata diperkirakan dari panjang huruf (logika yang sama dengan mini player),
+  // jadi baris LRC biasa pun disapu halus per kata, bukan sekaligus satu baris.
+  const fillStart = fill?.start
+  const fillEnd = fill?.end
+  const guessed = useMemo(
+    () =>
+      state === 'active' && reliable && !bg && !realWords && item.text && fillStart !== undefined
+        ? wordsFor({ time: fillStart, text: item.text }, fillEnd).words
+        : null,
+    [state, reliable, bg, realWords, item.text, fillStart, fillEnd],
+  )
+  const sweepWords = state === 'active' && item.text ? (realWords ?? guessed) : null
+  const content =
+    sweepWords && fill ? (
+      <KaraokeWords words={sweepWords} timing={fill.timing} rest={bg ? REST_COLOR_DIM : REST_COLOR} className="whitespace-pre-wrap" />
+    ) : (
+      text
+    )
+  // Romanisasi + terjemahan dari server (bila ada): kecil di bawah baris; vokal latar tidak diberi.
+  const subs = !bg ? [item.transliteration, item.translation].filter((t): t is string => !!t) : []
+  // Romanisasi dengan waktu kata dari server: pada baris aktif ikut terisi karaoke (sama seperti teks utama).
+  const romanWords = state === 'active' && fill && fill.timing.mode !== 'estimated' && item.transliterationWords && item.transliterationWords.length > 0 ? item.transliterationWords : null
+  const withSubs =
+    subs.length > 0 ? (
+      <>
+        {content}
+        {subs.map((t, i) => (
+          <span key={i} className="mt-0.5 block text-sm font-normal leading-snug text-white/55">
+            {romanWords && t === item.transliteration && fill ? <KaraokeWords words={romanWords} timing={fill.timing} rest={REST_COLOR_DIM} className="whitespace-pre-wrap" /> : t}
+          </span>
+        ))}
+      </>
+    ) : (
+      content
+    )
   const common = {
     'data-line': index,
+    'data-bg': bg ? 'true' : undefined,
     'aria-current': state === 'active' ? ('true' as const) : undefined,
     ...(onCalibrate ? handlers : {}),
   }
   return onSeek && item.time !== undefined ? (
     <button type="button" {...common} onClick={() => onSeek(item.time as number)} className={`${className} focus-ring`}>
-      {content}
+      {withSubs}
     </button>
   ) : (
     <p {...common} className={className}>
-      {content}
+      {withSubs}
     </p>
   )
 }
@@ -169,6 +160,7 @@ function LineList({
   onCalibrate,
   header,
   timing,
+  credit,
 }: {
   items: Item[]
   active: number
@@ -176,20 +168,36 @@ function LineList({
   onCalibrate?: (item: Item) => void
   header?: ReactNode
   timing?: FillTiming
+  credit?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Duet: bila ada >= 2 penyanyi berbeda, penyanyi pertama rata kiri dan yang lain rata kanan.
+  const { duet, mainAgent } = useMemo(() => {
+    const agents = new Set<string>()
+    for (const item of items) if (item.agent) agents.add(item.agent)
+    return { duet: agents.size >= 2, mainAgent: items.find((item) => item.agent)?.agent }
+  }, [items])
+
+  // Vokal latar menempel pada baris induknya: saat latar aktif, induk (baris utama sebelumnya) ikut menyala dan jadi jangkar gulir.
+  const parent = useMemo(() => {
+    if (active < 0 || !items[active]?.background) return -1
+    for (let i = active - 1; i >= 0; i -= 1) if (!items[i].background) return i
+    return -1
+  }, [items, active])
+  const anchor = parent >= 0 ? parent : active
+
   useEffect(() => {
     const container = containerRef.current
-    if (!container || active < 0) return
-    const node = container.querySelector<HTMLElement>(`[data-line="${active}"]`)
+    if (!container || anchor < 0) return
+    const node = container.querySelector<HTMLElement>(`[data-line="${anchor}"]`)
     if (!node) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     container.scrollTo({
       top: node.offsetTop - container.clientHeight / 2 + node.clientHeight / 2,
       behavior: reduce ? 'auto' : 'smooth',
     })
-  }, [active, items])
+  }, [anchor, items])
 
   return (
     <div className="flex h-full flex-col">
@@ -204,27 +212,39 @@ function LineList({
             key={i}
             index={i}
             item={item}
-            state={i === active ? 'active' : i < active ? 'past' : 'next'}
+            state={i === active || i === parent ? 'active' : i < active ? 'past' : 'next'}
+            side={!duet ? 'center' : item.agent && item.agent !== mainAgent ? 'right' : 'left'}
             onSeek={onSeek}
             onCalibrate={onCalibrate}
             fill={
-              timing && i === active && item.time !== undefined
+              timing && (i === active || i === parent) && item.time !== undefined
                 ? { start: item.time, end: items[i + 1]?.time ?? item.time + FILL_MAX_S, timing }
                 : undefined
             }
           />
         ))}
-        <p className="pt-6 text-[11px] text-ink-faint">Lirik dari LRCLIB / NetEase</p>
+        <p className="pt-6 text-[11px] text-ink-faint">{credit ?? 'Lirik dari LRCLIB / NetEase'}</p>
       </div>
     </div>
   )
+}
+
+const SOURCE_NAMES: Record<string, string> = { lyricsplus: 'LyricsPlus', betterlyrics: 'BetterLyrics' }
+
+/** Keterangan sumber di ujung daftar. Tanpa `source` = rantai lama (LRCLIB / NetEase), teks bawaan dipakai. */
+function creditFor(source: string | undefined, wordSynced: boolean | undefined): string | undefined {
+  if (!source) return undefined
+  const name = SOURCE_NAMES[source] ?? source
+  return wordSynced ? `Lirik per kata dari ${name}` : `Lirik dari ${name}`
 }
 
 const ESTIMATE_NOTE = 'Waktu lirik tidak tersedia, sorotan hanya perkiraan.'
 
 function PlainLyrics({ lines }: { lines: string[] }) {
   const { currentTime, duration } = usePlaybackTime()
-  const items = useMemo<Item[]>(() => lines.map((text) => ({ text })), [lines])
+  const display = useLyricDisplayPrefs()
+  // Lirik polos tidak punya terjemahan server, tetapi romanisasi lokal tetap bisa (kana / Hangul / Hindi / Sirilik).
+  const items = useMemo<Item[]>(() => lines.map((text) => ({ text, ...(display.romanization ? { transliteration: romanize(text) } : {}) })), [lines, display])
   const active = estimateActive(items, currentTime, duration)
   return <LineList items={items} active={active} header={ESTIMATE_NOTE} />
 }
@@ -274,5 +294,13 @@ function SyncedLyrics({ result, trackKey }: { result: Extract<LyricsResult, { ki
   // Loncat ke baris hanya akurat pada mode berwaktu; waktu lirik dikonversi balik ke waktu audio.
   const onSeek = seekable && mode !== 'estimated' ? (time: number) => seekTo(Math.max(0, (time - offset) * (mode === 'scaled' ? ratio : 1))) : undefined
 
-  return <LineList items={items} active={active} onSeek={onSeek} onCalibrate={onCalibrate} header={header} timing={{ mode, ratio, offset }} />
+  return <LineList
+      items={items}
+      active={active}
+      onSeek={onSeek}
+      onCalibrate={onCalibrate}
+      header={header}
+      timing={{ mode, ratio, offset }}
+      credit={creditFor(result.source, result.wordSynced)}
+    />
 }

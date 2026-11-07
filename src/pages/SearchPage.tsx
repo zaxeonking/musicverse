@@ -78,7 +78,7 @@ export default function SearchPage() {
               type="button"
               onClick={() => setQuery('')}
               aria-label="Hapus pencarian"
-              className="icon-btn absolute right-0.5 top-1/2 -translate-y-1/2"
+              className="mv-pop icon-btn absolute right-0.5 top-1/2 -translate-y-1/2"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>

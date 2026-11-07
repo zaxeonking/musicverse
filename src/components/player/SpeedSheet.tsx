@@ -27,7 +27,7 @@ export default function SpeedSheet({ onClose }: { onClose: () => void }) {
             Nada suara tetap sama. Berlaku untuk semua lagu.
           </p>
         </div>
-        <ul className="max-h-[60vh] overflow-y-auto border-t border-line px-2 pt-2">
+        <ul className="mv-list max-h-[60vh] overflow-y-auto border-t border-line px-2 pt-2">
           {SPEED_OPTIONS.map((option) => (
             <Action
               key={option}

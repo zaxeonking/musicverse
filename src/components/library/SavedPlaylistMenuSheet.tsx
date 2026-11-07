@@ -79,7 +79,7 @@ export default function SavedPlaylistMenuSheet({ playlist, onClose, onOpen, onRe
             </div>
           </div>
         ) : (
-          <ul className="border-t border-line px-2 pt-2">
+          <ul className="mv-list border-t border-line px-2 pt-2">
             <Action
               icon={ListMusic}
               label="Buka playlist"

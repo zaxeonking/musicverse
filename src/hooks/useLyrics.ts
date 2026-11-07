@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchLyrics, LyricsError, type LyricsResult } from '../services/lyricsApi'
 import { readOfflineLyrics, saveOfflineLyrics } from '../native/offlineLyrics'
+import { readCachedLyrics, saveCachedLyrics } from '../native/lyricsCache'
+import { onProviderPrefsChange } from '../utils/lyricProviderPrefs'
 import type { PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
 
@@ -16,6 +18,9 @@ const cache = new Map<string, LyricsResult>()
 
 const prefetching = new Set<string>()
 
+// Pengaturan provider berubah -> hasil sesi lama (mis. tanpa kata) tidak boleh dipakai lagi.
+onProviderPrefsChange(() => cache.clear())
+
 /**
  * Cari lirik lebih awal (lagu yang baru mulai diputar dan lagu berikutnya) tanpa menunggu panel lirik dibuka,
  * supaya lirik sudah siap begitu lagu mulai. Hasil masuk ke cache yang sama dengan useLyrics.
@@ -27,10 +32,12 @@ export function prefetchLyrics(track: PlaylistTrack): void {
   void (async () => {
     try {
       const stored = await readOfflineLyrics(track)
-      const result = stored ?? (await fetchLyrics(track, { signal: new AbortController().signal }))
+      const persisted = stored ?? (await readCachedLyrics(key))
+      const result = persisted ?? (await fetchLyrics(track, { signal: new AbortController().signal }))
       if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value as string)
       cache.set(key, result)
       if (!stored) void saveOfflineLyrics(track, result)
+      if (!persisted) void saveCachedLyrics(key, result)
     } catch {
       // Gagal diam-diam: useLyrics akan mencoba lagi dan menampilkan pesan bila perlu.
     } finally {
@@ -77,10 +84,17 @@ export function useLyrics(track: PlaylistTrack | null, enabled: boolean): { stat
         remember(stored)
         return
       }
+      const persisted = await readCachedLyrics(key)
+      if (controller.signal.aborted) return
+      if (persisted) {
+        remember(persisted)
+        return
+      }
       try {
         const result = await fetchLyrics(current, { signal: controller.signal })
         if (controller.signal.aborted) return
         remember(result)
+        void saveCachedLyrics(key, result)
         // Lagu unduhan yang liriknya belum tersimpan: simpan sekarang agar lain kali tersedia offline.
         void saveOfflineLyrics(current, result)
       } catch (error: unknown) {

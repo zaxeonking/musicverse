@@ -12,6 +12,7 @@ import MarqueeText from '../ui/MarqueeText'
 import { describeMainButton } from './PlayerControls'
 import TrackActionSheet from './TrackActionSheet'
 import UpcomingList from './UpcomingList'
+import { useExitGhost } from '../../hooks/useExitGhost'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 const FOCUS = 'focus-ring'
@@ -27,6 +28,7 @@ function TrackCover({ track }: { track: PlaylistTrack }) {
  * selalu sinkron. Mobile: bottom sheet. Desktop (lg): panel di sisi kanan.
  */
 export default function QueuePanel({ onClose }: { onClose: () => void }) {
+  const exitRef = useExitGhost()
   const {
     queue,
     currentIndex,
@@ -126,7 +128,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
   const by = currentTrack.artists ? ` oleh ${currentTrack.artists}` : ''
 
   return (
-    <div className="fixed inset-0 z-[60]">
+    <div ref={exitRef} className="fixed inset-0 z-[60]">
       <div aria-hidden="true" onClick={onClose} className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         ref={dialogRef}

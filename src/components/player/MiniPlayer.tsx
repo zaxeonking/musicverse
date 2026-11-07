@@ -21,6 +21,9 @@ const SHRINK_DISTANCE = 70
 /** Jarak seret ke atas (px) yang membuka pemutar penuh. */
 const OPEN_DISTANCE = 60
 const DRAG_START_PX = 8
+/** Lama kartu tenggelam ke belakang nav lalu hilang (ms). */
+const LEAVE_MS = 440
+const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
  * Mini player. Anak flex AppShell tepat di atas BottomNav (bukan position: fixed), jadi konten
@@ -54,6 +57,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const pendingExpand = useRef(false)
   const showBubble = collapsed || kbBubble
   const dockRef = useRef<HTMLDivElement>(null)
+  // Pembungkus mini player: z-40 (di depan nav). Saat kartu turun ke nav, diturunkan di bawah nav (z-20) supaya kartu masuk ke BELAKANG nav.
+  const wrapRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [dockWidth, setDockWidth] = useState(0)
   // Dari sisi mana kartu baru saja membesar (untuk animasi keluar dari gelembung).
@@ -66,6 +71,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     openTrackMenu(currentTrack, { place: 'player' })
   })
   const collapseTimer = useRef(0)
+  // Kartu -> disc: kartu tetap terpasang sebagai "hantu" selagi disc muncul di bawahnya, supaya keduanya menyatu (tidak ada jeda kosong).
+  const [leaving, setLeaving] = useState(false)
+  const regionRef = useRef<HTMLDivElement>(null)
+  const leaveAnims = useRef<Animation[]>([])
+  const leaveTimer = useRef(0)
   const resetTimer = useRef(0)
 
   useLayoutEffect(() => {
@@ -81,6 +91,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   useLayoutEffect(
     () => () => {
       window.clearTimeout(collapseTimer.current)
+      window.clearTimeout(leaveTimer.current)
       window.clearTimeout(resetTimer.current)
       window.clearTimeout(kbTimer.current)
       cancelSettle.current?.()
@@ -152,6 +163,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (kbBubble && pinOffset.current > 0) releasePin()
   })
 
+  /** Kartu di belakang nav (true) atau kembali di depannya (false, z-40 bawaan). */
+  const behindNav = (on: boolean) => {
+    if (wrapRef.current) wrapRef.current.style.zIndex = on ? '20' : ''
+  }
+
   /** Posisikan kartu mengikuti jari: ke bawah = turun + mengecil + memudar; ke atas = naik + sedikit membesar. */
   const applyDrag = (dy: number, animate: boolean) => {
     const el = cardRef.current
@@ -177,36 +193,82 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     applyDrag(0, true)
     window.setTimeout(() => {
       if (cardRef.current) cardRef.current.style.transition = ''
+      if (!leaveAnims.current.length) behindNav(false)
     }, 340)
   }
 
+  /** Hentikan morph kartu -> disc (dipanggil saat selesai, atau disc diketuk di tengah jalan) dan bersihkan sisa gaya. */
+  const stopLeave = () => {
+    window.clearTimeout(collapseTimer.current)
+    window.clearTimeout(leaveTimer.current)
+    leaveAnims.current.forEach((animation) => animation.cancel())
+    leaveAnims.current = []
+    const card = cardRef.current
+    if (card) {
+      card.style.transition = ''
+      card.style.transform = ''
+      card.style.opacity = ''
+    }
+    if (regionRef.current) regionRef.current.style.pointerEvents = ''
+    behindNav(false)
+    setLeaving(false)
+  }
+
   /**
-   * Kartu "terbang" mengecil ke pojok tempat gelembung, lalu diganti gelembung. `persist` = pilihan pengguna (disimpan);
-   * false = sementara karena keyboard (tidak disimpan).
+   * Kartu tenggelam ke BELAKANG nav (nav kaca mengaburkannya), memudar dan mengabur, lalu disc muncul di pojoknya.
+   * Selama gerakan ini pembungkus diturunkan di bawah nav (`behindNav`). Di tengah jalan disc dipasang (kartu sudah
+   * hampir hilang) dan muncul sebelum kartu selesai. Tanpa nav (desktop): kartu turun dan memudar saja.
+   * `persist` = pilihan pengguna (disimpan); false = sementara karena keyboard (tidak disimpan).
    */
   const flyToBubble = (persist: boolean) => {
-    const el = cardRef.current
-    if (!el) {
-      if (persist) setCollapsed(true)
-      else setKbBubble(true)
+    const card = cardRef.current
+    const region = regionRef.current
+    const dock = dockRef.current
+    const commit = () => (persist ? setCollapsed(true) : setKbBubble(true))
+    if (!card || !region || !dock || reducedMotion() || typeof card.animate !== 'function') {
+      commit()
       return
     }
-    const travel = Math.max(0, el.clientWidth / 2 - 28) * (side === 'right' ? 1 : -1)
-    el.style.transition = 'transform 220ms cubic-bezier(0.5,0,0.75,0), opacity 200ms ease-in'
-    el.style.transform = `translate3d(${travel}px, 0, 0) scale(0.16)`
-    el.style.opacity = '0'
+    const glow = card.querySelector('[data-mini-glow]')
+    const glowFrom = glow ? getComputedStyle(glow).opacity : '0'
+    const style = getComputedStyle(card)
+    const cardFrom = style.opacity
+    const fromTransform = style.transform
+    // Seberapa jauh kartu turun: bagian atasnya sampai tengah nav, jadi seluruh kartu lewat di belakang nav.
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Navigasi utama"]')
+    const navRect = nav?.getBoundingClientRect()
+    const naturalTop = dock.getBoundingClientRect().bottom - card.offsetHeight
+    const dy = navRect && navRect.height > 0 ? navRect.top + navRect.height / 2 - naturalTop : card.offsetHeight + 24
+    region.style.pointerEvents = 'none'
+    behindNav(true)
+    // Lepas transisi sisa seretan; gerakan dilanjutkan dari posisi jari (fromTransform), bukan melompat ke tempat awal.
+    card.style.transition = 'none'
+    leaveAnims.current = [
+      card.animate(
+        [
+          { transform: fromTransform, opacity: cardFrom, filter: 'blur(0px)', offset: 0 },
+          { opacity: cardFrom, filter: 'blur(0px)', offset: 0.3 },
+          { transform: `translate3d(0, ${dy}px, 0) scale(0.92)`, opacity: 0, filter: 'blur(10px)', offset: 1 },
+        ],
+        { duration: LEAVE_MS, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' },
+      ),
+    ]
+    if (glow) leaveAnims.current.push(glow.animate([{ opacity: glowFrom }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' }))
+    setLeaving(true)
     const timer = persist ? collapseTimer : kbTimer
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => {
+    window.clearTimeout(leaveTimer.current)
+    timer.current = window.setTimeout(commit, LEAVE_MS * 0.72)
+    leaveTimer.current = window.setTimeout(() => {
+      stopLeave()
       setGrowFrom(null)
-      if (persist) setCollapsed(true)
-      else setKbBubble(true)
-    }, 200)
+    }, LEAVE_MS + 40)
   }
 
   const shrink = () => flyToBubble(true)
 
   const expand = () => {
+    if (leaving) stopLeave()
     if (keyboardOpen) {
       pendingExpand.current = true
       const active = document.activeElement
@@ -314,6 +376,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       d.crossed = crossed
       if (crossed) navigator.vibrate?.(10)
     }
+    // Diseret ke bawah: kartu turun ke BELAKANG nav, bukan menimpanya. Ke atas: kembali di depan.
+    behindNav(dy > 0)
     applyDrag(dy, false)
   }
 
@@ -349,18 +413,20 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         : 'animate-player-up'
 
   return (
-    <div className="pointer-events-none relative z-40 h-0 shrink-0">
+    <div ref={wrapRef} className="pointer-events-none relative z-40 h-0 shrink-0">
     <div ref={dockRef} className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
-    {showBubble ? (
-      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} riseFrom={riseFrom} />
-    ) : (
-    <div className={`flex origin-bottom flex-col ${cardAnimation}`}>
+    {showBubble && (
+      <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} riseFrom={riseFrom} morph={leaving} />
+    )}
+    {(!showBubble || leaving) && (
+    <div className={`flex origin-bottom flex-col ${cardAnimation} ${showBubble ? 'pointer-events-none absolute inset-x-0 bottom-0' : ''}`}>
     {/* Grup yang ikut bergerak saat diseret: glow (di belakang) + kartu. */}
     <div ref={cardRef} className="pointer-events-none relative origin-bottom">
     {/* Glow warna sampul: hanya di belakang kartu mini player (bukan overlay layar), condong ke atas dan samping
         supaya tidak menyentuh navbar. Berdenyut sekali tiap ganti lagu, lalu redup menetap; lebih redup saat jeda. */}
     <span
       key={currentTrack?.id ?? 'none'}
+      data-mini-glow=""
       aria-hidden="true"
       style={{
         boxShadow: `0 -10px 32px -6px rgba(${glowColor},0.6), 0 -2px 16px -2px rgba(${glowColor},0.4)`,
@@ -371,6 +437,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       }`}
     />
     <div
+      ref={regionRef}
       role="region"
       data-tour="mini-player"
       aria-label="Pemutar musik"

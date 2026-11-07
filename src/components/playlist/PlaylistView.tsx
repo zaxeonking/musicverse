@@ -129,7 +129,7 @@ export default function PlaylistView() {
       {notice && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink"
+          className="mv-drop flex items-start gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
           <p className="min-w-0 flex-1">{noticeMessage(notice)}</p>
@@ -142,7 +142,7 @@ export default function PlaylistView() {
       {status === 'error' && error && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink sm:flex-row sm:items-center sm:justify-between"
+          className="mv-drop flex flex-col gap-3 rounded-lg bg-card px-4 py-3 text-sm text-ink sm:flex-row sm:items-center sm:justify-between"
         >
           <p className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />

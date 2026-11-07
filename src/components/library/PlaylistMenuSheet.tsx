@@ -129,7 +129,7 @@ export default function PlaylistMenuSheet({ playlist, onClose, onToast }: Playli
             }}
           />
         ) : (
-          <ul className="border-t border-line px-2 pt-2">
+          <ul className="mv-list border-t border-line px-2 pt-2">
             <Action
               icon={ListMusic}
               label="Buka playlist"

@@ -2,6 +2,7 @@ import { pluginFetch } from '../plugins/http'
 import { formatDurationMs } from '../plugins/spotifyImporter'
 import type { PlaylistTrack } from '../types/spotify'
 import { normalizeSearchText } from '../utils/trackSearch'
+import { pickDeezerTrackId } from '../utils/deezerMatch'
 
 /**
  * Pencarian artis dari luar, bukan dari playlist di perangkat. Gabungan dua sumber (hybrid):
@@ -189,6 +190,16 @@ export async function findDeezerSeed(title: string, artist: string, signal?: Abo
   }
 }
 
+/**
+ * Id lagu Deezer untuk rekaman yang SAMA (judul + artis + durasi cocok); null = tidak ada yang cocok. Dipakai mencari ISRC
+ * lagu non-Deezer (mis. playlist Spotify). Galat jaringan dilempar (pemanggil memutuskan), "tidak ketemu" bukan galat.
+ */
+export async function findDeezerTrackId(title: string, artist: string, durationS: number | null, signal?: AbortSignal): Promise<string | undefined> {
+  const q = `artist:"${artist.replace(/"/g, '')}" track:"${title.replace(/"/g, '')}"`
+  const rows = await getList<DeezerTrack>(`${DEEZER}/search?q=${encodeURIComponent(q)}&limit=8`, 'data', signal)
+  return pickDeezerTrackId(rows, title, artist, durationS)
+}
+
 const albumGenreCache = new Map<string, number[]>()
 const trackTempoCache = new Map<string, number>()
 
@@ -211,6 +222,12 @@ export async function fetchTrackTempo(dzId: string, signal?: AbortSignal): Promi
   const bpm = typeof body.bpm === 'number' && Number.isFinite(body.bpm) && body.bpm > 0 ? body.bpm : 0
   trackTempoCache.set(dzId, bpm)
   return bpm
+}
+
+/** ISRC lagu dari Deezer (`/track/{id}`); undefined = tidak ada. Pencarian Deezer tidak menyertakan ISRC, jadi perlu panggilan ini. */
+export async function fetchTrackIsrc(dzId: string, signal?: AbortSignal): Promise<string | undefined> {
+  const body = await getJson(`${DEEZER}/track/${encodeURIComponent(dzId)}`, signal)
+  return typeof body.isrc === 'string' && body.isrc.trim() !== '' ? body.isrc.trim().toUpperCase() : undefined
 }
 
 /** Profil iTunes yang namanya sama persis dengan artis Deezer (huruf besar/kecil diabaikan). */

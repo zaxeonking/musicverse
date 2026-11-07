@@ -66,13 +66,13 @@ export default function BackupPage() {
       </div>
 
       {message && (
-        <p role="status" className="mt-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
+        <p role="status" className="mv-drop mt-3 rounded-lg bg-card px-4 py-3 text-sm text-ink">
           {message}
         </p>
       )}
 
       {pending && sum && (
-        <div role="alertdialog" aria-label="Konfirmasi pulihkan" className="mt-3 space-y-3 rounded-lg bg-card p-4 text-sm text-ink">
+        <div role="alertdialog" aria-label="Konfirmasi pulihkan" className="mv-drop mt-3 space-y-3 rounded-lg bg-card p-4 text-sm text-ink">
           <p className="font-semibold">Pulihkan cadangan ini?</p>
           <p className="text-ink-muted">
             {sum.savedPlaylists} playlist tersimpan, {sum.myPlaylists} playlist buatanmu, {sum.plays} putaran di riwayat
