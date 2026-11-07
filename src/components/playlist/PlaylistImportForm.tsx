@@ -4,10 +4,8 @@ import { usePlaylist } from '../../context/PlaylistContext'
 import { readClipboardText } from '../../native/clipboard'
 import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
+import { getArtistSearchState, type SearchMode } from '../../utils/artistSearchStore'
 import Chip from '../ui/Chip'
-
-/** Jenis pencarian untuk judul yang diketik: lagu (alur lama) atau artis (daftar artis dari luar). */
-export type SearchMode = 'track' | 'artist'
 
 interface PlaylistImportFormProps {
   mode: SearchMode
@@ -18,7 +16,11 @@ interface PlaylistImportFormProps {
 
 export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch }: PlaylistImportFormProps) {
   const { status, loadPlaylist, reset } = usePlaylist()
-  const [value, setValue] = useState('')
+  // Kembali ke Beranda saat mode Artis: kolom berisi kata kunci artis terakhir, sesuai hasil yang tampil.
+  const [value, setValue] = useState(() => {
+    const saved = getArtistSearchState()
+    return saved.mode === 'artist' ? saved.submitted : ''
+  })
   const [validationError, setValidationError] = useState<string | null>(null)
   const inputId = useId()
   const errorId = `${inputId}-error`
@@ -45,6 +47,20 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
       controller.abort()
     }
   }, [value, focused, loading, inputKind, mode])
+
+  // Mode Artis: hasil muncul saat mengetik (ditunda 400 ms). Kata kunci yang sudah dicari tidak diulang,
+  // jadi kembali ke Beranda dengan artis terbuka tidak menimpanya.
+  const artistSearchRef = useRef(onArtistSearch)
+  useEffect(() => {
+    artistSearchRef.current = onArtistSearch
+  })
+  useEffect(() => {
+    if (mode !== 'artist' || inputKind !== 'search') return
+    const text = value.trim()
+    if (text.length < 2 || text === getArtistSearchState().submitted) return
+    const timer = setTimeout(() => artistSearchRef.current(text), 400)
+    return () => clearTimeout(timer)
+  }, [value, mode, inputKind])
 
   async function pickSuggestion(text: string) {
     setSuggestions([])

@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import ArtistSearchPanel, { type ArtistRequest } from '../components/playlist/ArtistSearchPanel'
-import PlaylistImportForm, { type SearchMode } from '../components/playlist/PlaylistImportForm'
+import ArtistSearchPanel from '../components/playlist/ArtistSearchPanel'
+import PlaylistImportForm from '../components/playlist/PlaylistImportForm'
 import PlaylistView from '../components/playlist/PlaylistView'
 import { useGreeting } from '../hooks/greeting'
+import { artistSearch, useArtistSearch } from '../utils/artistSearchStore'
 
 export default function HomePage() {
   const greeting = useGreeting()
-  const [mode, setMode] = useState<SearchMode>('track')
-  const [artistRequest, setArtistRequest] = useState<ArtistRequest | null>(null)
+  // Mode dan hasil artis disimpan di luar halaman, jadi tetap ada saat pindah tab lalu kembali ke Beranda.
+  const { mode } = useArtistSearch()
 
   return (
     <div className="space-y-8">
@@ -25,15 +25,12 @@ export default function HomePage() {
         </div>
         <PlaylistImportForm
           mode={mode}
-          onModeChange={(next) => {
-            setMode(next)
-            if (next === 'track') setArtistRequest(null)
-          }}
-          onArtistSearch={(q) => setArtistRequest(q ? { q, n: Date.now() } : null)}
+          onModeChange={artistSearch.setMode}
+          onArtistSearch={(q) => (q ? artistSearch.search(q) : artistSearch.clear())}
         />
       </section>
 
-      {mode === 'artist' ? <ArtistSearchPanel request={artistRequest} /> : <PlaylistView />}
+      {mode === 'artist' ? <ArtistSearchPanel /> : <PlaylistView />}
     </div>
   )
 }

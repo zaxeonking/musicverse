@@ -1,6 +1,7 @@
 import { Music2, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ArtistMatches from '../components/playlist/ArtistMatches'
 import TrackList from '../components/playlist/TrackList'
 import EmptyState from '../components/ui/EmptyState'
 import SectionHeader from '../components/ui/SectionHeader'
@@ -84,6 +85,8 @@ export default function SearchPage() {
           )}
         </div>
       </div>
+
+      <ArtistMatches query={query} />
 
       <section aria-label="All Songs">
         <SectionHeader
