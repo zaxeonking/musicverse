@@ -26,15 +26,15 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: readonly ThemePreset[] = [
-  { id: 'hijau', label: 'Hijau', accent: '#1DB954', accentLight: '#148A3F', bgDark: '#121212', bgLight: '#F5F7F5' },
-  { id: 'biru', label: 'Biru', accent: '#4F8CFF', accentLight: '#2F6FED', bgDark: '#0E1420', bgLight: '#F3F6FC' },
-  { id: 'ungu', label: 'Ungu', accent: '#A78BFA', accentLight: '#7048E8', bgDark: '#15111F', bgLight: '#F7F5FD' },
-  { id: 'mawar', label: 'Mawar', accent: '#FF5C8A', accentLight: '#E0336A', bgDark: '#1A1115', bgLight: '#FDF4F7' },
-  { id: 'oranye', label: 'Oranye', accent: '#FF9A3C', accentLight: '#D9650B', bgDark: '#17120D', bgLight: '#FDF7F0' },
-  { id: 'laut', label: 'Laut', accent: '#22D3EE', accentLight: '#0891B2', bgDark: '#0B1618', bgLight: '#F1F9FB' },
-  { id: 'merah', label: 'Merah', accent: '#EF4444', accentLight: '#D32F2F', bgDark: '#160F0F', bgLight: '#FDF4F4' },
+  { id: 'hijau', label: 'Hijau', accent: '#1DB954', accentLight: '#148A3F', bgDark: '#121212', bgLight: '#ECEFEA' },
+  { id: 'biru', label: 'Biru', accent: '#4F8CFF', accentLight: '#2F6FED', bgDark: '#0E1420', bgLight: '#EAEEF6' },
+  { id: 'ungu', label: 'Ungu', accent: '#A78BFA', accentLight: '#7048E8', bgDark: '#15111F', bgLight: '#EFEDF7' },
+  { id: 'mawar', label: 'Mawar', accent: '#FF5C8A', accentLight: '#E0336A', bgDark: '#1A1115', bgLight: '#F6ECEF' },
+  { id: 'oranye', label: 'Oranye', accent: '#FF9A3C', accentLight: '#D9650B', bgDark: '#17120D', bgLight: '#F5EFE6' },
+  { id: 'laut', label: 'Laut', accent: '#22D3EE', accentLight: '#0891B2', bgDark: '#0B1618', bgLight: '#E6F0F3' },
+  { id: 'merah', label: 'Merah', accent: '#EF4444', accentLight: '#D32F2F', bgDark: '#160F0F', bgLight: '#F6ECEC' },
   // Id lama 'amoled' dipertahankan supaya pilihan tersimpan dari versi sebelumnya tetap berlaku.
-  { id: 'amoled', label: 'Mono', accent: '#FFFFFF', accentLight: '#111111', bgDark: '#000000', bgLight: '#FFFFFF' },
+  { id: 'amoled', label: 'Mono', accent: '#FFFFFF', accentLight: '#111111', bgDark: '#000000', bgLight: '#EEEEEE' },
 ]
 
 export const CUSTOM_ID = 'kustom'
@@ -58,7 +58,7 @@ const DEFAULT_STATE: ThemeState = {
   preset: 'hijau',
   customAccent: '#1DB954',
   customBgDark: '#121212',
-  customBgLight: '#F5F7F5',
+  customBgLight: '#ECEFEA',
   radius: 'normal',
   dynamicAccent: false,
   glow: false,
@@ -193,10 +193,11 @@ export function hslToRgb([h, s, l]: [number, number, number]): RGB {
   return [hue(h + 1 / 3) * 255, hue(h) * 255, hue(h - 1 / 3) * 255]
 }
 
-/** Batas kecerahan HSL latar: gelap maks. 0,16; terang min. 0,90. Di luar itu teks tidak lagi terbaca. */
+/** Batas kecerahan HSL latar: gelap maks. 0,16; terang 0,86-0,95. Di luar itu teks tidak lagi terbaca atau terlalu menyilaukan. */
 export const BG_LIMITS: Record<ResolvedMode, { minL: number; maxL: number; maxS: number }> = {
   dark: { minL: 0, maxL: 0.16, maxS: 0.5 },
-  light: { minL: 0.9, maxL: 1, maxS: 0.6 },
+  // Maks. 0,95: latar terang hampir putih menyilaukan; kartu/permukaan diberi warna LEBIH terang dari latar, bukan latar yang dibuat putih.
+  light: { minL: 0.86, maxL: 0.95, maxS: 0.6 },
 }
 
 /** Latar dipaksa masuk rentang mode-nya, apa pun warna yang dipilih. */
@@ -209,7 +210,8 @@ export function clampBg(hex: string, mode: ResolvedMode = 'dark'): string {
 
 const WHITE: RGB = [255, 255, 255]
 const BLACK: RGB = [0, 0, 0]
-const INK_LIGHT_MODE: RGB = [18, 18, 18]
+// Bukan hitam pekat: hitam murni di atas latar terang membuat huruf "bergetar" dan melelahkan mata.
+const INK_LIGHT_MODE: RGB = [30, 35, 33]
 const triplet = (c: RGB) => c.map((v) => Math.round(Math.max(0, Math.min(255, v)))).join(' ')
 
 export interface ThemeTokens {
@@ -240,7 +242,8 @@ export function deriveTokens(accentHex: string, bgHex: string, mode: ResolvedMod
     // Aksen terlalu gelap untuk latar ini (teks/ikon beraksen tak terbaca): diterangkan bertahap.
     for (let i = 0; i < 10 && contrast(accent, bg) < 3; i += 1) accent = mix(accent, WHITE, 0.12)
   } else {
-    for (let i = 0; i < 10 && contrast(accent, bg) < 3; i += 1) accent = mix(accent, BLACK, 0.12)
+    // Teks/ikon beraksen di atas latar terang butuh kontras lebih tinggi daripada di mode gelap (aksen pucat jadi "hilang").
+    for (let i = 0; i < 10 && contrast(accent, bg) < 3.8; i += 1) accent = mix(accent, BLACK, 0.12)
   }
   const onAccent = contrast(accent, BLACK) >= contrast(accent, WHITE) ? BLACK : WHITE
   if (mode === 'dark') {
@@ -262,20 +265,22 @@ export function deriveTokens(accentHex: string, bgHex: string, mode: ResolvedMod
       bgHex: bgFixed,
     }
   }
+  // Mode terang: latar sedikit redup, permukaan (kartu, sheet, kolom) LEBIH terang dari latar dan terpisah oleh garis tipis + bayangan lembut.
+  // Dulu permukaan lebih gelap dari latar yang hampir putih, hasilnya abu-abu kusam dan tidak ada yang "mengambang".
   return {
     bg: triplet(bg),
-    card: triplet(mix(bg, BLACK, 0.035)),
-    raised: triplet(mix(bg, BLACK, 0.07)),
-    raisedHover: triplet(mix(bg, BLACK, 0.11)),
+    card: triplet(mix(bg, WHITE, 0.4)),
+    raised: triplet(mix(bg, WHITE, 0.62)),
+    raisedHover: triplet(mix(bg, WHITE, 0.3)),
     ink: triplet(INK_LIGHT_MODE),
-    inkMuted: triplet(mix(INK_LIGHT_MODE, bg, 0.3)),
-    inkFaint: triplet(mix(INK_LIGHT_MODE, bg, 0.35)),
+    inkMuted: triplet(mix(INK_LIGHT_MODE, bg, 0.26)),
+    inkFaint: triplet(mix(INK_LIGHT_MODE, bg, 0.33)),
     veil: '0 0 0',
     accent: triplet(accent),
     accentSoft: triplet(mix(accent, WHITE, 0.12)),
     accentDeep: triplet(mix(accent, BLACK, 0.2)),
     onAccent: triplet(onAccent),
-    danger: '200 40 40',
+    danger: '190 40 40',
     onDanger: '255 255 255',
     bgHex: bgFixed,
   }
@@ -375,7 +380,7 @@ export function randomThemePatch(): Partial<ThemeState> {
     preset: CUSTOM_ID,
     customAccent: hex(rand(0.6, 0.9), rand(0.5, 0.62)),
     customBgDark: clampBg(hex(rand(0.2, 0.4), rand(0.06, 0.1)), 'dark'),
-    customBgLight: clampBg(hex(rand(0.25, 0.5), rand(0.94, 0.97)), 'light'),
+    customBgLight: clampBg(hex(rand(0.2, 0.4), rand(0.91, 0.94)), 'light'),
   }
 }
 

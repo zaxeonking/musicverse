@@ -94,7 +94,8 @@ export default {
         // Disc yang muncul setelah kartu tenggelam ke belakang nav: naik sedikit dari arah nav sambil membesar, lalu mengendap.
         // Disc yang muncul di bawah kartu yang sedang mengerut: hanya memudar masuk dan mengendap dari sedikit lebih kecil.
         'bubble-morph': {
-          from: { opacity: '0', transform: 'scale(0.86)' },
+          from: { opacity: '0', transform: 'scale(0.72)' },
+          '45%': { opacity: '1' },
           to: { opacity: '1', transform: 'none' },
         },
         'bubble-in': {
@@ -130,7 +131,7 @@ export default {
         'glow-pulse': 'glow-pulse 1400ms ease-out backwards',
         'card-from-right': 'card-from-right 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'card-from-left': 'card-from-left 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
-        'bubble-morph': 'bubble-morph 280ms cubic-bezier(0.22, 1, 0.36, 1) both',
+        'bubble-morph': 'bubble-morph 340ms cubic-bezier(0.34, 1.3, 0.64, 1) both',
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         'bubble-rise': 'bubble-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',

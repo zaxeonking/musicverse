@@ -33,13 +33,32 @@ export interface LyricItem {
   transliterationWords?: LyricWord[]
 }
 
-/** Baris aktif menurut PROGRES lagu (tanpa waktu per baris). Hanya perkiraan, tetapi tetap bergerak. */
+/** Bobot waktu satu baris: lebih panjang = dinyanyikan lebih lama. Aksara kana/kanji/Hangul memuat lebih banyak bunyi per huruf. */
+function lineWeight(text: string): number {
+  let w = 0
+  for (const ch of text.trim()) w += /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(ch) ? 1.8 : /\s/.test(ch) ? 0.3 : 1
+  return Math.max(6, w)
+}
+
+/**
+ * Baris aktif menurut PROGRES lagu (tanpa waktu per baris). Hanya perkiraan, tetapi tetap bergerak.
+ * Baris tidak lagi dibagi sama rata: waktu tiap baris sebanding dengan panjangnya, jadi baris pendek (mis. "FULi FULi yo")
+ * tidak memakan jatah sama banyak dengan baris panjang. Intro ~6% dan outro ~8% lagu dilewati.
+ */
 export function estimateActive(items: readonly LyricItem[], currentTime: number, duration: number | null): number {
   if (!duration || !Number.isFinite(duration) || duration <= 0) return -1
   const filled = items.map((item, i) => (item.text.trim() ? i : -1)).filter((i) => i >= 0)
   if (filled.length === 0) return -1
   const progress = Math.min(1, Math.max(0, (currentTime / duration - 0.06) / 0.86))
-  return filled[Math.min(filled.length - 1, Math.floor(progress * filled.length))]
+  const weights = filled.map((i) => lineWeight(items[i].text))
+  const total = weights.reduce((a, b) => a + b, 0)
+  const target = progress * total
+  let acc = 0
+  for (let k = 0; k < filled.length; k += 1) {
+    acc += weights[k]
+    if (target < acc) return filled[k]
+  }
+  return filled[filled.length - 1]
 }
 
 export function offsetStorageKey(trackKey?: string): string | null {

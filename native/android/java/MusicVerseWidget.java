@@ -274,22 +274,53 @@ public class MusicVerseWidget extends AppWidgetProvider {
     }
   }
 
-  /** Gambar ulang satu widget dengan pengaturannya. Gagal menggambar sampul -> coba lagi tanpa sampul supaya tombol tetap hidup. */
+  /**
+   * Gambar ulang satu widget dengan pengaturannya. Bertahap supaya widget tidak pernah tertinggal di "Problem loading widget":
+   * (1) gambar penuh, (2) tanpa sampul, (3) tampilan pengaman yang memuat judul + pesan galat singkat dan tetap membuka aplikasi.
+   */
   private static void update(Context app, AppWidgetManager manager, int id, Form form, Model model) {
-    MusicVerseWidgetConfig cfg = MusicVerseWidgetConfig.load(app, id);
-    int[] size = sizeDp(manager, id, form);
+    Throwable failure;
     try {
-      manager.updateAppWidget(id, build(app, model, form, cfg, size[0], size[1]));
-    } catch (RuntimeException e) {
-      android.util.Log.w("MusicVerse", "Widget gagal digambar: " + e);
-      if (model != null && model.cover != null) {
-        try {
-          manager.updateAppWidget(id, build(app, model.copyWithoutCover(), form, cfg, size[0], size[1]));
-        } catch (RuntimeException ignored) {
-          // biarkan tampilan lama
+      MusicVerseWidgetConfig cfg = MusicVerseWidgetConfig.load(app, id);
+      int[] size = sizeDp(manager, id, form);
+      try {
+        manager.updateAppWidget(id, build(app, model, form, cfg, size[0], size[1]));
+        return;
+      } catch (RuntimeException | OutOfMemoryError e) {
+        android.util.Log.w("MusicVerse", "Widget gagal digambar: " + e);
+        failure = e;
+        if (model != null && model.cover != null) {
+          try {
+            manager.updateAppWidget(id, build(app, model.copyWithoutCover(), form, cfg, size[0], size[1]));
+            return;
+          } catch (RuntimeException | OutOfMemoryError e2) {
+            failure = e2;
+          }
         }
       }
+    } catch (RuntimeException | OutOfMemoryError e) {
+      android.util.Log.w("MusicVerse", "Widget gagal disiapkan: " + e);
+      failure = e;
     }
+    try {
+      manager.updateAppWidget(id, safeViews(app, form, failure));
+    } catch (RuntimeException | OutOfMemoryError ignored) {
+      // tidak ada yang bisa dilakukan lagi
+    }
+  }
+
+  /** Tampilan pengaman: layout bentuknya apa adanya, hanya judul + alasan gagal (terbaca di layar) dan ketukan membuka aplikasi. */
+  private static RemoteViews safeViews(Context app, Form form, Throwable why) {
+    RemoteViews v = new RemoteViews(app.getPackageName(), form.layout);
+    if (form.text) {
+      String reason = why == null ? "?" : why.getClass().getSimpleName() + (why.getMessage() == null ? "" : ": " + why.getMessage());
+      if (reason.length() > 90) reason = reason.substring(0, 90);
+      v.setTextViewText(R.id.widget_title, "MusicVerse");
+      v.setTextViewText(R.id.widget_artist, "Gagal menggambar: " + reason);
+    }
+    PendingIntent open = openApp(app);
+    if (open != null) v.setOnClickPendingIntent(R.id.widget_root, open);
+    return v;
   }
 
   /** Dipanggil layar pengaturan setelah menyimpan: gambar ulang widget `id` dari keadaan terakhir. */

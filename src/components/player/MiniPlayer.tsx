@@ -28,15 +28,28 @@ import LyricLine from './LyricLine'
 import MiniBubble from './MiniBubble'
 import SeekBar from './SeekBar'
 
-/** Jarak seret ke bawah (px) yang cukup untuk memperkecil, dan awal gerakan dianggap seretan. */
-const SHRINK_DISTANCE = 70
+/** Jarak seret ke bawah (px) yang cukup untuk MENUTUP musik (kartu tenggelam, pemutar dikosongkan). */
+const CLOSE_DISTANCE = 96
+/** Lemparan ke bawah (px/ms) yang cukup untuk menutup walau jaraknya belum sampai, asal sudah lewat CLOSE_MIN_FLICK px. */
+const CLOSE_VELOCITY = 0.7
+const CLOSE_MIN_FLICK = 40
+/** Lama kartu tenggelam saat ditutup (ms). */
+const CLOSE_MS = 300
+/** Geser samping: jarak (px) kartu sudah jadi disc penuh, dan batas progress yang dianggap "jadi" saat dilepas. */
+const ROLL_MIN = 90
+const ROLL_MAX = 170
+const ROLL_COMMIT = 0.42
+const ROLL_FLICK_VELOCITY = 0.5
+const ROLL_FLICK_MIN = 28
+/** Lama kartu menyelesaikan gulungan jadi disc / membalik kembali (ms). */
+const ROLL_SETTLE_MS = 280
 /** Proyeksi progress (posisi + momentum) di atas ini saat dilepas = buka pemutar penuh. Cukup ~15% jarak atau lemparan ringan. */
 const OPEN_PROJECTION = 0.2
 /** Getar kecil saat progress melewati titik "lepas sekarang = terbuka". */
 const OPEN_HAPTIC_AT = 0.2
 const DRAG_START_PX = 8
 /** Lama kartu tenggelam ke belakang nav lalu hilang (ms). */
-const LEAVE_MS = 520
+const LEAVE_MS = 440
 /** Diameter disc (px); sama dengan SIZE di MiniBubble. */
 const BUBBLE_PX = 56
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -47,7 +60,7 @@ const reducedMotion = () => typeof window.matchMedia === 'function' && window.ma
  * lewat useAudioPlayer; tidak punya state playback sendiri.
  */
 export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void; onOpenQueue: () => void }) {
-  const { status, currentTrack } = useAudioPlayer()
+  const { status, currentTrack, cleanup } = useAudioPlayer()
   const { openTrackMenu } = useTrackMenu()
   const now = useNowPlaying()
   const glowColor = useCoverGlow(now?.coverSrc, now?.cover.from)
@@ -86,12 +99,26 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     active: false,
     crossed: false,
     lastY: 0,
+    lastX: 0,
     lastT: 0,
     velocity: 0,
+    vx: 0,
+    // Animasi penutup/gulungan sedang berjalan: sentuhan baru diabaikan sampai selesai.
+    busy: false,
     // Seretan ke atas yang menggerakkan lapisan pemutar penuh (bukan kartu), dan progress awalnya (bila lapisan "ditangkap" di tengah gerakan).
     sheet: false,
     base: 0,
+    // 'v' = seretan vertikal (ke bawah = tutup, ke atas = buka pemutar penuh), 'h' = geser samping (kartu bergulir jadi disc).
+    mode: '' as '' | 'v' | 'h',
+    // Progress gulungan 0..1 dan arah terakhir (-1 kiri, 1 kanan).
+    roll: 0,
+    dir: 1 as -1 | 1,
   })
+  // Disc pratinjau yang "berguling" dari tengah kartu ke pojok selama geser samping (arah menentukan sisi menempel).
+  const [rollDir, setRollDir] = useState<-1 | 0 | 1>(0)
+  const rollDiscRef = useRef<HTMLSpanElement>(null)
+  const rollRaf = useRef(0)
+  const closeTimer = useRef(0)
   const swallowClick = useRef(false)
   // Tahan lama pada info lagu = menu lagu yang sedang diputar. Tidak jalan bila sedang menyeret kartu.
   const press = useLongPress(() => {
@@ -122,6 +149,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       window.clearTimeout(leaveTimer.current)
       window.clearTimeout(resetTimer.current)
       window.clearTimeout(kbTimer.current)
+      window.clearTimeout(closeTimer.current)
+      window.cancelAnimationFrame(rollRaf.current)
       cancelSettle.current?.()
       pinStop.current?.()
       // Mini player hilang di tengah seretan ke atas: jangan tinggalkan lapisan pemutar penuh menggantung.
@@ -203,27 +232,176 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (wrapRef.current) wrapRef.current.style.zIndex = on ? '20' : ''
   }
 
-  /** Posisikan kartu mengikuti jari saat diseret ke BAWAH: turun + mengecil + memudar. (Seret ke atas menggerakkan lapisan pemutar penuh, lihat playerSheet.) */
+  /** Posisikan kartu mengikuti jari saat diseret ke BAWAH (= menutup musik): turun + mengecil + memudar. (Seret ke atas menggerakkan lapisan pemutar penuh, lihat playerSheet.) */
   const applyDrag = (dy: number, animate: boolean) => {
     const el = cardRef.current
     if (!el) return
-    el.style.transition = animate ? 'transform 320ms cubic-bezier(0.34,1.56,0.64,1), opacity 200ms' : 'none'
+    el.style.transition = animate ? 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out' : 'none'
     if (dy <= 0) {
       el.style.transform = ''
       el.style.opacity = ''
+      if (!animate) el.style.willChange = ''
       return
     }
-    const p = Math.min(dy / (SHRINK_DISTANCE * 1.6), 1)
-    el.style.transform = `translate3d(0, ${dy}px, 0) scale(${1 - p * 0.14})`
-    el.style.opacity = String(1 - p * 0.35)
+    // Melewati titik "lepas = menutup" seretan terasa makin berat (karet). Kartu makin pudar mendekati titik itu,
+    // jadi jelas bahwa melepas sekarang berarti musik ditutup.
+    const shown = dy <= CLOSE_DISTANCE ? dy : CLOSE_DISTANCE + (dy - CLOSE_DISTANCE) * 0.35
+    const p = Math.min(shown / (CLOSE_DISTANCE * 1.15), 1)
+    el.style.willChange = 'transform, opacity'
+    el.style.transform = `translate3d(0, ${shown}px, 0) scale(${1 - p * 0.1})`
+    el.style.opacity = String(1 - p * 0.55)
+  }
+
+  const shouldClose = (dy: number, velocity: number) => dy > CLOSE_DISTANCE || (velocity > CLOSE_VELOCITY && dy > CLOSE_MIN_FLICK)
+
+  /** Tutup musik: kartu tenggelam ke belakang nav sambil memudar, lalu pemutar dihentikan dan dikosongkan. */
+  const closeMusic = () => {
+    const el = cardRef.current
+    drag.current.busy = true
+    navigator.vibrate?.(12)
+    if (!el || reducedMotion()) {
+      cleanup()
+      return
+    }
+    behindNav(true)
+    if (regionRef.current) regionRef.current.style.pointerEvents = 'none'
+    el.style.willChange = 'transform, opacity'
+    el.style.transition = `transform ${CLOSE_MS}ms cubic-bezier(0.32, 0.72, 0, 1), opacity ${Math.round(CLOSE_MS * 0.8)}ms ease-in`
+    el.style.transform = `translate3d(0, ${el.offsetHeight + 72}px, 0) scale(0.88)`
+    el.style.opacity = '0'
+    closeTimer.current = window.setTimeout(() => cleanup(), CLOSE_MS)
+  }
+
+  // ---- Geser samping: kartu menggulir jadi disc ----
+  const rollDistance = () => Math.max(ROLL_MIN, Math.min(ROLL_MAX, dockWidth * 0.4))
+
+  /**
+   * Gambar satu frame gulungan untuk progress `p` (0 = kartu utuh, 1 = disc di pojok sisi `dir`).
+   *  - bentuk kartu dipotong (clip-path) mengerut ke pojok tempat disc menempel, lalu kartu memudar;
+   *  - disc pratinjau berguling dari tengah kartu ke pojok: bergeser, turun, membesar, dan berputar satu putaran penuh
+   *    (jadi mendarat tepat di sudut 0 seperti disc asli).
+   * Hanya gaya inline ke DOM (tanpa render ulang React), aman dipanggil tiap frame.
+   */
+  const applyRoll = (p: number, dir: -1 | 1) => {
+    const region = regionRef.current
+    const card = cardRef.current
+    if (!region || !card) return
+    const e = Math.min(1, Math.max(0, p))
+    const w = region.offsetWidth
+    const h = region.offsetHeight
+    if (e <= 0) {
+      region.style.clipPath = ''
+      card.style.opacity = ''
+    } else {
+      const discTop = Math.max(0, h - BUBBLE_PX)
+      const discLeft = dir > 0 ? Math.max(0, w - BUBBLE_PX) : 0
+      const discRight = dir > 0 ? 0 : Math.max(0, w - BUBBLE_PX)
+      // Awal gerakan: dari -48 (bayangan kartu belum terpotong) ke 0 dengan cepat, baru kemudian menyempit. Tanpa ini
+      // bayangan terpotong mendadak di frame pertama atau kartu baru terlihat mengerut setelah ditarik jauh.
+      const inset = (target: number) => (e <= 0.15 ? -48 * (1 - e / 0.15) : target * ((e - 0.15) / 0.85))
+      const radius = 24 + (BUBBLE_PX / 2 - 24) * e
+      region.style.willChange = 'clip-path'
+      region.style.clipPath = `inset(${inset(discTop)}px ${inset(discRight)}px ${inset(0)}px ${inset(discLeft)}px round ${radius}px)`
+      card.style.opacity = e <= 0.55 ? '' : String(Math.max(0, 1 - (e - 0.55) / 0.45))
+    }
+    const disc = rollDiscRef.current
+    if (disc) {
+      const ease = 1 - (1 - e) * (1 - e)
+      const startX = w / 2
+      const cornerX = dir > 0 ? w - BUBBLE_PX / 2 : BUBBLE_PX / 2
+      const x = startX + (cornerX - startX) * ease - BUBBLE_PX / 2
+      const y = -((h - BUBBLE_PX) / 2) * (1 - ease)
+      const scale = 0.5 + 0.5 * ease
+      disc.style.opacity = String(Math.min(1, Math.max(0, (e - 0.12) / 0.38)))
+      disc.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${dir * 360 * ease}deg) scale(${scale})`
+    }
+  }
+
+  /** Bersihkan sisa gaya gulungan dari kartu dan disc pratinjau. */
+  const clearRoll = () => {
+    window.cancelAnimationFrame(rollRaf.current)
+    const region = regionRef.current
+    if (region) {
+      region.style.clipPath = ''
+      region.style.willChange = ''
+    }
+    if (cardRef.current) cardRef.current.style.opacity = ''
+    if (rollDiscRef.current) rollDiscRef.current.style.opacity = '0'
+    drag.current.roll = 0
+    setRollDir(0)
+  }
+
+  /** Lanjutkan gulungan dari `from` ke `to` dengan easing menurun (mulai cepat dari kecepatan jari, mengendap pelan). */
+  const tweenRoll = (from: number, to: number, dir: -1 | 1, ms: number, done: () => void) => {
+    window.cancelAnimationFrame(rollRaf.current)
+    const t0 = performance.now()
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / ms)
+      const k = 1 - Math.pow(1 - t, 3)
+      const p = from + (to - from) * k
+      drag.current.roll = p
+      applyRoll(p, dir)
+      if (t < 1) rollRaf.current = window.requestAnimationFrame(step)
+      else done()
+    }
+    rollRaf.current = window.requestAnimationFrame(step)
+  }
+
+  /** Jadi disc di sisi `dir`: gulungan diselesaikan, lalu disc asli menggantikan disc pratinjau (memudar silang). */
+  const commitRoll = (dir: -1 | 1) => {
+    const d = drag.current
+    d.busy = true
+    navigator.vibrate?.(10)
+    const finish = () => {
+      const disc = rollDiscRef.current
+      setSide(dir > 0 ? 'right' : 'left')
+      // Kartu tetap terpasang sebagai "hantu" (sudah tak terlihat) selagi disc asli muncul dengan animasi morph.
+      setLeaving(true)
+      setCollapsed(true)
+      if (regionRef.current) regionRef.current.style.pointerEvents = 'none'
+      if (disc) {
+        disc.style.transition = 'opacity 260ms ease-out'
+        disc.style.opacity = '0'
+      }
+      window.clearTimeout(leaveTimer.current)
+      leaveTimer.current = window.setTimeout(() => {
+        stopLeave()
+        setGrowFrom(null)
+        setRollDir(0)
+        d.busy = false
+      }, 320)
+    }
+    if (reducedMotion()) {
+      finish()
+      return
+    }
+    tweenRoll(d.roll, 1, dir, ROLL_SETTLE_MS, finish)
+  }
+
+  /** Batal: gulungan berbalik pelan ke kartu utuh. */
+  const cancelRoll = () => {
+    const d = drag.current
+    d.busy = true
+    const done = () => {
+      clearRoll()
+      d.busy = false
+    }
+    if (reducedMotion()) {
+      done()
+      return
+    }
+    tweenRoll(d.roll, 0, d.dir, Math.round(ROLL_SETTLE_MS * 0.8), done)
   }
 
   const springBack = () => {
     applyDrag(0, true)
     window.setTimeout(() => {
-      if (cardRef.current) cardRef.current.style.transition = ''
+      if (cardRef.current) {
+        cardRef.current.style.transition = ''
+        cardRef.current.style.willChange = ''
+      }
       if (!leaveAnims.current.length) behindNav(false)
-    }, 340)
+    }, 380)
   }
 
   /** Hentikan morph kartu -> disc (dipanggil saat selesai, atau disc diketuk di tengah jalan) dan bersihkan sisa gaya. */
@@ -237,8 +415,12 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       card.style.transition = ''
       card.style.transform = ''
       card.style.opacity = ''
+      card.style.willChange = ''
     }
-    if (regionRef.current) regionRef.current.style.pointerEvents = ''
+    if (regionRef.current) {
+      regionRef.current.style.pointerEvents = ''
+      regionRef.current.style.willChange = ''
+    }
     behindNav(false)
     setLeaving(false)
   }
@@ -270,27 +452,40 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const discTop = Math.max(0, h - BUBBLE_PX)
     const discLeft = side === 'right' ? Math.max(0, w - BUBBLE_PX) : 0
     const discRight = side === 'right' ? 0 : Math.max(0, w - BUBBLE_PX)
-    // -48px = tidak memotong apa pun (bayangan kartu ikut terlihat) sampai gerakan benar-benar dimulai.
-    const open = 'inset(-48px -48px -48px -48px round 24px)'
+    // Seretan menurunkan kartu `dragY` px di bawah pembungkus: klip awal harus ikut melebar ke bawah, kalau tidak bagian kartu yang
+    // sudah di luar -48px terpotong mendadak tepat saat jari dilepas (itu yang terasa patah).
+    let dragY = 0
+    try {
+      if (fromTransform && fromTransform !== 'none') dragY = Math.max(0, new DOMMatrixReadOnly(fromTransform).m42)
+    } catch {
+      dragY = 0
+    }
+    const open = `inset(-48px -48px ${-(48 + dragY)}px -48px round 24px)`
     const disc = `inset(${discTop}px ${discRight}px 0px ${discLeft}px round ${BUBBLE_PX / 2}px)`
     region.style.pointerEvents = 'none'
+    region.style.willChange = 'clip-path, opacity'
     // Lepas transisi sisa seretan; gerakan dilanjutkan dari posisi jari (fromTransform), bukan melompat ke tempat awal.
     card.style.transition = 'none'
+    // Satu irama untuk semuanya: mulai cepat dari kecepatan jari lalu mengendap pelan (tanpa awal lambat ala ease-in-out).
+    const settle = 'cubic-bezier(0.32, 0.72, 0, 1)'
     leaveAnims.current = [
       card.animate(
         [
-          { transform: fromTransform, opacity: cardFrom, offset: 0 },
-          { transform: 'none', opacity: '1', offset: 1 },
+          { transform: fromTransform, opacity: cardFrom },
+          { transform: 'none', opacity: '1' },
         ],
-        { duration: LEAVE_MS * 0.4, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' },
+        { duration: LEAVE_MS * 0.8, easing: settle, fill: 'forwards' },
       ),
+      // Bentuk: kartu -> lingkaran disc.
+      region.animate([{ clipPath: open }, { clipPath: disc }], { duration: LEAVE_MS, easing: settle, fill: 'forwards' }),
+      // Kartu memudar di atas disc yang muncul di bawahnya: bertahan penuh dulu, lalu menyatu (tanpa lompatan kecerahan).
       region.animate(
         [
-          { clipPath: open, opacity: 1, offset: 0 },
-          { clipPath: disc, opacity: 1, offset: 0.76 },
-          { clipPath: disc, opacity: 0, offset: 1 },
+          { opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.55 },
+          { opacity: 0, offset: 1 },
         ],
-        { duration: LEAVE_MS, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' },
+        { duration: LEAVE_MS, easing: 'linear', fill: 'forwards' },
       ),
     ]
     if (glow) leaveAnims.current.push(glow.animate([{ opacity: glowFrom }, { opacity: 0 }], { duration: 240, easing: 'ease-out', fill: 'forwards' }))
@@ -298,7 +493,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const timer = persist ? collapseTimer : kbTimer
     window.clearTimeout(timer.current)
     window.clearTimeout(leaveTimer.current)
-    timer.current = window.setTimeout(commit, LEAVE_MS * 0.5)
+    timer.current = window.setTimeout(commit, LEAVE_MS * 0.3)
     leaveTimer.current = window.setTimeout(() => {
       stopLeave()
       setGrowFrom(null)
@@ -388,15 +583,20 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     // Seek bar punya geseran sendiri (horizontal): jangan dibajak.
     if ((event.target as HTMLElement).closest('input[type="range"], [role="progressbar"]')) return
     const d = drag.current
+    // Kartu sedang menutup / menggulir jadi disc: jangan dibajak lagi.
+    if (d.busy) return
     d.id = event.pointerId
     d.x = event.clientX
     d.y = event.clientY
     d.active = false
     d.crossed = false
     d.lastY = event.clientY
+    d.lastX = event.clientX
     d.lastT = event.timeStamp
     d.velocity = 0
+    d.vx = 0
     d.sheet = false
+    d.mode = ''
   }
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -406,13 +606,36 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const dy = event.clientY - d.y
     if (!d.active) {
       if (Math.abs(dx) < DRAG_START_PX && Math.abs(dy) < DRAG_START_PX) return
-      // Gerakan dominan horizontal bukan untuk kita.
-      if (Math.abs(dx) > Math.abs(dy)) {
-        d.id = -1
-        return
-      }
+      // Arah dominan dikunci sejak awal: samping = kartu bergulir jadi disc, vertikal = tutup (bawah) / buka pemutar penuh (atas).
+      d.mode = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
       d.active = true
       event.currentTarget.setPointerCapture(event.pointerId)
+      if (d.mode === 'h') {
+        d.dir = dx > 0 ? 1 : -1
+        d.roll = 0
+        d.crossed = false
+        setRollDir(d.dir)
+      }
+    }
+    if (d.mode === 'h') {
+      const dtx = event.timeStamp - d.lastT
+      if (dtx > 0) d.vx = d.vx * 0.5 + ((event.clientX - d.lastX) / dtx) * 0.5
+      d.lastX = event.clientX
+      d.lastT = event.timeStamp
+      // Jari berbalik melewati titik awal: disc pindah ke sisi seberang.
+      if (dx !== 0 && (dx > 0 ? 1 : -1) !== d.dir) {
+        d.dir = dx > 0 ? 1 : -1
+        setRollDir(d.dir)
+      }
+      const roll = Math.min(1, Math.abs(dx) / rollDistance())
+      d.roll = roll
+      const crossedRoll = roll >= ROLL_COMMIT
+      if (crossedRoll !== d.crossed) {
+        d.crossed = crossedRoll
+        if (crossedRoll) navigator.vibrate?.(10)
+      }
+      applyRoll(roll, d.dir)
+      return
     }
     const dt = event.timeStamp - d.lastT
     // Kecepatan dihaluskan (rata-rata bergerak) supaya lemparan akhir tidak ditentukan satu event yang berisik.
@@ -449,8 +672,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       // Jari kembali melewati titik awal: lapisan menutup lagi, seretan berlanjut sebagai seretan ke bawah.
       setSheetProgress(d.base)
     }
-    // Getar kecil saat melewati titik "lepas sekarang = mengecil".
-    const crossed = dy > SHRINK_DISTANCE
+    // Getar kecil saat melewati titik "lepas sekarang = musik ditutup".
+    const crossed = dy > CLOSE_DISTANCE
     if (crossed !== d.crossed) {
       d.crossed = crossed
       if (crossed) navigator.vibrate?.(10)
@@ -476,12 +699,21 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     // Jari diam sebelum dilepas = tidak ada momentum.
     const fresh = event.timeStamp - d.lastT < 90
     const velocity = fresh ? d.velocity : 0
+    if (d.mode === 'h') {
+      // Cukup jauh (atau dilempar searah) = jadi disc di sisi arah geser; kalau tidak, gulungan berbalik.
+      const dx = event.clientX - d.x
+      const vx = fresh ? d.vx : 0
+      const flick = Math.abs(vx) > ROLL_FLICK_VELOCITY && Math.abs(dx) > ROLL_FLICK_MIN && (vx > 0 ? 1 : -1) === d.dir
+      if (!cancelled && (d.roll >= ROLL_COMMIT || flick)) commitRoll(d.dir)
+      else cancelRoll()
+      return
+    }
     if (d.sheet) {
       d.sheet = false
       if (dy >= -DRAG_START_PX) {
         // Berakhir di titik awal / di bawahnya: lapisan menutup, lalu dilanjutkan sebagai seretan ke bawah bila cukup jauh.
         finishSheetDrag(false, 0)
-        if (!cancelled && (dy > SHRINK_DISTANCE || (velocity > 0.6 && dy > 24))) shrink()
+        if (!cancelled && shouldClose(dy, velocity)) closeMusic()
         else springBack()
         return
       }
@@ -490,7 +722,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       finishSheetDrag(open, pv)
       return
     }
-    if (!cancelled && (dy > SHRINK_DISTANCE || (velocity > 0.6 && dy > 24))) shrink()
+    if (!cancelled && shouldClose(dy, velocity)) closeMusic()
     else springBack()
   }
 
@@ -552,12 +784,12 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       }}
       className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-veil/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]`}
     >
-      {/* Pegangan: seret kartu ke bawah untuk memperkecil jadi gelembung. Ketuk = cadangan untuk keyboard/pembaca layar. */}
+      {/* Pegangan. Geser kiri/kanan = kartu bergulir jadi disc, geser ke bawah = tutup musik. Ketuk = cadangan (keyboard/pembaca layar) untuk jadi disc. */}
       <button
         type="button"
         onClick={() => shrink()}
-        aria-label="Perkecil pemutar jadi gelembung"
-        title="Seret ke bawah untuk memperkecil"
+        aria-label="Perkecil pemutar jadi disc"
+        title="Geser ke samping untuk jadi disc, geser ke bawah untuk menutup musik"
         className="absolute left-1/2 top-0 z-10 flex h-4 w-20 -translate-x-1/2 items-start justify-center pt-1 focus-ring"
       >
         <span aria-hidden="true" className="h-1 w-9 rounded-full bg-veil/25" />
@@ -611,6 +843,21 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     </div>
     </div>
     </div>
+    )}
+    {/* Disc pratinjau saat kartu digeser ke samping: berguling dari tengah kartu ke pojok (lihat applyRoll). Posisinya diatur lewat gaya inline. */}
+    {rollDir !== 0 && (
+      <span
+        ref={rollDiscRef}
+        aria-hidden="true"
+        style={{ opacity: 0 }}
+        className="pointer-events-none absolute bottom-0 left-0 z-10 h-14 w-14 rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] will-change-transform"
+      >
+        <span className="absolute inset-[5px] overflow-hidden rounded-full">
+          <CoverArt cover={now.cover} src={now.coverSrc} round />
+          <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
+        </span>
+        <span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />
+      </span>
     )}
     </div>
     </div>

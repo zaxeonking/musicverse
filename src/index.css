@@ -403,3 +403,41 @@ html.no-splash #splash {
     display: none;
   }
 }
+
+/* ---------- Mode terang: nyaman di mata ----------
+   Latar tidak lagi hampir putih (lihat theme.ts); sisanya di sini: lapisan gelap dan bayangan yang di mode gelap terlihat wajar
+   tetapi di atas latar terang jadi kotor dan menyilaukan saat sheet muncul. */
+/* Lapisan redup di belakang sheet/panel: hitam pekat 60% di layar terang terasa seperti "kedip" yang menyakitkan mata. */
+html[data-theme='light'] .bg-black\/60:not(.mv-dark-scope *),
+html[data-theme='light'] .bg-black\/50:not(.mv-dark-scope *) {
+  background-color: rgb(22 30 27 / 0.4);
+}
+/* Bayangan hitam pekat (shadow-black/xx) diganti bayangan lembut berwarna sedikit kehijauan-abu. */
+html[data-theme='light'] [class*='shadow-black'] {
+  --tw-shadow-color: rgb(30 40 36 / 0.2);
+}
+/* Mini player: permukaan terang + garis tipis + bayangan lembut (bukan bayangan hitam 50%). */
+html[data-theme='light'] [data-mini-card] {
+  border-color: rgb(0 0 0 / 0.08);
+  box-shadow:
+    0 10px 28px -8px rgb(30 40 36 / 0.22),
+    0 2px 6px rgb(30 40 36 / 0.1),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+html[data-theme='light'] [data-mini-glow] {
+  filter: saturate(0.8);
+  mix-blend-mode: multiply;
+}
+/* Disc (mini player gelembung). */
+html[data-theme='light'] button[aria-label^='Perbesar pemutar'] {
+  box-shadow:
+    0 8px 20px -6px rgb(30 40 36 / 0.3),
+    0 1px 4px rgb(30 40 36 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+/* Kartu dan baris di halaman: garis tipis supaya permukaan terang terbaca terhadap latar tanpa harus gelap. */
+html[data-theme='light'] .bg-card,
+html[data-theme='light'] .bg-raised {
+  outline: 1px solid rgb(0 0 0 / 0.05);
+  outline-offset: -1px;
+}

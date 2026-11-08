@@ -52,11 +52,24 @@ cpSync(join(nativeDir, 'res'), join(androidMain, 'res'), { recursive: true })
     }
   }
 }
+// Pratinjau widget kini hanya PNG kecil di drawable-nodpi (tanpa previewLayout). Buang sisa versi lama dari proyek android hasil build sebelumnya.
+for (const dir of ['drawable-hdpi', 'drawable-xhdpi', 'drawable-xxhdpi']) {
+  const d = join(androidMain, 'res', dir)
+  if (existsSync(d)) for (const file of readdirSync(d)) if (/^widget_preview_.*\.png$/.test(file)) rmSync(join(d, file), { force: true })
+}
+{
+  const d = join(androidMain, 'res', 'layout')
+  if (existsSync(d)) for (const file of readdirSync(d)) if (/^widget_pv_.*\.xml$/.test(file)) rmSync(join(d, file), { force: true })
+}
 // 2a. XML penyedia widget memuat nama kelas layar atur (android:configure) yang butuh appId lengkap: isi __APP_ID__ di salinannya.
-const xmlSrc = join(nativeDir, 'res', 'xml')
-for (const file of readdirSync(xmlSrc)) {
-  const text = readFileSync(join(xmlSrc, file), 'utf8')
-  if (text.includes('__APP_ID__')) writeFileSync(join(androidMain, 'res', 'xml', file), text.replaceAll('__APP_ID__', appId))
+// xml/ = Android 11 ke bawah; xml-v31/ = Android 12+ (tambah targetCellWidth/Height). Keduanya perlu appId.
+for (const dir of ['xml', 'xml-v31']) {
+  const xmlSrc = join(nativeDir, 'res', dir)
+  if (!existsSync(xmlSrc)) continue
+  for (const file of readdirSync(xmlSrc)) {
+    const text = readFileSync(join(xmlSrc, file), 'utf8')
+    if (text.includes('__APP_ID__')) writeFileSync(join(androidMain, 'res', dir, file), text.replaceAll('__APP_ID__', appId))
+  }
 }
 
 // 2b. Splash native & tema: splash bawaan (ikon launcher besar di tengah / gambar splash Capacitor) diganti layar polos

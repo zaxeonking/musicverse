@@ -112,6 +112,17 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabi
  */
 /** Bagian yang menutup/membuka dengan halus (tinggi + pudar) saat mode lirik layar penuh berganti. Tetap terpasang agar bisa beranimasi. */
 function Collapse({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+  // Potong isi (overflow-hidden) hanya saat menutup/membuka. Setelah terbuka penuh dibiarkan terlihat, kalau tidak glow
+  // tombol putar (box-shadow) terpotong lurus mengikuti kotak barisnya dan tampak seperti persegi.
+  const [settled, setSettled] = useState(!hidden)
+  useEffect(() => {
+    if (hidden) {
+      setSettled(false)
+      return
+    }
+    const timer = window.setTimeout(() => setSettled(true), 520)
+    return () => window.clearTimeout(timer)
+  }, [hidden])
   return (
     <div
       aria-hidden={hidden || undefined}
@@ -120,7 +131,7 @@ function Collapse({ hidden, children }: { hidden: boolean; children: ReactNode }
         hidden ? 'pointer-events-none grid-rows-[0fr] -translate-y-2 opacity-0' : 'grid-rows-[1fr] translate-y-0 opacity-100'
       }`}
     >
-      <div className="min-h-0 overflow-hidden">{children}</div>
+      <div className={`min-h-0 ${settled ? '' : 'overflow-hidden'}`}>{children}</div>
     </div>
   )
 }
