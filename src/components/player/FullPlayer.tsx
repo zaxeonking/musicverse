@@ -614,9 +614,9 @@ export default function FullPlayer({
       {/* Petunjuk: seret ke bawah untuk kembali ke mini player. */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[max(0.375rem,env(safe-area-inset-top))] h-1 w-10 -translate-x-1/2 rounded-full bg-veil/25"
+        className="pointer-events-none absolute left-1/2 top-[max(0.375rem,var(--sat))] h-1 w-10 -translate-x-1/2 rounded-full bg-veil/25"
       />
-      <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,env(safe-area-inset-bottom))]' : 'pb-2'} transition-[padding] duration-500 ease-out motion-reduce:transition-none pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] ${lyricsFullActive ? 'pt-0' : 'pt-[max(0.75rem,env(safe-area-inset-top))]'}`}>
+      <div className={`mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col ${lyricsFullActive ? 'pb-[max(1rem,var(--sab))]' : 'pb-2'} transition-[padding] duration-500 ease-out motion-reduce:transition-none pl-[max(1.5rem,var(--sal))] pr-[max(1.5rem,var(--sar))] ${lyricsFullActive ? 'pt-0' : 'pt-[max(0.75rem,var(--sat))]'}`}>
         <Collapse hidden={lyricsFullActive}>
         <header className="fp-item grid grid-cols-[3rem_1fr_3rem] items-center">
           <button
@@ -832,7 +832,7 @@ export default function FullPlayer({
         data-tour="queue-bar"
         onClick={onOpenQueue}
         aria-label="Buka antrean"
-        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-veil/10 bg-black/60 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-veil/5 focus-ring"
+        className="fp-item mt-1 flex w-full shrink-0 items-center justify-center gap-3 rounded-t-[2rem] border-t border-veil/10 bg-black/60 pb-[max(0.75rem,var(--sab))] pt-3 text-base font-semibold text-ink-muted transition-colors hover:text-ink active:bg-veil/5 focus-ring"
       >
         <ListMusic className="h-5 w-5" aria-hidden="true" />
         Berikutnya

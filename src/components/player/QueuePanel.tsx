@@ -140,7 +140,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
         aria-label="Antrean"
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] animate-sheet-up flex-col rounded-t-2xl border-t border-line bg-card pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-2xl shadow-black/60 focus:outline-none lg:inset-y-0 lg:animate-panel-in lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
+        className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] animate-sheet-up flex-col rounded-t-2xl border-t border-line bg-card pl-[var(--sal)] pr-[var(--sar)] shadow-2xl shadow-black/60 focus:outline-none lg:inset-y-0 lg:animate-panel-in lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
       >
         <header className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -161,7 +161,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
           </button>
         </header>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-[max(1rem,var(--sab))]">
           <section aria-label="Sedang diputar">
             <h3 className="px-2 pb-1 pt-2 text-sm font-semibold text-ink-muted">
               Sedang diputar

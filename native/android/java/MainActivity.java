@@ -3,7 +3,13 @@ package __APP_ID__;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.WebView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -30,6 +36,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(MusicVerseNativePlugin.class);
     super.onCreate(savedInstanceState);
     applyThemeBackground();
+    enableEdgeToEdge();
     // Hanya saat benar-benar dibuka dari widget (bukan dibuat ulang karena rotasi layar).
     if (savedInstanceState == null) handleWidgetPlay(getIntent());
     if (getBridge() != null) {
@@ -40,6 +47,49 @@ public class MainActivity extends BridgeActivity {
         webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
       }
     }
+  }
+
+
+  /**
+   * Layar penuh sampai ke area poni/kamera: jendela tidak menyisakan ruang untuk status bar dan navigation bar (keduanya
+   * transparan), WebView tanpa margin, dan ukuran inset dikirim ke CSS (--sat/--sab/--sal/--sar, dalam px CSS) supaya
+   * header dan mini player tetap tidak tertutup walau env(safe-area-inset-*) WebView bernilai 0.
+   */
+  private void enableEdgeToEdge() {
+    android.view.Window window = getWindow();
+    WindowCompat.setDecorFitsSystemWindows(window, false);
+    window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
+    window.setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+    if (android.os.Build.VERSION.SDK_INT >= 29) {
+      window.setNavigationBarContrastEnforced(false);
+      window.setStatusBarContrastEnforced(false);
+    }
+    if (android.os.Build.VERSION.SDK_INT >= 28) {
+      window.getAttributes().layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+    }
+    if (getBridge() == null || getBridge().getWebView() == null) return;
+    final WebView webView = getBridge().getWebView();
+    final View host = (View) webView.getParent();
+    ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
+      ViewGroup.LayoutParams lp = webView.getLayoutParams();
+      if (lp instanceof ViewGroup.MarginLayoutParams) {
+        ((ViewGroup.MarginLayoutParams) lp).setMargins(0, 0, 0, 0);
+        webView.setLayoutParams(lp);
+      }
+      Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+      boolean keyboard = insets.isVisible(WindowInsetsCompat.Type.ime());
+      float d = getResources().getDisplayMetrics().density;
+      final String js = "(function(){var s=document.documentElement.style;"
+          + "s.setProperty('--sat','" + Math.round(bars.top / d) + "px');"
+          + "s.setProperty('--sab','" + (keyboard ? 0 : Math.round(bars.bottom / d)) + "px');"
+          + "s.setProperty('--sal','" + Math.round(bars.left / d) + "px');"
+          + "s.setProperty('--sar','" + Math.round(bars.right / d) + "px');})()";
+      webView.post(() -> webView.evaluateJavascript(js, null));
+      return WindowInsetsCompat.CONSUMED;
+    });
+    ViewCompat.requestApplyInsets(host);
+    // Halaman dimuat ulang (OTA / reload): kirim ulang nilai inset.
+    webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> ViewCompat.requestApplyInsets(host));
   }
 
   /** Latar jendela + WebView mengikuti tema, supaya tema terang tidak diawali kedipan #121212 sebelum halaman tergambar. */

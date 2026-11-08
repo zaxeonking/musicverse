@@ -407,7 +407,7 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         route: '/',
         demo: 'mini-roll',
         title: 'Baru: disc lebih besar',
-        body: 'Geser pemutar mini ke samping: sampulnya membesar jadi disc yang lebih besar, cincin progres tergambar, lalu disc menempel di sisi layar. Ketuk disc untuk membesar lagi.',
+        body: 'Geser pemutar mini ke samping: sampulnya ikut terbawa, membesar jadi lingkaran, lalu meroda ke sisi layar. Ketuk disc, dan ia meroda kembali lalu berubah jadi sampul di pemutar mini.',
       },
       {
         id: 'wn-tour-practice',
@@ -416,6 +416,18 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         title: 'Baru: tutorial bisa dicoba langsung',
         body: 'Langkah yang menyorot pemutar mini kini bisa diketuk dan digeser sungguhan, dan ada latihan menyeret disc. Ikon aplikasi ikut tema juga membuka aplikasi lagi sendiri setelah berganti.',
         task: 'Seret disc ke sisi lain, lalu tahan',
+      },
+    ],
+  },
+  {
+    id: '0.5.51.7',
+    steps: [
+      {
+        id: 'wn-fullscreen',
+        route: '/',
+        nativeOnly: true,
+        title: 'Baru: layar penuh sampai kamera',
+        body: 'Tampilan kini memenuhi layar sampai ke area kamera dan bilah gestur. Cahaya di belakang pemutar mini juga lebih lembut, dan ikon ikut tema membuka aplikasi lagi lebih andal.',
       },
     ],
   },

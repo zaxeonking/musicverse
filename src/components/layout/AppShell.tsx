@@ -43,7 +43,7 @@ export default function AppShell() {
     // konten (di bawah) dan posisi mini player; 0 di layar lebar (tidak ada nav bawah) dan saat keyboard terbuka (nav turun).
     <div
       data-keyboard={keyboardOpen ? 'open' : 'closed'}
-      className={`fixed inset-0 flex overflow-hidden bg-bg text-ink ${theme.glow ? 'mv-glow' : ''} [--dock-offset:calc(4.5rem_+_env(safe-area-inset-bottom,0px))] data-[keyboard=open]:[--dock-offset:0px] lg:[--dock-offset:0px]`}
+      className={`fixed inset-0 flex overflow-hidden bg-bg text-ink ${theme.glow ? 'mv-glow' : ''} [--dock-offset:calc(4.5rem_+_var(--sab))] data-[keyboard=open]:[--dock-offset:0px] lg:[--dock-offset:0px]`}
     >
       <a
         href="#konten"
@@ -64,7 +64,7 @@ export default function AppShell() {
           ref={mainRef}
           id="konten"
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] outline-none lg:pr-0"
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pl-[var(--sal)] pr-[var(--sar)] outline-none lg:pr-0"
         >
           {/* Transisi geser horizontal antar halaman (halaman lama memudar, lalu halaman baru masuk). */}
           <PageTransition

@@ -1,10 +1,11 @@
 # Riwayat perubahan MusicVerse (arsip)
 
-Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.5.md`.
+Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.7.md`.
 Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
 
 ## Daftar isi
 
+- 0.5.51.5
 - 0.5.51
 - 0.5.50.7
 - 0.5.50.4
@@ -105,6 +106,48 @@ Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
 - 0.3.8
 - 0.3.7
 
+
+---
+
+<!-- sumber: CHANGES-0.5.51.5.md -->
+
+# 0.5.51.5 (ikon buka-ulang otomatis, tutorial bisa dicoba, disc lebih besar)
+
+Files: native/android/java/{MainActivity,MusicVerseNativePlugin}.java, src/native/musicVerseNative.ts,
+src/tour/{steps,TourHost,PracticeStage,DemoStage}.ts(x) (entri Yang baru 0.5.51.5), src/components/player/{MiniPlayer,MiniBubble,FullPlayer}.tsx,
+src/index.css, tailwind.config.js, package.json (appVersion 0.5.51.5), CHANGES.md (0.5.51 diarsipkan), PROJECT_STRUCTURE.md
+
+1. Ganti ikon aplikasi -> buka ulang otomatis (APK baru)
+   - Sebagian peluncur/ROM menutup aplikasi saat alias ikon berganti. Sebelum alias diganti, plugin memasang alarm (AlarmManager, ±0,7 dtk)
+     ke alias baru, jadi aplikasi terbuka lagi sendiri tanpa dibuka manual. Bila aplikasi tidak ditutup, alarm hanya membawanya ke depan.
+   - Hanya bila aplikasi sedang dilihat (`MainActivity.foreground`); ganti tema otomatis saat aplikasi di latar tidak memunculkan layar.
+   - Tanpa izin alarm tepat (Android 12+) dipakai alarm hemat daya: bisa terlambat sedikit.
+2. Tutorial yang tadinya tidak bisa dicoba
+   - Penyebab: langkah dengan sorotan + petunjuk jari (Pemutar, Geser jadi disc, Tutup musik, Lirik) menutup seluruh layar, jadi elemen asli
+     tidak bisa diketuk/digeser. Kini ada `tryTarget` pada langkah: lubang sorotan tembus sentuhan (sisa layar tetap terkunci).
+     Bila ketukan membuka pemutar penuh, tutorial menutupnya lagi di langkah berikutnya.
+   - "Main-main dengan disc" tadinya hanya animasi; kini latihan `disc-drag` (seret disc ke sisi lain, tahan untuk putar/jeda).
+   - Sleep timer dan Antrean tidak dibuat bisa disentuh: lembarnya tampil di bawah lapisan tutorial.
+3. Animasi mini player <-> disc tidak lagi dilewati saat "kurangi gerakan" menyala
+   - Dugaan penyebab gejala "langsung jadi disc": `prefers-reduced-motion` melewati gulungan kartu -> disc, dan aturan global mematikan
+     animasi CSS `card-from-*`. Kini kartu <-> disc tetap beranimasi; saat "kurangi gerakan" menyala tanpa putaran disc.
+4. Disc lebih besar + animasi kartu -> disc meniru video contoh
+   - Disc 56 px -> 72 px (`BUBBLE_PX` di MiniPlayer dan `SIZE` di MiniBubble harus sama; lubang tengah, ikon play, klip `card-from-*`, dan
+     penghitung sampul FullPlayer ikut disesuaikan).
+   - Kartu -> disc (geser samping), dua tahap: (1) sampul ikut terbawa geseran sambil membesar dan berubah bentuk (persegi bulat -> lingkaran),
+     (2) lalu meroda ke sisi geser sampai pojok (putaran berbanding jarak, berakhir di kelipatan 360). Latar piringan, cincin progres, dan
+     lubang tengah muncul bertahap; cincin tergambar sampai posisi lagu sekarang.
+   - Perbaikan bug cincin progres di disc: dulu cincin ikut berputar bersama disc pratinjau, jadi busurnya mulai dari sudut miring (kanan-kiri)
+     lalu "melompat" ke atas-bawah saat diganti disc asli. Kini hanya sampul yang berputar; cincin diam dan mulai dari jam 12.
+   - Disc -> kartu (ketuk disc): salinan disc (sudut putarnya disalin) lebih dulu meroda ke arah sampul di kartu, lalu pelan-pelan berubah
+     bentuk dan mengecil sampai pas dengan ukuran sampul; sampul asli memudar masuk menggantikannya (`captureDisc` / `runDiscFly`).
+   - Riak halus (`disc-halo`) tetap muncul sekali saat disc mendarat.
+
+Catatan
+- Butuh APK baru untuk bagian 1 (Java berubah): `npm run android:sync` lalu build. Bagian 2-4 hanya TS/TSX/CSS dan bisa lewat pembaruan OTA;
+  APK lama tetap aman (tanpa buka-ulang otomatis).
+- Pengguna lama: tidak ada migrasi data. Disc lebih besar langsung berlaku setelah pembaruan.
+- Belum diuji di perangkat dan belum dijalankan `npm run typecheck` (tidak ada node_modules di lingkungan pembuatan): jalankan sebelum rilis.
 
 ---
 

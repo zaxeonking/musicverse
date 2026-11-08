@@ -109,7 +109,7 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(9.5rem+env(safe-area-inset-bottom))] z-[65] flex justify-center px-4 lg:bottom-28"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(9.5rem+var(--sab))] z-[65] flex justify-center px-4 lg:bottom-28"
       >
         <Presence show={toast !== null} mode="float">
           {toast && (

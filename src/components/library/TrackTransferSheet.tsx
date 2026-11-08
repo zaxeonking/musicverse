@@ -35,7 +35,7 @@ export default function TrackTransferSheet({ source, trackIds, mode, onClose, on
         role="dialog"
         aria-modal="true"
         aria-label={mode === 'copy' ? 'Salin lagu terpilih' : 'Pindahkan lagu terpilih'}
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,var(--sab))] pt-3 shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
       >
         <PlaylistTransferPanel source={source} trackIds={trackIds} mode={mode} onBack={onClose} onDone={onDone} />
       </div>

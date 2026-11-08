@@ -43,7 +43,7 @@ export default function RefreshChoiceSheet({ onClose, onRefresh, onSync }: Refre
         role="dialog"
         aria-modal="true"
         aria-label="Perbarui playlist"
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,var(--sab))] shadow-2xl shadow-black/60 lg:bottom-6 lg:rounded-2xl lg:border"
       >
         <p className="px-4 pb-3 pt-4 text-sm font-semibold text-ink">Perbarui playlist</p>
         <ul className="mv-list border-t border-line px-2 pt-2">

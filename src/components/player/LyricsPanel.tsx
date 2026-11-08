@@ -224,7 +224,7 @@ function LineList({
 
   return (
     <div className="flex h-full flex-col">
-      {header && <div className={`shrink-0 px-4 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,env(safe-area-inset-top))]' : 'pt-2'}`}>{header}</div>}
+      {header && <div className={`shrink-0 px-4 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,var(--sat))]' : 'pt-2'}`}>{header}</div>}
       <div
         ref={containerRef}
         style={FADE_MASK}

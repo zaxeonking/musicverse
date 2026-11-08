@@ -804,15 +804,22 @@ public class MusicVerseNativePlugin extends Plugin {
     }
   }
 
-  private static final long RELAUNCH_DELAY_MS = 700L;
+  private static final long RELAUNCH_DELAY_MS = 600L;
 
   private static android.app.PendingIntent relaunchIntent(Context ctx, String id) {
     android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN)
         .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
         .setComponent(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + id))
         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+    // Android 14+: izinkan PendingIntent ini membuka activity dari latar belakang (dibuat saat aplikasi masih di depan).
+    android.os.Bundle options = null;
+    if (android.os.Build.VERSION.SDK_INT >= 34) {
+      options = android.app.ActivityOptions.makeBasic()
+          .setPendingIntentCreatorBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+          .toBundle();
+    }
     return android.app.PendingIntent.getActivity(ctx, 5151, intent,
-        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE, options);
   }
 
   /** Jadwalkan pembukaan ulang aplikasi lewat alias `id` sesaat lagi. Mengembalikan false bila gagal dijadwalkan. */
@@ -822,10 +829,16 @@ public class MusicVerseNativePlugin extends Plugin {
       if (am == null) return false;
       long at = System.currentTimeMillis() + RELAUNCH_DELAY_MS;
       android.app.PendingIntent pi = relaunchIntent(ctx, id);
-      boolean exact = android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
-      if (exact) am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
-      else am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
-      return true;
+      // setAlarmClock: tepat waktu, tidak ditunda Doze, dan tidak butuh izin alarm tepat (Android 12+). Alarm biasa hanya cadangan.
+      try {
+        am.setAlarmClock(new android.app.AlarmManager.AlarmClockInfo(at, pi), pi);
+        return true;
+      } catch (RuntimeException first) {
+        boolean exact = android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
+        if (exact) am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
+        else am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
+        return true;
+      }
     } catch (RuntimeException e) {
       return false;
     }

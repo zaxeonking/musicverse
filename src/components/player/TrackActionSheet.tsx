@@ -83,7 +83,7 @@ export default function TrackActionSheet({
         aria-modal="true"
         aria-label={`Opsi untuk ${track.title}`}
         onKeyDown={onKeyDown}
-        className="absolute inset-x-0 bottom-0 animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-2xl shadow-black/60 lg:left-auto lg:right-0 lg:w-[26rem]"
+        className="absolute inset-x-0 bottom-0 animate-sheet-up rounded-t-2xl border-t border-line bg-card pb-[max(0.75rem,var(--sab))] pl-[var(--sal)] pr-[var(--sar)] shadow-2xl shadow-black/60 lg:left-auto lg:right-0 lg:w-[26rem]"
       >
         <div className="flex items-center gap-3 px-4 pb-3 pt-4">
           <span className="w-12 shrink-0">

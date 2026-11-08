@@ -56,6 +56,118 @@ const BUBBLE_PX = 72
 const RING_CIRC = 2 * Math.PI * 26
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+/** Salinan disc yang akan terbang ke sampul di kartu (lihat captureDisc / runDiscFly). */
+interface DiscFly {
+  node: HTMLElement
+  rect: DOMRect
+  angle: number
+}
+
+/**
+ * Disc -> kartu, bagian 1: salin disc yang sedang tampil SEBELUM dilepas React. Sudut putaran piringan saat ini ikut disalin
+ * (animasi `animate-disc` salinan dimatikan) supaya tidak melompat di frame pertama.
+ */
+function captureDisc(): DiscFly | null {
+  const disc = document.querySelector<HTMLElement>('[data-mini-disc]')
+  if (!disc) return null
+  const rect = disc.getBoundingClientRect()
+  if (rect.width <= 0) return null
+  const node = disc.cloneNode(true) as HTMLElement
+  node.removeAttribute('data-mini-disc')
+  node.setAttribute('aria-hidden', 'true')
+  node.removeAttribute('aria-label')
+  node.style.cssText = `position:absolute;left:0;top:0;width:${rect.width}px;height:${rect.height}px;transform-origin:50% 50%;pointer-events:none;`
+  node.querySelectorAll('.animate-disc-halo').forEach((el) => el.remove())
+  let angle = 0
+  const spinning = disc.firstElementChild as HTMLElement | null
+  const copy = node.firstElementChild as HTMLElement | null
+  if (spinning && copy) {
+    const m = getComputedStyle(spinning).transform
+    if (m && m !== 'none') {
+      try {
+        const matrix = new DOMMatrixReadOnly(m)
+        angle = (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI
+        if (angle < 0) angle += 360
+      } catch {
+        angle = 0
+      }
+    }
+    copy.style.animation = 'none'
+    copy.style.transform = `rotate(${angle}deg)`
+  }
+  return { node, rect, angle }
+}
+
+const FLY_MS = 600
+
+/**
+ * Disc -> kartu, bagian 2 (setelah kartu terpasang): disc lebih dulu meroda ke arah sampul di kartu, lalu pelan-pelan berubah
+ * bentuk (lingkaran -> bentuk sampul) dan mengecil sampai pas dengan ukuran sampul. Sampul asli disembunyikan selama terbang
+ * lalu memudar masuk menggantikan salinan.
+ */
+function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
+  const target = cover?.getBoundingClientRect()
+  if (!cover || !target || target.width <= 0) return
+  const d = fly.rect
+  const dx = target.left + target.width / 2 - (d.left + d.width / 2)
+  const dy = target.top + target.height / 2 - (d.top + d.height / 2)
+  const sc = target.width / d.width
+  const radius = parseFloat(getComputedStyle(cover.firstElementChild ?? cover).borderTopLeftRadius)
+  const rf = ((Number.isFinite(radius) ? Math.min(radius, target.width / 2) : 8) / target.width) * 100
+  // Meroda: putaran penuh berbanding jarak, berakhir di kelipatan 360 supaya sampul tegak seperti sampul di kartu.
+  const turns = Math.max(1, Math.round(Math.hypot(dx, dy) / (Math.PI * d.width)))
+  const rot = (dx < 0 ? -1 : 1) * 360 * turns
+  const wrap = document.createElement('div')
+  wrap.setAttribute('aria-hidden', 'true')
+  wrap.style.cssText = `position:fixed;left:${d.left}px;top:${d.top}px;width:${d.width}px;height:${d.height}px;overflow:hidden;border-radius:50%;pointer-events:none;z-index:60;will-change:transform,border-radius;`
+  wrap.appendChild(fly.node)
+  document.body.appendChild(wrap)
+  cover.style.opacity = '0'
+  const ease = 'cubic-bezier(0.4, 0, 0.2, 1)'
+  const midScale = 1 + (sc - 1) * 0.3
+  const midRadius = 50 - (50 - rf) * 0.5
+  const T = (f: number, scale: number) => `translate3d(${dx * f}px, ${dy * f}px, 0) rotate(${rot * f}deg) scale(${scale})`
+  const animations: Animation[] = [
+    wrap.animate(
+      [
+        { offset: 0, transform: T(0, 1), borderRadius: '50%', easing: ease },
+        { offset: 0.3, transform: T(0.35, 1), borderRadius: '50%', easing: ease },
+        { offset: 0.75, transform: T(1, midScale), borderRadius: `${midRadius}%`, easing: ease },
+        { offset: 1, transform: T(1, sc), borderRadius: `${rf}%` },
+      ],
+      { duration: FLY_MS, fill: 'forwards', easing: 'linear' },
+    ),
+  ]
+  // Piringan di dalam memperbesar isinya supaya sampul memenuhi bentuk akhir; cincin dan lubang tengah memudar lebih dulu.
+  const inner = fly.node
+  const fill = d.width / (d.width - 12)
+  animations.push(inner.animate([{ transform: 'scale(1)' }, { offset: 0.3, transform: 'scale(1)' }, { transform: `scale(${fill})` }], { duration: FLY_MS, fill: 'forwards', easing: ease }))
+  const spin = inner.firstElementChild as HTMLElement | null
+  if (spin) {
+    const back = fly.angle > 180 ? 360 : 0
+    animations.push(spin.animate([{ transform: `rotate(${fly.angle}deg)` }, { transform: `rotate(${back}deg)` }], { duration: FLY_MS * 0.8, fill: 'forwards', easing: ease }))
+  }
+  inner.querySelectorAll<HTMLElement>('svg, span[class*="border-veil"]').forEach((el) => {
+    animations.push(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FLY_MS * 0.35, fill: 'forwards', easing: 'ease-out' }))
+  })
+  const finish = () => {
+    cover.style.transition = 'opacity 140ms ease-out'
+    cover.style.opacity = '1'
+    wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards' }).finished.then(
+      () => wrap.remove(),
+      () => wrap.remove(),
+    )
+    window.setTimeout(() => {
+      cover.style.transition = ''
+      cover.style.opacity = ''
+    }, 220)
+  }
+  animations[0].finished.then(finish, () => {
+    wrap.remove()
+    cover.style.opacity = ''
+  })
+}
+
 /**
  * Mini player. Anak flex AppShell tepat di atas BottomNav (bukan position: fixed), jadi konten
  * di atasnya otomatis berhenti di sini dan tidak pernah tertutup. Hanya membaca dari audio engine
@@ -129,6 +241,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const [handoff, setHandoff] = useState(false)
   const rollDiscRef = useRef<HTMLSpanElement>(null)
   const rollRaf = useRef(0)
+  // Salinan disc yang menunggu kartu terpasang untuk terbang ke sampul (disc -> kartu).
+  const discFly = useRef<DiscFly | null>(null)
   const closeTimer = useRef(0)
   const swallowClick = useRef(false)
   // Tahan lama pada info lagu = menu lagu yang sedang diputar. Tidak jalan bila sedang menyeret kartu.
@@ -308,8 +422,13 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
   }
   // Ukuran kartu tetap selama gulungan: dibaca sekali (membaca offsetWidth/Height tiap frame memaksa layout ulang tiap frame).
-  const rollSize = useRef({ w: 0, h: 0, cx: 0, cy: 0, cw: 44, frac: 0 })
+  const rollSize = useRef({ w: 0, h: 0, cx: 0, cy: 0, cw: 44, cr: 8, frac: 0 })
   const rollRingRef = useRef<SVGCircleElement>(null)
+  const rollRingBoxRef = useRef<SVGSVGElement>(null)
+  const rollChromeRef = useRef<HTMLSpanElement>(null)
+  const rollRotorRef = useRef<HTMLSpanElement>(null)
+  const rollCoverRef = useRef<HTMLSpanElement>(null)
+  const rollHoleRef = useRef<HTMLSpanElement>(null)
 
   /**
    * Gambar satu frame gulungan untuk progress `p` (0 = kartu utuh, 1 = disc di pojok sisi `dir`).
@@ -333,6 +452,9 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       size.cw = cover && cover.width > 0 ? cover.width : 44
       size.cx = cover && cover.width > 0 ? cover.left - box.left + cover.width / 2 : 38
       size.cy = cover && cover.width > 0 ? cover.top - box.top + cover.height / 2 : size.h / 2
+      const coverEl = region.querySelector<HTMLElement>('[data-mini-cover]')
+      const radius = coverEl ? parseFloat(getComputedStyle(coverEl.firstElementChild ?? coverEl).borderTopLeftRadius) : Number.NaN
+      size.cr = Number.isFinite(radius) ? Math.min(radius, size.cw / 2) : 8
       const seek = region.querySelector<HTMLInputElement>('input[type="range"]')
       const max = seek ? Number(seek.max) || 0 : 0
       size.frac = seek && max > 0 ? Math.min(1, Math.max(0, Number(seek.value) / max)) : 0
@@ -359,17 +481,39 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
     const disc = rollDiscRef.current
     if (disc) {
-      const ease = 1 - Math.pow(1 - e, 3)
-      // Sampul membesar jadi disc sambil meluncur dari tempatnya di kartu ke pojok; cincin progres tergambar di akhir.
+      // Dua tahap: (1) sampul ikut terbawa geseran sambil membesar dan berubah bentuk (persegi bulat -> lingkaran),
+      // (2) lalu meroda ke sisi geser sampai pojok. Cincin progres tidak ikut berputar (selalu mulai dari jam 12),
+      // jadi serah-terima ke disc asli tidak ada lompatan sudut.
+      const grow = smooth(e / 0.4)
+      const roll = smooth((e - 0.25) / 0.75)
+      const travel = 0.18 * grow + 0.82 * roll
       const startLeft = size.cx - BUBBLE_PX / 2
       const endLeft = dir > 0 ? w - BUBBLE_PX : 0
-      const x = startLeft + (endLeft - startLeft) * ease
-      const y = (size.cy + BUBBLE_PX / 2 - h) * (1 - ease)
-      const scale = size.cw / BUBBLE_PX + (1 - size.cw / BUBBLE_PX) * ease
-      disc.style.opacity = String(smooth(e / 0.2))
-      disc.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${reducedMotion() ? 0 : dir * 100 * ease}deg) scale(${scale})`
+      const x = startLeft + (endLeft - startLeft) * travel
+      const y = (size.cy + BUBBLE_PX / 2 - h) * (1 - travel)
+      const s0 = size.cw / BUBBLE_PX
+      disc.style.opacity = String(Math.min(1, e / 0.05))
+      disc.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s0 + (1 - s0) * grow})`
+      // Meroda: putaran penuh berbanding jarak tempuh, berakhir tepat di kelipatan 360 supaya sama dengan disc asli.
+      const turns = Math.max(1, Math.round(Math.abs(endLeft - startLeft) / (Math.PI * BUBBLE_PX)))
+      const rotor = rollRotorRef.current
+      if (rotor) rotor.style.transform = `rotate(${reducedMotion() ? 0 : dir * 360 * turns * travel}deg)`
+      const cover = rollCoverRef.current
+      if (cover) {
+        const startR = size.cr / s0
+        const endR = (BUBBLE_PX - 12) / 2
+        cover.style.inset = `${6 * grow}px`
+        cover.style.borderRadius = `${startR + (endR - startR) * grow}px`
+      }
+      const chrome = rollChromeRef.current
+      if (chrome) chrome.style.opacity = String(smooth((e - 0.15) / 0.3))
+      const ringIn = smooth((e - 0.5) / 0.3)
+      const ringBox = rollRingBoxRef.current
+      if (ringBox) ringBox.style.opacity = String(ringIn)
+      const hole = rollHoleRef.current
+      if (hole) hole.style.opacity = String(smooth((e - 0.55) / 0.35))
       const ring = rollRingRef.current
-      if (ring) ring.style.strokeDashoffset = String(RING_CIRC * (1 - size.frac * smooth((e - 0.4) / 0.6)))
+      if (ring) ring.style.strokeDashoffset = String(RING_CIRC * (1 - size.frac * smooth((e - 0.5) / 0.5)))
     }
   }
 
@@ -384,6 +528,9 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (cardRef.current) cardRef.current.style.opacity = ''
     if (rollDiscRef.current) rollDiscRef.current.style.opacity = '0'
     if (rollRingRef.current) rollRingRef.current.style.strokeDashoffset = String(RING_CIRC)
+    if (rollRingBoxRef.current) rollRingBoxRef.current.style.opacity = '0'
+    if (rollChromeRef.current) rollChromeRef.current.style.opacity = '0'
+    if (rollHoleRef.current) rollHoleRef.current.style.opacity = '0'
     setMorphing(false)
     rollSize.current.w = 0
     drag.current.roll = 0
@@ -621,6 +768,14 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showBubble, growFrom])
 
+  // Disc -> kartu: setelah kartu terpasang, salinan disc terbang ke sampul di kartu.
+  useLayoutEffect(() => {
+    const fly = discFly.current
+    if (!fly || showBubble || !growFrom) return
+    discFly.current = null
+    runDiscFly(fly, regionRef.current?.querySelector<HTMLElement>('[data-mini-cover]') ?? null)
+  }, [showBubble, growFrom])
+
   const expand = () => {
     window.cancelAnimationFrame(rollRaf.current)
     if (leaving) stopLeave(true)
@@ -630,6 +785,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       if (active instanceof HTMLElement) active.blur()
       return
     }
+    discFly.current = captureDisc()
     setGrowFrom(side)
     setCollapsed(false)
   }
@@ -670,11 +826,13 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (pendingExpand.current) {
       pendingExpand.current = false
       if (collapsed) {
+        discFly.current = captureDisc()
         setGrowFrom(side)
         setCollapsed(false)
       }
     }
     if (kbBubble) {
+      discFly.current = captureDisc()
       setGrowFrom(side)
       setKbBubble(false)
       setBubbleRise(false)
@@ -869,7 +1027,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
 
   return (
     <div ref={wrapRef} className="pointer-events-none relative z-40 h-0 shrink-0">
-    <div ref={dockRef} data-mini-dock="" className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,env(safe-area-inset-left))] mr-[max(0.75rem,env(safe-area-inset-right))] lg:mx-6 lg:mb-6">
+    <div ref={dockRef} data-mini-dock="" className="absolute inset-x-0 bottom-0 mb-[calc(var(--dock-offset,0px)+1rem)] transition-[margin-bottom] duration-300 ease-out motion-reduce:transition-none ml-[max(0.75rem,var(--sal))] mr-[max(0.75rem,var(--sar))] lg:mx-6 lg:mb-6">
     {showBubble && (
       <MiniBubble now={now} side={side} width={dockWidth} onExpand={expand} onSideChange={setSide} rise={kbBubble && !collapsed && bubbleRise} riseFrom={riseFrom} morph={leaving} handoff={handoff} />
     )}
@@ -884,10 +1042,17 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       data-mini-glow=""
       aria-hidden="true"
       style={{
-        boxShadow: `0 -10px 32px -6px rgba(${glowColor},0.6), 0 -2px 16px -2px rgba(${glowColor},0.4)`,
-        transition: 'box-shadow 600ms ease, opacity 400ms ease',
+        // Lapisan warna yang di-blur (bukan box-shadow tipis di tepi kartu): cahaya menyebar lembut ke atas dan samping,
+        // tanpa garis tepi keras. Sisi bawah ditarik ke dalam supaya tidak menyentuh navbar.
+        top: -18,
+        left: -8,
+        right: -8,
+        bottom: 26,
+        background: `rgba(${glowColor},0.7)`,
+        filter: 'blur(20px)',
+        transition: 'background-color 600ms ease, opacity 400ms ease',
       }}
-      className={`pointer-events-none absolute inset-0 rounded-3xl animate-glow-pulse motion-reduce:animate-none ${
+      className={`pointer-events-none absolute rounded-[32px] animate-glow-pulse motion-reduce:animate-none ${
         status === 'paused' ? 'opacity-30' : 'opacity-60'
       }`}
     />
@@ -972,21 +1137,25 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     )}
     {/* Disc pratinjau saat kartu digeser ke samping: berguling dari tengah kartu ke pojok (lihat applyRoll). Posisinya diatur lewat gaya inline. */}
     {rollDir !== 0 && (
-      <span
-        ref={rollDiscRef}
-        aria-hidden="true"
-        style={{ opacity: 0 }}
-        className="pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] w-[72px] rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] will-change-transform"
-      >
-        <span className="absolute inset-[6px] overflow-hidden rounded-full">
-          <CoverArt cover={now.cover} src={now.coverSrc} round instant />
-          <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
+      <span ref={rollDiscRef} aria-hidden="true" style={{ opacity: 0 }} className="pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] w-[72px] will-change-transform">
+        {/* Latar piringan: baru terlihat saat sampul sudah membesar jadi lingkaran. */}
+        <span
+          ref={rollChromeRef}
+          style={{ opacity: 0 }}
+          className="absolute inset-0 rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)]"
+        />
+        {/* Hanya sampul yang berputar (meroda); cincin progres di bawahnya diam. */}
+        <span ref={rollRotorRef} className="absolute inset-0 will-change-transform">
+          <span ref={rollCoverRef} style={{ inset: 0, borderRadius: 8 }} className="absolute overflow-hidden">
+            <CoverArt cover={now.cover} src={now.coverSrc} instant />
+            <span className="absolute inset-0 bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
+          </span>
         </span>
-        <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+        <svg ref={rollRingBoxRef} viewBox="0 0 56 56" style={{ opacity: 0 }} className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
           <circle cx="28" cy="28" r="26" fill="none" style={{ stroke: 'rgb(var(--mv-veil, 255 255 255) / 0.14)' }} strokeWidth="3" />
           <circle ref={rollRingRef} cx="28" cy="28" r="26" fill="none" style={{ stroke: 'rgb(var(--mv-accent, 29 185 84))' }} strokeWidth="3" strokeLinecap="round" strokeDasharray={RING_CIRC} strokeDashoffset={RING_CIRC} />
         </svg>
-        <span className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />
+        <span ref={rollHoleRef} style={{ opacity: 0 }} className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />
       </span>
     )}
     </div>

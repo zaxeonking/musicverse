@@ -1,7 +1,7 @@
 MusicVerse — Project Structure
 
 Project: MusicVerse
-Version: v0.5.51.5
+Version: v0.5.51.7
 Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
 Platform: Web / Android
 
@@ -655,8 +655,8 @@ DEVELOPMENT_RULES.md| Aturan pengembangan lanjutan: fitur baru, tutorial dan "Ya
 File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
-CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51), terbaru di atas.
-CHANGES-0.5.51.5.md| Riwayat perubahan versi 0.5.51.5 (terbaru).
+CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.5), terbaru di atas.
+CHANGES-0.5.51.7.md| Riwayat perubahan versi 0.5.51.7 (terbaru).
 
 ---
 
@@ -822,7 +822,7 @@ Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami peruba
   
 End of Project Structure Documentation
 Project: MusicVerse
-Reference Version: v0.5.51.5
+Reference Version: v0.5.51.7
 Document: PROJECT_STRUCTURE.md
 ## Lirik per kata (0.5.54 – 0.5.56)
 - `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`
