@@ -376,6 +376,7 @@ export interface MusicVerseNativePlugin {
   /**
    * Tampilan native yang ikut tema: `bg` (#RRGGBB) jadi latar jendela saat membuka aplikasi; `icon` = id tema siap pakai
    * (mis. "biru") untuk ikon peluncur, atau "hijau" (bawaan). Id tak dikenal diabaikan. Butuh APK v0.5.51+.
+   * Bila ganti ikon membuat sistem menutup aplikasi, aplikasi dibuka lagi otomatis (alarm ±0,7 dtk). Butuh APK v0.5.51.5+.
    */
   setAppearance(options: { bg: string; icon: string }): Promise<void>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */

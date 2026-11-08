@@ -758,7 +758,7 @@ public class MusicVerseNativePlugin extends Plugin {
   /**
    * Tampilan native yang ikut tema. `bg` (#RRGGBB) disimpan dan dipakai MainActivity sebagai latar jendela saat membuka aplikasi
    * (tanpa kedipan gelap di tema terang). `icon` = id tema siap pakai: ikon peluncur diganti dengan menyalakan activity-alias
-   * yang bersangkutan dan mematikan sisanya (DONT_KILL_APP: aplikasi tidak ditutup). Id tak dikenal diabaikan.
+   * yang bersangkutan dan mematikan sisanya (DONT_KILL_APP). Bila sistem tetap menutup aplikasi, alarm membukanya lagi otomatis. Id tak dikenal diabaikan.
    */
   @PluginMethod
   public void setAppearance(PluginCall call) {
@@ -784,6 +784,10 @@ public class MusicVerseNativePlugin extends Plugin {
     android.content.SharedPreferences prefs = ctx.getSharedPreferences(MainActivity.APPEARANCE_PREFS, Context.MODE_PRIVATE);
     if (id.equals(prefs.getString(ICON_PREF, null))) return; // sudah aktif: jangan memicu peluncur memuat ulang
     android.content.pm.PackageManager pm = ctx.getPackageManager();
+    // Sebagian peluncur/ROM menutup aplikasi saat pintu peluncurnya diganti (walau DONT_KILL_APP). Alarm dipasang SEBELUM
+    // alias diganti supaya tetap hidup setelah proses mati: aplikasi dibuka lagi otomatis lewat ikon baru. Bila aplikasi
+    // tidak ditutup, intent ini hanya membawa aplikasi ke depan (MainActivity singleTask). Hanya bila aplikasi sedang dilihat.
+    boolean relaunch = MainActivity.foreground && scheduleRelaunch(ctx, id);
     try {
       // Nyalakan yang baru lebih dulu, baru matikan sisanya: selalu ada tepat satu pintu peluncur yang aktif.
       pm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + id),
@@ -796,6 +800,42 @@ public class MusicVerseNativePlugin extends Plugin {
       prefs.edit().putString(ICON_PREF, id).apply();
     } catch (RuntimeException e) {
       // Alias belum ada (manifest lama) atau peluncur menolak: ikon tetap seperti semula.
+      if (relaunch) cancelRelaunch(ctx, id);
+    }
+  }
+
+  private static final long RELAUNCH_DELAY_MS = 700L;
+
+  private static android.app.PendingIntent relaunchIntent(Context ctx, String id) {
+    android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN)
+        .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        .setComponent(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + id))
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+    return android.app.PendingIntent.getActivity(ctx, 5151, intent,
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+  }
+
+  /** Jadwalkan pembukaan ulang aplikasi lewat alias `id` sesaat lagi. Mengembalikan false bila gagal dijadwalkan. */
+  private boolean scheduleRelaunch(Context ctx, String id) {
+    try {
+      android.app.AlarmManager am = (android.app.AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+      if (am == null) return false;
+      long at = System.currentTimeMillis() + RELAUNCH_DELAY_MS;
+      android.app.PendingIntent pi = relaunchIntent(ctx, id);
+      boolean exact = android.os.Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
+      if (exact) am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
+      else am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
+      return true;
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  private void cancelRelaunch(Context ctx, String id) {
+    try {
+      android.app.AlarmManager am = (android.app.AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+      if (am != null) am.cancel(relaunchIntent(ctx, id));
+    } catch (RuntimeException ignored) {
     }
   }
 

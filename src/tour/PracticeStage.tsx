@@ -1,5 +1,5 @@
 import { ArrowRightLeft, Check, Copy, Download, FolderPlus, Heart, ListEnd, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import CoverArt from '../components/ui/CoverArt'
 import { useLongPress } from '../hooks/useLongPress'
 import { useSwipeSelect, type SwipeHint } from '../hooks/useSwipeSelect'
@@ -502,6 +502,95 @@ function QuizPractice({ onComplete }: { onComplete: () => void }) {
   )
 }
 
+/** Seret disc ke sisi lain (menempel ke tepi) lalu tahan untuk putar / jeda: sama dengan gerakan disc di pemutar mini. */
+function DiscDragPractice({ onComplete }: { onComplete: () => void }) {
+  const DISC = 48
+  const box = useRef<HTMLDivElement>(null)
+  const [x, setX] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const [side, setSide] = useState<'left' | 'right'>('left')
+  const [moved, setMoved] = useState(false)
+  const [held, setHeld] = useState(false)
+  const [playing, setPlaying] = useState(true)
+  const complete = useLatest(onComplete)
+  const start = useRef({ px: 0, x: 0, travelled: 0 })
+  const holdTimer = useRef<number | null>(null)
+  const maxX = () => Math.max(0, (box.current?.clientWidth ?? 300) - DISC - 24)
+
+  const clearHold = () => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
+    holdTimer.current = null
+  }
+  useEffect(() => clearHold, [])
+  useEffect(() => {
+    if (moved && held) complete.current()
+  }, [moved, held, complete])
+
+  const onDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId)
+    start.current = { px: event.clientX, x, travelled: 0 }
+    setDragging(true)
+    clearHold()
+    holdTimer.current = window.setTimeout(() => {
+      if (start.current.travelled > 10) return
+      navigator.vibrate?.(15)
+      setPlaying((value) => !value)
+      setHeld(true)
+    }, 450)
+  }
+  const onMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragging) return
+    const dx = event.clientX - start.current.px
+    start.current.travelled = Math.max(start.current.travelled, Math.abs(dx))
+    if (Math.abs(dx) > 10) clearHold()
+    setX(Math.min(maxX(), Math.max(0, start.current.x + dx)))
+  }
+  const onUp = () => {
+    if (!dragging) return
+    clearHold()
+    setDragging(false)
+    if (start.current.travelled <= 10) return
+    const next = x > maxX() / 2 ? 'right' : 'left'
+    setX(next === 'right' ? maxX() : 0)
+    navigator.vibrate?.(10)
+    if (next !== side) setMoved(true)
+    setSide(next)
+  }
+
+  return (
+    <div className="mt-3">
+      <div ref={box} className="relative h-[72px] overflow-hidden rounded-xl bg-bg">
+        <div
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+          style={{
+            width: DISC,
+            height: DISC,
+            transform: `translateX(${x + 12}px) scale(${dragging ? 1.08 : 1})`,
+            transition: dragging ? 'none' : 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            touchAction: 'none',
+          }}
+          className="absolute bottom-3 left-0 flex select-none items-center justify-center rounded-full border-[3px] border-accent/70 bg-raised shadow-lg"
+        >
+          <span style={{ animationDuration: '3s' }} className={`flex h-8 w-8 items-center justify-center rounded-full bg-accent/35 ${playing ? 'animate-spin' : ''}`}>
+            <span className="h-2 w-2 rounded-full bg-bg" />
+            <span className="absolute h-3 w-0.5 -translate-y-2.5 rounded-full bg-accent" />
+          </span>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <TaskChip done={moved}>Seret ke sisi lain</TaskChip>
+        <TaskChip done={held}>Tahan: putar / jeda</TaskChip>
+      </div>
+      <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-ink-muted">
+        {held ? (playing ? 'Disc berputar lagi (contoh)' : 'Disc dijeda (contoh)') : ''}
+      </p>
+    </div>
+  )
+}
+
 /** Area latihan di dalam kartu tutorial: baris contoh yang benar-benar bisa digeser / ditahan (data pengguna tidak tersentuh). */
 export default function PracticeStage({ kind, onComplete }: PracticeStageProps) {
   if (kind === 'swipe-track') return <SwipeTrackPractice onComplete={onComplete} />
@@ -509,6 +598,7 @@ export default function PracticeStage({ kind, onComplete }: PracticeStageProps) 
   if (kind === 'save-track') return <SaveTrackPractice onComplete={onComplete} />
   if (kind === 'like-track') return <LikeTrackPractice onComplete={onComplete} />
   if (kind === 'select-tracks') return <SelectTracksPractice onComplete={onComplete} />
+  if (kind === 'disc-drag') return <DiscDragPractice onComplete={onComplete} />
   if (kind === 'quiz') return <QuizPractice onComplete={onComplete} />
   return <SwipePlaylistPractice onComplete={onComplete} />
 }

@@ -73,6 +73,11 @@
       transition-delay: 0ms !important;
       scroll-behavior: auto !important;
     }
+    /* Pengecualian: kartu mini player membesar dari disc tetap beranimasi (tanpa ini langsung melompat). Hanya bentuk/pudar, tanpa putaran. */
+    [data-mini-card][data-mini-card] {
+      animation-duration: 460ms !important;
+      animation-delay: 0ms !important;
+    }
   }
 }
 

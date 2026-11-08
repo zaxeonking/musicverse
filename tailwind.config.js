@@ -82,12 +82,12 @@ export default {
         // Disc -> kartu: kartu dibuka dari lingkaran 56px di pojok disc ke bentuk penuh (kebalikan gerakan mengerut).
         // -48px di ujung = tidak memotong apa pun, jadi bayangan kartu tetap utuh setelah animasi selesai.
         'card-from-right': {
-          '0%': { clipPath: 'inset(calc(100% - 56px) 0px 0px calc(100% - 56px) round 28px)', opacity: '0.4' },
+          '0%': { clipPath: 'inset(calc(100% - 72px) 0px 0px calc(100% - 72px) round 36px)', opacity: '0.4' },
           '35%': { opacity: '1' },
           '100%': { clipPath: 'inset(-48px -48px -48px -48px round 24px)', opacity: '1' },
         },
         'card-from-left': {
-          '0%': { clipPath: 'inset(calc(100% - 56px) calc(100% - 56px) 0px 0px round 28px)', opacity: '0.4' },
+          '0%': { clipPath: 'inset(calc(100% - 72px) calc(100% - 72px) 0px 0px round 36px)', opacity: '0.4' },
           '35%': { opacity: '1' },
           '100%': { clipPath: 'inset(-48px -48px -48px -48px round 24px)', opacity: '1' },
         },
@@ -97,6 +97,11 @@ export default {
           from: { opacity: '0', transform: 'scale(0.72)' },
           '45%': { opacity: '1' },
           to: { opacity: '1', transform: 'none' },
+        },
+        // Riak halus di sekeliling disc yang baru jadi: membesar sedikit sambil memudar.
+        'disc-halo': {
+          from: { opacity: '0.6', transform: 'scale(1)' },
+          to: { opacity: '0', transform: 'scale(1.45)' },
         },
         'bubble-in': {
           from: { opacity: '0', transform: 'scale(0.3)' },
@@ -132,6 +137,7 @@ export default {
         'card-from-right': 'card-from-right 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'card-from-left': 'card-from-left 460ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'bubble-morph': 'bubble-morph 340ms cubic-bezier(0.34, 1.3, 0.64, 1) both',
+        'disc-halo': 'disc-halo 720ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both',
         'bubble-in': 'bubble-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         'bubble-rise': 'bubble-rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'sheet-expand': 'sheet-expand 420ms cubic-bezier(0.22, 1, 0.36, 1) both',

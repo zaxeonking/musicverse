@@ -42,13 +42,13 @@ const miniCoverRect = () => {
 }
 
 /**
- * Disc Player (gelembung): sampul berupa lingkaran 5px di dalam tombol disc. Dipakai bila kartu mini tidak ada, supaya sampul
+ * Disc Player (gelembung): sampul berupa lingkaran 6px di dalam tombol disc (72px). Dipakai bila kartu mini tidak ada, supaya sampul
  * terbang ke/dari disc, bukan sekadar memudar. Kotak diukur dari tombol (bukan dari piringan yang berputar).
  */
 const discCoverRect = (): Box | null => {
   const rect = document.querySelector<HTMLElement>('[data-mini-disc]')?.getBoundingClientRect()
   if (!rect || rect.width <= 0) return null
-  const inset = (5 / 56) * rect.width
+  const inset = (6 / 72) * rect.width
   return { left: rect.left + inset, top: rect.top + inset, width: rect.width - inset * 2 }
 }
 

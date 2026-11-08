@@ -4,7 +4,7 @@ export type TourAnimation = 'swipe' | 'press' | 'tap' | 'roll' | 'down'
 export type DemoKind = 'mini-roll' | 'mini-close' | 'disc-side' | 'theme'
 
 /** Latihan langsung di dalam kartu (baris contoh yang asli bisa digeser / ditahan, tanpa mengubah data pengguna). */
-export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist' | 'save-track' | 'like-track' | 'select-tracks' | 'quiz'
+export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist' | 'save-track' | 'like-track' | 'select-tracks' | 'disc-drag' | 'quiz'
 
 export interface TourStep {
   id: string
@@ -24,6 +24,8 @@ export interface TourStep {
   demo?: DemoKind
   /** Mengetuk elemen yang disorot langsung melanjutkan ke langkah berikutnya (ketukannya tetap diteruskan ke elemen). */
   advanceOnTargetClick?: boolean
+  /** Elemen yang disorot boleh disentuh langsung (ketuk / geser sungguhan) tanpa otomatis lanjut; sisa layar tetap terkunci. */
+  tryTarget?: boolean
   /** Latihan interaktif: kartu memuat baris contoh; selesai dilatih = lanjut otomatis (tombol Lanjut tetap ada). */
   practice?: PracticeKind
   /** Perintah singkat yang diminta dari pengguna (tampil sebagai label aksen di kartu). */
@@ -178,6 +180,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/',
     target: 'mini-player',
     animate: 'tap',
+    tryTarget: true,
+    task: 'Ketuk pemutar mini',
     title: 'Pemutar',
     body: 'Ketuk pemutar mini untuk membuka pemutar penuh: lirik, antrean, dan sleep timer.',
     missing: 'Saat lagu diputar, pemutar mini muncul di bawah. Ketuk untuk membuka pemutar penuh: lirik, antrean, dan sleep timer.',
@@ -188,6 +192,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     target: 'mini-player',
     animate: 'roll',
     demo: 'mini-roll',
+    tryTarget: true,
+    task: 'Geser pemutar mini ke samping',
     title: 'Geser jadi disc',
     body: 'Geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu, dan disc terus berputar saat lagu diputar. Ketuk disc untuk membesar lagi.',
     missing: 'Saat lagu diputar, geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu. Ketuk disc untuk membesar lagi.',
@@ -195,7 +201,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: 'mini-disc',
     route: '/',
-    demo: 'disc-side',
+    practice: 'disc-drag',
+    task: 'Seret disc ke sisi lain, lalu tahan',
     title: 'Main-main dengan disc',
     body: 'Seret disc ke sisi layar lain, dan ia menempel dengan getar kecil. Tahan disc untuk putar atau jeda, geser ke atas untuk membuka pemutar penuh. Cincin di tepinya menunjukkan progres lagu.',
   },
@@ -205,6 +212,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     target: 'mini-player',
     animate: 'down',
     demo: 'mini-close',
+    tryTarget: true,
+    task: 'Geser pemutar mini ke bawah',
     title: 'Tutup musik',
     body: 'Geser pemutar mini ke bawah: kartu tenggelam ke belakang menu bawah dan musik berhenti. Lewat batas getar kecil, lepas jari untuk menutup. Belum sampai? Lepas saja, kartu kembali.',
     missing: 'Geser pemutar mini ke bawah untuk menutup musik: kartu tenggelam ke belakang menu bawah dan pemutar dikosongkan. Putar lagu dulu untuk mencobanya.',
@@ -223,6 +232,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/',
     openPlayer: true,
     target: 'lyrics-btn',
+    tryTarget: true,
+    task: 'Ketuk ikon mik',
     title: 'Lirik',
     body: 'Ketuk ikon mik untuk mengganti sampul dengan lirik lagu yang sedang diputar. Ketuk lagi untuk kembali.',
     missing: 'Di pemutar penuh, ikon mik menampilkan lirik lagu yang sedang diputar. Putar lagu dulu untuk mencobanya.',
@@ -385,6 +396,26 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         nativeOnly: true,
         title: 'Baru: layar pembuka & ikon ikut tema',
         body: 'Animasi buka aplikasi kini memakai warna tema pilihanmu. Di Pengaturan > Tema > Layar pembuka & ikon, kamu juga bisa menyalakan Ikon aplikasi ikut tema (bawaan mati).',
+      },
+    ],
+  },
+  {
+    id: '0.5.51.5',
+    steps: [
+      {
+        id: 'wn-disc-big',
+        route: '/',
+        demo: 'mini-roll',
+        title: 'Baru: disc lebih besar',
+        body: 'Geser pemutar mini ke samping: sampulnya membesar jadi disc yang lebih besar, cincin progres tergambar, lalu disc menempel di sisi layar. Ketuk disc untuk membesar lagi.',
+      },
+      {
+        id: 'wn-tour-practice',
+        route: '/',
+        practice: 'disc-drag',
+        title: 'Baru: tutorial bisa dicoba langsung',
+        body: 'Langkah yang menyorot pemutar mini kini bisa diketuk dan digeser sungguhan, dan ada latihan menyeret disc. Ikon aplikasi ikut tema juga membuka aplikasi lagi sendiri setelah berganti.',
+        task: 'Seret disc ke sisi lain, lalu tahan',
       },
     ],
   },

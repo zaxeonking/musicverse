@@ -220,6 +220,23 @@ export default function TourHost() {
     return () => target.removeEventListener('click', onClick, { capture: true })
   }, [target, step, index, steps.length])
 
+  // Langkah yang boleh dicoba langsung: bila ketukan membuka pemutar penuh, tutorial yang menutupnya lagi di langkah berikutnya.
+  useEffect(() => {
+    if (!target || !step?.tryTarget) return
+    let timer = 0
+    const onClick = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        if (playerRef.current.open && !step.openPlayer) openedByTour.current = true
+      }, 450)
+    }
+    target.addEventListener('click', onClick, { capture: true })
+    return () => {
+      window.clearTimeout(timer)
+      target.removeEventListener('click', onClick, { capture: true })
+    }
+  }, [target, step])
+
   // Escape = lewati. Fokus ke tombol Lanjut tiap ganti langkah.
   useEffect(() => {
     if (!active) return
@@ -311,7 +328,7 @@ export default function TourHost() {
 
   const last = index >= steps.length - 1
   const hasTarget = rect !== null && target !== null
-  const interactive = step.advanceOnTargetClick === true
+  const interactive = step.advanceOnTargetClick === true || step.tryTarget === true
   const vw = window.innerWidth
   const vh = window.innerHeight
   const cardW = Math.min(CARD_MAX_W, vw - MARGIN * 2)
@@ -424,7 +441,7 @@ export default function TourHost() {
         </div>
         <h2 className="mt-2 font-display text-lg font-bold leading-snug text-ink">{step.title}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-muted">{text}</p>
-        {step.task && (
+        {step.task && (!step.tryTarget || hasTarget) && (
           <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
             <Hand className="h-3.5 w-3.5" aria-hidden="true" />
             Coba: {step.task}

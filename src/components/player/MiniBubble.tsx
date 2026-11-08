@@ -7,7 +7,7 @@ import { parseDuration } from '../../utils/formatTime'
 import { swallowNextClick } from '../../utils/swallowNextClick'
 import CoverArt from '../ui/CoverArt'
 
-const SIZE = 56 // px (h-14 w-14)
+const SIZE = 72 // px (h-[72px] w-[72px]); sama dengan BUBBLE_PX di MiniPlayer
 const RING_R = 26
 const CIRC = 2 * Math.PI * RING_R
 const TAP_SLOP = 8
@@ -166,7 +166,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
   return (
     <div
       style={rise && riseFrom > 0 ? ({ '--rise-from': `${Math.round(riseFrom)}px` } as CSSProperties) : undefined}
-      className={`pointer-events-none relative h-14 ${rise ? 'animate-bubble-rise' : handoffEntry ? '' : morphEntry ? 'animate-bubble-morph' : 'animate-bubble-in'} motion-reduce:animate-none ${
+      className={`pointer-events-none relative h-[72px] ${rise ? 'animate-bubble-rise' : handoffEntry ? '' : morphEntry ? 'animate-bubble-morph' : 'animate-bubble-in'} motion-reduce:animate-none ${
         side === 'right' ? 'origin-bottom-right' : 'origin-bottom-left'
       }`}
     >
@@ -188,27 +188,31 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
           transition: drag ? 'none' : 'transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
-        className="pointer-events-auto absolute left-0 top-0 h-14 w-14 touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-xl focus-ring"
+        className="pointer-events-auto absolute left-0 top-0 h-[72px] w-[72px] touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-xl focus-ring"
       >
         {/* Piringan: berputar saat playing, berhenti di posisi terakhir saat jeda. */}
         <span
           aria-hidden="true"
-          className="absolute inset-[5px] animate-disc overflow-hidden rounded-full motion-reduce:animate-none"
+          className="absolute inset-[6px] animate-disc overflow-hidden rounded-full motion-reduce:animate-none"
           style={{ animationPlayState: playing && !loading ? 'running' : 'paused', opacity: loading ? 0.55 : 1 }}
         >
           <CoverArt cover={now.cover} src={now.coverSrc} round instant />
           <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
         </span>
         <ProgressRing error={error} loading={loading} />
+        {/* Riak halus sekali saat kartu selesai jadi disc (seperti contoh animasi disc). */}
+        {(morphEntry || handoffEntry) && (
+          <span aria-hidden="true" className="pointer-events-none absolute -inset-px animate-disc-halo rounded-full border-2 border-veil/40 motion-reduce:animate-none" />
+        )}
         {/* Lubang tengah piringan; berubah jadi ikon play saat jeda. */}
         <span
           aria-hidden="true"
           className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-veil/25 bg-bg transition-all ${
-            paused || loading ? 'h-6 w-6 bg-black/70' : 'h-3 w-3'
+            paused || loading ? 'h-8 w-8 bg-black/70' : 'h-4 w-4'
           }`}
         >
-          {paused && <Play className="h-3 w-3 text-ink" fill="currentColor" />}
-          {loading && <Loader2 className="h-3 w-3 animate-spin text-ink motion-reduce:animate-pulse" />}
+          {paused && <Play className="h-4 w-4 text-ink" fill="currentColor" />}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-ink motion-reduce:animate-pulse" />}
         </span>
       </button>
     </div>

@@ -1,7 +1,7 @@
 MusicVerse — Project Structure
 
 Project: MusicVerse
-Version: v0.5.51
+Version: v0.5.51.5
 Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
 Platform: Web / Android
 
@@ -446,7 +446,7 @@ steps.ts| Definisi langkah tutorial utama, tur per halaman, dan daftar WHATS_NEW
 tourStore.ts| State tur dan penanda sudah dilihat/selesai (disimpan di perangkat).
 TourHost.tsx| Penampil tur: sorotan, kartu langkah, dan navigasi antarlangkah.
 DemoStage.tsx| Peragaan animasi kecil di dalam kartu.
-PracticeStage.tsx| Latihan langsung di dalam kartu (geser, tahan, suka, pilih lagu, kuis).
+PracticeStage.tsx| Latihan langsung di dalam kartu (geser, tahan, suka, pilih lagu, seret disc, kuis).
 
 ---
 
@@ -655,8 +655,8 @@ DEVELOPMENT_RULES.md| Aturan pengembangan lanjutan: fitur baru, tutorial dan "Ya
 File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
-CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.50.7), terbaru di atas.
-CHANGES-0.5.51.md| Riwayat perubahan versi 0.5.51 (terbaru).
+CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51), terbaru di atas.
+CHANGES-0.5.51.5.md| Riwayat perubahan versi 0.5.51.5 (terbaru).
 
 ---
 
@@ -822,7 +822,7 @@ Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami peruba
   
 End of Project Structure Documentation
 Project: MusicVerse
-Reference Version: v0.5.51
+Reference Version: v0.5.51.5
 Document: PROJECT_STRUCTURE.md
 ## Lirik per kata (0.5.54 – 0.5.56)
 - `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`

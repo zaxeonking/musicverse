@@ -14,6 +14,8 @@ public class MainActivity extends BridgeActivity {
   private static final long KEEPALIVE_MS = 5000L;
   private final Handler keepAliveHandler = new Handler(Looper.getMainLooper());
   private boolean inBackground = false;
+  /** True selama activity di layar (onResume..onPause). Dipakai plugin: buka-ulang otomatis sesudah ganti ikon hanya bila aplikasi sedang dilihat. */
+  static volatile boolean foreground = false;
   private final Runnable keepAlive = new Runnable() {
     @Override public void run() {
       if (!inBackground) return;
@@ -83,6 +85,7 @@ public class MainActivity extends BridgeActivity {
   @Override
   public void onPause() {
     super.onPause();
+    foreground = false;
     resumeWebViewTimers();
     startKeepAlive();
   }
@@ -97,12 +100,14 @@ public class MainActivity extends BridgeActivity {
   @Override
   public void onResume() {
     super.onResume();
+    foreground = true;
     inBackground = false;
     keepAliveHandler.removeCallbacks(keepAlive);
   }
 
   @Override
   public void onDestroy() {
+    foreground = false;
     inBackground = false;
     keepAliveHandler.removeCallbacksAndMessages(null);
     // Activity benar-benar ditutup (tombol back sampai keluar, finish(), dsb.; bukan sekadar rotasi layar):

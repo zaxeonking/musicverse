@@ -6,7 +6,7 @@ const reducedMotion = () => typeof window.matchMedia === 'function' && window.ma
 
 /** Satu putaran peragaan (ms). */
 const LOOP_MS = 4600
-const DISC = 44
+const DISC = 56
 const CARD_H = 64
 /** Bentuk kartu penuh dan bentuk lingkaran disc di pojok kanan bawah (sama dengan gerakan asli di MiniPlayer). */
 const CLIP_FULL = 'inset(-8px -8px -8px -8px round 16px)'
@@ -60,7 +60,7 @@ function Disc({ innerRef, className = '' }: { innerRef?: RefObject<HTMLDivElemen
       style={{ width: DISC, height: DISC }}
       className={`flex items-center justify-center rounded-full border-[3px] border-accent/70 bg-raised shadow-lg ${className}`}
     >
-      <span className="h-6 w-6 rounded-full bg-accent/35" />
+      <span className="h-6 w-8 rounded-full bg-accent/35" />
       <span className="absolute h-2 w-2 rounded-full bg-bg" />
     </div>
   )
@@ -117,7 +117,7 @@ function MiniRoll() {
       </div>
       <Disc innerRef={disc} className="absolute bottom-3 right-3" />
       <Finger innerRef={swipe} className="bottom-[30px] left-1/2 -ml-3.5" />
-      <Finger innerRef={tap} className="bottom-[20px] right-[20px]" />
+      <Finger innerRef={tap} className="bottom-[26px] right-[26px]" />
     </div>
   )
 }

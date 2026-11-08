@@ -52,7 +52,8 @@ const DRAG_START_PX = 8
 /** Lama kartu tenggelam ke belakang nav lalu hilang (ms). */
 const LEAVE_MS = 440
 /** Diameter disc (px); sama dengan SIZE di MiniBubble. */
-const BUBBLE_PX = 56
+const BUBBLE_PX = 72
+const RING_CIRC = 2 * Math.PI * 26
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
@@ -307,7 +308,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
   }
   // Ukuran kartu tetap selama gulungan: dibaca sekali (membaca offsetWidth/Height tiap frame memaksa layout ulang tiap frame).
-  const rollSize = useRef({ w: 0, h: 0 })
+  const rollSize = useRef({ w: 0, h: 0, cx: 0, cy: 0, cw: 44, frac: 0 })
+  const rollRingRef = useRef<SVGCircleElement>(null)
 
   /**
    * Gambar satu frame gulungan untuk progress `p` (0 = kartu utuh, 1 = disc di pojok sisi `dir`).
@@ -325,6 +327,15 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (size.w === 0) {
       size.w = region.offsetWidth
       size.h = region.offsetHeight
+      // Disc pratinjau lahir dari sampul kecil di kartu (bukan dari tengah), dan cincin progres tergambar sampai posisi lagu sekarang.
+      const box = region.getBoundingClientRect()
+      const cover = region.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect()
+      size.cw = cover && cover.width > 0 ? cover.width : 44
+      size.cx = cover && cover.width > 0 ? cover.left - box.left + cover.width / 2 : 38
+      size.cy = cover && cover.width > 0 ? cover.top - box.top + cover.height / 2 : size.h / 2
+      const seek = region.querySelector<HTMLInputElement>('input[type="range"]')
+      const max = seek ? Number(seek.max) || 0 : 0
+      size.frac = seek && max > 0 ? Math.min(1, Math.max(0, Number(seek.value) / max)) : 0
     }
     const w = size.w
     const h = size.h
@@ -349,13 +360,16 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const disc = rollDiscRef.current
     if (disc) {
       const ease = 1 - Math.pow(1 - e, 3)
-      const startX = w / 2
-      const cornerX = dir > 0 ? w - BUBBLE_PX / 2 : BUBBLE_PX / 2
-      const x = startX + (cornerX - startX) * ease - BUBBLE_PX / 2
-      const y = -((h - BUBBLE_PX) / 2) * (1 - ease)
-      const scale = 0.5 + 0.5 * ease
-      disc.style.opacity = String(smooth((e - 0.08) / 0.4))
-      disc.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${dir * 360 * ease}deg) scale(${scale})`
+      // Sampul membesar jadi disc sambil meluncur dari tempatnya di kartu ke pojok; cincin progres tergambar di akhir.
+      const startLeft = size.cx - BUBBLE_PX / 2
+      const endLeft = dir > 0 ? w - BUBBLE_PX : 0
+      const x = startLeft + (endLeft - startLeft) * ease
+      const y = (size.cy + BUBBLE_PX / 2 - h) * (1 - ease)
+      const scale = size.cw / BUBBLE_PX + (1 - size.cw / BUBBLE_PX) * ease
+      disc.style.opacity = String(smooth(e / 0.2))
+      disc.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${reducedMotion() ? 0 : dir * 100 * ease}deg) scale(${scale})`
+      const ring = rollRingRef.current
+      if (ring) ring.style.strokeDashoffset = String(RING_CIRC * (1 - size.frac * smooth((e - 0.4) / 0.6)))
     }
   }
 
@@ -369,6 +383,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
     if (cardRef.current) cardRef.current.style.opacity = ''
     if (rollDiscRef.current) rollDiscRef.current.style.opacity = '0'
+    if (rollRingRef.current) rollRingRef.current.style.strokeDashoffset = String(RING_CIRC)
     setMorphing(false)
     rollSize.current.w = 0
     drag.current.roll = 0
@@ -385,7 +400,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const step = (now: number) => {
       const dt = Math.min(48, now - last)
       last = now
-      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt / 70)
+      const k = 1 - Math.exp(-dt / 70)
       d.shown += (d.roll - d.shown) * k
       if (Math.abs(d.roll - d.shown) < 0.0005) d.shown = d.roll
       applyRoll(d.shown, d.dir)
@@ -448,10 +463,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         d.busy = false
       }, 300)
     }
-    if (reducedMotion()) {
-      finish()
-      return
-    }
+    // Tetap beranimasi walau "kurangi gerakan" menyala: perubahan kartu <-> disc harus terlihat, bukan lompat.
     tweenRoll(d.shown, 1, dir, ROLL_SETTLE_MS, finish)
   }
 
@@ -463,10 +475,6 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const done = () => {
       clearRoll()
       d.busy = false
-    }
-    if (reducedMotion()) {
-      done()
-      return
     }
     tweenRoll(d.shown, 0, d.dir, Math.round(ROLL_SETTLE_MS * 0.8), done)
   }
@@ -534,7 +542,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const region = regionRef.current
     const dock = dockRef.current
     const commit = () => (persist ? setCollapsed(true) : setKbBubble(true))
-    if (!card || !region || !dock || reducedMotion() || typeof card.animate !== 'function') {
+    if (!card || !region || !dock || typeof card.animate !== 'function') {
       commit()
       return
     }
@@ -854,9 +862,9 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const cardAnimation = growFrom ? '' : 'animate-player-up'
   const regionGrow =
     growFrom === 'right'
-      ? 'animate-card-from-right motion-reduce:animate-none'
+      ? 'animate-card-from-right'
       : growFrom === 'left'
-        ? 'animate-card-from-left motion-reduce:animate-none'
+        ? 'animate-card-from-left'
         : ''
 
   return (
@@ -968,13 +976,17 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         ref={rollDiscRef}
         aria-hidden="true"
         style={{ opacity: 0 }}
-        className="pointer-events-none absolute bottom-0 left-0 z-10 h-14 w-14 rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] will-change-transform"
+        className="pointer-events-none absolute bottom-0 left-0 z-10 h-[72px] w-[72px] rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] will-change-transform"
       >
-        <span className="absolute inset-[5px] overflow-hidden rounded-full">
+        <span className="absolute inset-[6px] overflow-hidden rounded-full">
           <CoverArt cover={now.cover} src={now.coverSrc} round instant />
           <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
         </span>
-        <span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />
+        <svg viewBox="0 0 56 56" className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+          <circle cx="28" cy="28" r="26" fill="none" style={{ stroke: 'rgb(var(--mv-veil, 255 255 255) / 0.14)' }} strokeWidth="3" />
+          <circle ref={rollRingRef} cx="28" cy="28" r="26" fill="none" style={{ stroke: 'rgb(var(--mv-accent, 29 185 84))' }} strokeWidth="3" strokeLinecap="round" strokeDasharray={RING_CIRC} strokeDashoffset={RING_CIRC} />
+        </svg>
+        <span className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />
       </span>
     )}
     </div>
