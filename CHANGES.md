@@ -1,10 +1,11 @@
 # Riwayat perubahan MusicVerse (arsip)
 
-Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.7.md`.
+Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.8.md`.
 Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
 
 ## Daftar isi
 
+- 0.5.51.7
 - 0.5.51.5
 - 0.5.51
 - 0.5.50.7
@@ -106,6 +107,63 @@ Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
 - 0.3.8
 - 0.3.7
 
+
+---
+
+<!-- sumber: CHANGES-0.5.51.7.md -->
+
+# 0.5.51.7 (layar penuh sampai kamera, glow pemutar mini lebih lembut, buka-ulang ikon lebih andal)
+
+Files: native/android/java/{MainActivity,MusicVerseNativePlugin,PlaybackService,RelaunchActivity}.java, src/components/player/NativeMediaSync.tsx, src/native/musicVerseNative.ts, scripts/setup-android.mjs, src/components/player/{MiniPlayer,LyricsPanel}.tsx, src/pages/SearchPage.tsx, src/components/layout/MobileHeader.tsx, src/index.css,
+semua komponen yang memakai safe-area (BottomNav, MobileHeader, AppShell, FullPlayer, LyricsPanel, QueuePanel, sheet-sheet menu, TrackMenuContext, dst.),
+src/tour/steps.ts (entri Yang baru 0.5.51.7), src/native/musicVerseNative.ts (komentar), package.json (appVersion 0.5.51.7), CHANGES.md (0.5.51.5 diarsipkan), PROJECT_STRUCTURE.md
+
+1. Layar penuh sampai area kamera (APK baru)
+   - Penyebab: WebView berada di bawah status bar, jadi strip paling atas hanya latar jendela. `MainActivity.enableEdgeToEdge()`: jendela tidak menyisakan
+     ruang untuk bar sistem (`setDecorFitsSystemWindows(false)`), status bar dan navigation bar transparan, mode poni `shortEdges`, margin WebView dihapus.
+   - Tinggi inset dikirim native ke CSS sebagai `--sat/--sab/--sal/--sar` (px CSS; `--sab` = 0 saat keyboard terbuka). `index.css` memberi nilai awal dari
+     `env(safe-area-inset-*)` (cadangan web/iOS). Semua pemakaian `env(safe-area-inset-*)` di src diganti `var(--sat|--sab|--sal|--sar)`.
+2. Cahaya latar pemutar mini
+   - Dulu `box-shadow` setipis tepi kartu (tampak seperti garis keras). Kini lapisan warna sampul yang di-blur 20 px, menyebar ke atas dan samping; sisi bawah
+     ditarik ke dalam supaya tidak menyentuh navbar. Aturan tema terang di `index.css` ikut disesuaikan (`blur(20px) saturate(0.8)`).
+3. Buka-ulang otomatis sesudah ganti ikon lebih andal
+   - Tanpa izin alarm tepat, Android 12+ memakai alarm hemat daya yang bisa telat/ditahan Doze, dan Android 14+ bisa menolak buka activity dari latar.
+     Kini memakai `setAlarmClock` (tepat waktu, tanpa izin tambahan; alarm lama jadi cadangan), PendingIntent diberi izin BAL (API 34+), jeda 0,7 -> 0,6 dtk.
+4. Cahaya latar tidak lagi terpotong di halaman Cari
+   - Pembungkus kolom cari (sticky) dan header seluler memakai `bg-bg` pekat, jadi cahaya latar (`mv-glow` di AppShell) terputus di belakangnya. Kini
+     pembungkus transparan dengan lapisan blur yang memudar ke bawah (daftar yang tergulir tidak menabrak kolom), header tanpa latar.
+   - Kolom cari berkaca: `bg-raised/60`, blur, garis tipis, dan pantulan warna aksen lembut dari atas.
+   - Kolom cari sticky lain (TrackList, bar pilih lagu) belum diubah.
+5. Animasi disc -> kartu tidak lagi "macet" sesaat di tengah jalan
+   - Penyebab: `runDiscFly` memakai satu animasi dengan keyframe tengah (offset 0.3 dan 0.75) yang masing-masing ber-easing; kecepatan kembali ke 0 di tiap
+     batas keyframe, terlihat sebagai disc berhenti sepersekian detik. Kini tiga lapis bersarang: geser dan putar memakai satu kurva mulus tanpa keyframe
+     tengah (putaran tetap sebanding jarak), sedangkan mengecil + berubah bentuk mulai setelah jeda 20% (`delay`) dan selesai bersamaan.
+6. Buka-ulang sesudah ganti ikon: pembuka di proses tersendiri (`RelaunchActivity`)
+   - Alarm saja tidak cukup di ROM yang memblokir buka activity dari latar belakang (izin "pop-up saat di latar" bawaan MATI di MIUI/HyperOS dll.).
+     Kini `RelaunchActivity` (transparan, `android:process=":relaunch"`) dibuka SAAT aplikasi masih di depan (diizinkan sistem), alias baru dinyalakan
+     ±250 ms sesudahnya, lalu dari activity itu aplikasi dibuka lewat ikon baru (±1,1 dtk, ulang sampai 6x bila alias belum aktif). Proses tersendiri tetap
+     hidup walau proses utama ditutup ROM. Alarm `setAlarmClock` tetap jadi cadangan.
+   - File baru: `native/android/java/RelaunchActivity.java`; `scripts/setup-android.mjs` memasang entri manifest-nya.
+7. Sorotan per kata di lirik pemutar penuh (otomatis, cadangan per kalimat)
+   - `LyricsPanel.tsx`: konstanta `LINE_ONLY = true` yang mematikan sorotan kata dihapus. Baris aktif disapu per kata (`KaraokeWords`, per huruf, tepi lembut,
+     sama dengan mini player) HANYA bila sumber memberi waktu kata asli (eLRC / TTML / LyricsPlus / BetterLyrics) dan waktu lirik cocok dengan audio (mode `exact`).
+     Selain itu (lirik per baris, durasi beda / `scaled` / `estimated`) baris aktif tetap disorot utuh per kalimat.
+   - Waktu kata TIDAK lagi ditebak dari panjang huruf di pemutar penuh (dulu dipakai saat LINE_ONLY=false). Romanisasi per kata ikut terisi bila servernya memberi waktu kata.
+   - Entri Yang baru 0.5.51.7 bertambah satu langkah (`wn-lyrics-word`).
+8. Notifikasi musik hilang saat tabrakan dengan suara lain + sampul tidak muncul saat diputar lagi
+   - Notifikasi hilang: saat app lain mengambil audio, sebagian ROM menyingkirkan notifikasi media yang sedang jeda dan mengirim `ACTION_SWIPED`.
+     Dulu native hanya memasangnya kembali bila `current.interrupted` / resumer sedang menunggu; selain itu `shutdown()` (notifikasi + pemutar mati).
+     Kini ada `focusLossAt`: geseran dalam 3 menit sesudah kehilangan fokus dianggap ulah ROM, notifikasi dipasang lagi (dan sekali lagi ±0,8 dtk kemudian).
+   - Sampul hilang: JS mengirim sampul base64 SEKALI per lagu (`sentCover`). Setelah service mati lalu diputar lagi dari aplikasi, service baru tanpa sampul
+     sementara JS menganggap sudah terkirim. Kini `updateNowPlaying` mengembalikan `{ fresh }` (service baru dibuat); JS lalu mengirim ulang sampulnya.
+   - Pengambilan data sampul: JS juga mengirim `coverUrl` (http/https); bila native belum punya sampul (service dibuat ulang atau JS gagal menyusun sampul,
+     mis. canvas ber-CORS), native mengunduhnya sendiri (maks. sekali per 20 dtk bila gagal). Unduhan diabaikan bila lagu sudah berganti.
+
+Catatan
+- Butuh APK baru untuk bagian 1 dan 3 (Java berubah): `npm run android:sync` lalu build. Bagian 2 hanya TSX/CSS dan bisa lewat OTA; OTA ke APK lama
+  tetap aman, tetapi `--sat` dkk. baru terisi dari native di APK baru (APK lama memakai `env()`).
+- Beberapa ROM (MIUI, ColorOS, dsb.) memblokir buka activity dari latar; bila ikon berganti tapi aplikasi tidak terbuka, aktifkan izin "Tampilkan di atas aplikasi lain" / mulai otomatis.
+- Belum diuji di perangkat dan belum dijalankan `npm run typecheck`.
 
 ---
 

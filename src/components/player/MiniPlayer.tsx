@@ -117,35 +117,42 @@ function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
   // Meroda: putaran penuh berbanding jarak, berakhir di kelipatan 360 supaya sampul tegak seperti sampul di kartu.
   const turns = Math.max(1, Math.round(Math.hypot(dx, dy) / (Math.PI * d.width)))
   const rot = (dx < 0 ? -1 : 1) * 360 * turns
+  // Tiga lapis bersarang (geser -> putar -> kecilkan/ubah bentuk) supaya tiap gerakan punya waktu dan easing sendiri tanpa
+  // keyframe tengah. Dulu satu animasi dengan keyframe per segmen ber-easing: kecepatan kembali 0 di tiap batas segmen, itu
+  // yang terlihat sebagai disc "berhenti" sepersekian detik di tengah jalan.
   const wrap = document.createElement('div')
   wrap.setAttribute('aria-hidden', 'true')
-  wrap.style.cssText = `position:fixed;left:${d.left}px;top:${d.top}px;width:${d.width}px;height:${d.height}px;overflow:hidden;border-radius:50%;pointer-events:none;z-index:60;will-change:transform,border-radius;`
-  wrap.appendChild(fly.node)
+  wrap.style.cssText = `position:fixed;left:${d.left}px;top:${d.top}px;width:${d.width}px;height:${d.height}px;pointer-events:none;z-index:60;will-change:transform;`
+  const rotator = document.createElement('div')
+  rotator.style.cssText = 'position:absolute;inset:0;will-change:transform;'
+  const clip = document.createElement('div')
+  clip.style.cssText = `position:absolute;inset:0;overflow:hidden;border-radius:50%;will-change:transform;`
+  clip.appendChild(fly.node)
+  rotator.appendChild(clip)
+  wrap.appendChild(rotator)
   document.body.appendChild(wrap)
   cover.style.opacity = '0'
-  const ease = 'cubic-bezier(0.4, 0, 0.2, 1)'
-  const midScale = 1 + (sc - 1) * 0.3
-  const midRadius = 50 - (50 - rf) * 0.5
-  const T = (f: number, scale: number) => `translate3d(${dx * f}px, ${dy * f}px, 0) rotate(${rot * f}deg) scale(${scale})`
+  // Satu kurva mulus untuk geser dan putar (meroda = putaran sebanding jarak): kecepatan tidak pernah kembali ke 0 di tengah.
+  const glide = 'cubic-bezier(0.3, 0.1, 0.2, 1)'
   const animations: Animation[] = [
-    wrap.animate(
-      [
-        { offset: 0, transform: T(0, 1), borderRadius: '50%', easing: ease },
-        { offset: 0.3, transform: T(0.35, 1), borderRadius: '50%', easing: ease },
-        { offset: 0.75, transform: T(1, midScale), borderRadius: `${midRadius}%`, easing: ease },
-        { offset: 1, transform: T(1, sc), borderRadius: `${rf}%` },
-      ],
-      { duration: FLY_MS, fill: 'forwards', easing: 'linear' },
-    ),
+    wrap.animate([{ transform: 'translate3d(0,0,0)' }, { transform: `translate3d(${dx}px, ${dy}px, 0)` }], { duration: FLY_MS, fill: 'forwards', easing: glide }),
+    rotator.animate([{ transform: 'rotate(0deg)' }, { transform: `rotate(${rot}deg)` }], { duration: FLY_MS, fill: 'forwards', easing: glide }),
+    // Mengecil + berubah bentuk mulai sedikit setelah bergerak, selesai bersamaan dengan geseran.
+    clip.animate([{ transform: 'scale(1)', borderRadius: '50%' }, { transform: `scale(${sc})`, borderRadius: `${rf}%` }], {
+      duration: FLY_MS * 0.8,
+      delay: FLY_MS * 0.2,
+      fill: 'both',
+      easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    }),
   ]
   // Piringan di dalam memperbesar isinya supaya sampul memenuhi bentuk akhir; cincin dan lubang tengah memudar lebih dulu.
   const inner = fly.node
   const fill = d.width / (d.width - 12)
-  animations.push(inner.animate([{ transform: 'scale(1)' }, { offset: 0.3, transform: 'scale(1)' }, { transform: `scale(${fill})` }], { duration: FLY_MS, fill: 'forwards', easing: ease }))
+  animations.push(inner.animate([{ transform: 'scale(1)' }, { transform: `scale(${fill})` }], { duration: FLY_MS * 0.8, delay: FLY_MS * 0.2, fill: 'both', easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }))
   const spin = inner.firstElementChild as HTMLElement | null
   if (spin) {
     const back = fly.angle > 180 ? 360 : 0
-    animations.push(spin.animate([{ transform: `rotate(${fly.angle}deg)` }, { transform: `rotate(${back}deg)` }], { duration: FLY_MS * 0.8, fill: 'forwards', easing: ease }))
+    animations.push(spin.animate([{ transform: `rotate(${fly.angle}deg)` }, { transform: `rotate(${back}deg)` }], { duration: FLY_MS * 0.8, fill: 'forwards', easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }))
   }
   inner.querySelectorAll<HTMLElement>('svg, span[class*="border-veil"]').forEach((el) => {
     animations.push(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FLY_MS * 0.35, fill: 'forwards', easing: 'ease-out' }))

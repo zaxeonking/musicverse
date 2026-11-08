@@ -788,19 +788,45 @@ public class MusicVerseNativePlugin extends Plugin {
     // alias diganti supaya tetap hidup setelah proses mati: aplikasi dibuka lagi otomatis lewat ikon baru. Bila aplikasi
     // tidak ditutup, intent ini hanya membawa aplikasi ke depan (MainActivity singleTask). Hanya bila aplikasi sedang dilihat.
     boolean relaunch = MainActivity.foreground && scheduleRelaunch(ctx, id);
-    try {
-      // Nyalakan yang baru lebih dulu, baru matikan sisanya: selalu ada tepat satu pintu peluncur yang aktif.
-      pm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + id),
-          android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
-      for (String other : ICON_IDS) {
-        if (other.equals(id)) continue;
-        pm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + other),
-            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+    // Pembuka-ulang utama: activity transparan di proses tersendiri, dibuka SEKARANG (aplikasi masih di depan, jadi diizinkan).
+    // Alarm di atas hanya cadangan. Alias baru dinyalakan sesaat sesudahnya supaya activity ini sudah tampil lebih dulu.
+    boolean helper = MainActivity.foreground && startRelaunchHelper(ctx, id);
+    final boolean cancelOnFail = relaunch;
+    final android.content.pm.PackageManager fpm = pm;
+    final String fid = id;
+    final android.content.SharedPreferences fprefs = prefs;
+    Runnable apply = () -> {
+      try {
+        // Nyalakan yang baru lebih dulu, baru matikan sisanya: selalu ada tepat satu pintu peluncur yang aktif.
+        fpm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + fid),
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+        for (String other : ICON_IDS) {
+          if (other.equals(fid)) continue;
+          fpm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + other),
+              android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+        }
+        fprefs.edit().putString(ICON_PREF, fid).apply();
+      } catch (RuntimeException e) {
+        // Alias belum ada (manifest lama) atau peluncur menolak: ikon tetap seperti semula.
+        if (cancelOnFail) cancelRelaunch(ctx, fid);
       }
-      prefs.edit().putString(ICON_PREF, id).apply();
+    };
+    if (helper) new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(apply, 250L);
+    else apply.run();
+  }
+
+  /** Buka RelaunchActivity (proses :relaunch). False bila gagal (manifest lama tanpa activity ini): alarm tetap jadi cadangan. */
+  private boolean startRelaunchHelper(Context ctx, String id) {
+    try {
+      android.content.Intent intent = new android.content.Intent()
+          .setComponent(new android.content.ComponentName(ctx, "__APP_ID__.RelaunchActivity"))
+          .putExtra("icon_id", id)
+          .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION
+              | android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+      ctx.startActivity(intent);
+      return true;
     } catch (RuntimeException e) {
-      // Alias belum ada (manifest lama) atau peluncur menolak: ikon tetap seperti semula.
-      if (relaunch) cancelRelaunch(ctx, id);
+      return false;
     }
   }
 
@@ -962,6 +988,8 @@ public class MusicVerseNativePlugin extends Plugin {
     state.hasPrevious = Boolean.TRUE.equals(call.getBoolean("hasPrevious", false));
     state.interrupted = Boolean.TRUE.equals(call.getBoolean("interrupted", false));
     state.resetCover = Boolean.TRUE.equals(call.getBoolean("resetCover", false));
+    String coverUrl = call.getString("coverUrl");
+    if (coverUrl != null && (coverUrl.startsWith("https://") || coverUrl.startsWith("http://"))) state.coverUrl = coverUrl;
     String cover = call.getString("coverBase64");
     if (cover != null && !cover.isEmpty()) {
       try {
@@ -973,8 +1001,13 @@ public class MusicVerseNativePlugin extends Plugin {
       }
     }
     try {
+      // Service belum jalan / baru dibuat ulang (notifikasi sempat hilang): service baru TIDAK punya sampul. JS diberi tahu lewat
+      // `fresh` supaya mengirim ulang sampulnya, walau lagunya sama dan sampulnya "sudah pernah dikirim".
+      boolean fresh = !PlaybackService.isRunning();
       PlaybackService.update(getContext(), state);
-      call.resolve();
+      JSObject result = new JSObject();
+      result.put("fresh", fresh);
+      call.resolve(result);
     } catch (RuntimeException e) {
       // Mis. ForegroundServiceStartNotAllowedException saat app di latar belakang dan service belum jalan.
       call.reject("Service pemutaran tidak bisa dimulai: " + e.getMessage());

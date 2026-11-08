@@ -429,6 +429,13 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         title: 'Baru: layar penuh sampai kamera',
         body: 'Tampilan kini memenuhi layar sampai ke area kamera dan bilah gestur. Cahaya di belakang pemutar mini juga lebih lembut, dan ikon ikut tema membuka aplikasi lagi lebih andal.',
       },
+      {
+        id: 'wn-lyrics-word',
+        route: '/',
+        title: 'Baru: sorotan per kata di lirik pemutar penuh',
+        body: 'Bila lirik punya waktu per kata, lirik di pemutar penuh terisi halus kata demi kata. Kalau tidak pas atau tidak tersedia, baris yang dinyanyikan disorot utuh per kalimat.',
+        missing: 'Putar lagu, buka pemutar penuh, lalu ketuk ikon mik. Lirik dengan waktu per kata disorot kata demi kata; sisanya per kalimat.',
+      },
     ],
   },
 ]

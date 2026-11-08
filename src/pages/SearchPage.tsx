@@ -54,7 +54,13 @@ export default function SearchPage() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">Cari</h1>
 
-      <div className="sticky top-0 z-10 -mx-4 bg-bg px-4 py-2 lg:-mx-8 lg:px-8">
+      {/* Tanpa latar pekat: cahaya latar (mv-glow di AppShell) tetap menyambung di belakang kolom cari. Lapisan blur + pudar di
+          bawahnya hanya menjaga daftar yang tergulir tidak menabrak kolom cari. */}
+      <div className="sticky top-0 z-10 -mx-4 px-4 py-2 lg:-mx-8 lg:px-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-2 -z-10 bottom-[-14px] bg-bg/30 backdrop-blur-xl [-webkit-mask-image:linear-gradient(to_bottom,black_65%,transparent)] [mask-image:linear-gradient(to_bottom,black_65%,transparent)]"
+        />
         <label htmlFor="search-input" className="sr-only">
           Cari lagu berdasarkan judul atau artis
         </label>
@@ -71,7 +77,7 @@ export default function SearchPage() {
             placeholder="Judul lagu atau artis"
             enterKeyHint="search"
             autoComplete="off"
-            className="h-12 w-full rounded-full bg-raised pl-12 pr-12 text-base text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full rounded-full border border-veil/10 bg-raised/60 bg-[linear-gradient(to_bottom,rgb(var(--mv-accent,29_185_84)/0.14),transparent_85%)] shadow-[inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-md pl-12 pr-12 text-base text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
             <button

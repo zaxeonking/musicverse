@@ -162,6 +162,8 @@ export default function NativeMediaSync() {
 
   const sentTrack = useRef<string | null>(null)
   const sentCover = useRef<string | null>(null)
+  // Naik bila native melapor service-nya baru dibuat ulang (tanpa sampul): memicu pengiriman ulang sampul.
+  const [coverNonce, setCoverNonce] = useState(0)
   const reported = useRef<{ position: number; at: number; playing: boolean; loading: boolean; duration: number } | null>(null)
   const lastMeta = useRef('')
   /** Keadaan terakhir yang dikirim ke native (tanpa sampul); dasar untuk detak posisi. */
@@ -205,6 +207,7 @@ export default function NativeMediaSync() {
     const newTrack = sentTrack.current !== trackId
     const coverReady = cover !== null && cover.trackId === trackId ? cover.base64 : (coverCache.current.get(trackId) ?? null)
     const coverToSend = coverReady !== null && sentCover.current !== trackId ? coverReady : null
+    const remoteCover = coverUrl && /^https?:\/\//i.test(coverUrl) ? coverUrl : undefined
 
     const now = performance.now()
     const last = reported.current
@@ -241,12 +244,22 @@ export default function NativeMediaSync() {
       interrupted,
       resetCover: newTrack,
       coverBase64: coverToSend ?? undefined,
+      // Cadangan: native mengunduh sendiri bila belum punya sampul (mis. service dibuat ulang setelah notifikasi hilang).
+      coverUrl: remoteCover,
     }
     lastPayload.current = { ...payload, resetCover: false, coverBase64: undefined }
-    void MusicVerseNative.updateNowPlaying(payload).catch((error: unknown) => {
-      console.warn('[MusicVerse] Notifikasi native gagal diperbarui:', error)
-    })
-  }, [trackId, title, artists, album, playing, loading, hasNext, hasPrevious, currentTime, duration, cover, currentTrack, sessionReady])
+    void MusicVerseNative.updateNowPlaying(payload)
+      .then((result) => {
+        // Service baru dibuat ulang: ia belum punya sampul. Kirim ulang walau lagunya sama.
+        if (result && result.fresh && coverToSend === null && sentCover.current === trackId) {
+          sentCover.current = null
+          setCoverNonce((n) => n + 1)
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn('[MusicVerse] Notifikasi native gagal diperbarui:', error)
+      })
+  }, [trackId, title, artists, album, playing, loading, hasNext, hasPrevious, currentTime, duration, cover, currentTrack, sessionReady, coverNonce, coverUrl])
 
   // Detak posisi: tidak bergantung pada render React / event `timeupdate` (yang bisa jarang atau berhenti saat layar mati
   // atau saat memutar berkas lokal). Posisi dan durasi dibaca langsung dari elemen audio, sehingga bilah progres

@@ -27,6 +27,8 @@ export interface NowPlayingUpdate {
   resetCover?: boolean
   /** PNG/JPEG base64 (tanpa awalan data:). Dikirim sekali per lagu. */
   coverBase64?: string
+  /** URL sampul http/https: cadangan, native mengunduh sendiri bila belum punya sampul (service dibuat ulang / sampul base64 gagal). */
+  coverUrl?: string
 }
 
 /** Event mesin audio ExoPlayer (nama `type` sama dengan event HTMLAudioElement). */
@@ -444,7 +446,8 @@ export interface MusicVerseNativePlugin {
   engineSetSleep(options: { endsAtMs: number }): Promise<void>
   addListener(eventName: 'engineEvent', listener: (event: NativeEngineEvent) => void): Promise<PluginListenerHandle>
   /** Memulai/memperbarui foreground service + notifikasi media. */
-  updateNowPlaying(options: NowPlayingUpdate): Promise<void>
+  /** `fresh` true = service pemutaran baru dibuat (belum punya sampul): kirim ulang sampul. APK lama tidak mengirim field ini. */
+  updateNowPlaying(options: NowPlayingUpdate): Promise<{ fresh?: boolean } | void>
   /** Menghentikan foreground service dan menghapus notifikasi. */
   stopPlayback(): Promise<void>
   /** Memberi tahu widget layar utama apakah lagu aktif sudah disukai (hati terisi / kosong). */

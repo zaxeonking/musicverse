@@ -268,6 +268,20 @@ if (!manifest.includes('.MusicVerseWidgetConfigActivity')) {
   manifest = manifest.replace(/(\s*)<\/application>/, `\n${activity}$1</application>`)
 }
 
+// Pembuka-ulang aplikasi sesudah ikon diganti: activity transparan di proses tersendiri (RelaunchActivity.java), lihat komentar di sana.
+if (!manifest.includes('.RelaunchActivity')) {
+  const activity =
+    '        <activity\n' +
+    '            android:name=".RelaunchActivity"\n' +
+    '            android:exported="false"\n' +
+    '            android:process=":relaunch"\n' +
+    '            android:excludeFromRecents="true"\n' +
+    '            android:taskAffinity=""\n' +
+    '            android:launchMode="singleTask"\n' +
+    '            android:theme="@android:style/Theme.Translucent.NoTitleBar" />\n'
+  manifest = manifest.replace(/(\s*)<\/application>/, `\n${activity}$1</application>`)
+}
+
 // Android Auto: pintu telusur media (exported wajib true agar Android Auto / Asisten Google bisa menyambung).
 if (!manifest.includes('.AutoBrowserService')) {
   const service =

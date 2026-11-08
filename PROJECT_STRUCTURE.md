@@ -1,7 +1,7 @@
 MusicVerse — Project Structure
 
 Project: MusicVerse
-Version: v0.5.51.7
+Version: v0.5.51.8
 Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
 Platform: Web / Android
 
@@ -469,6 +469,7 @@ Folder "native/android/" menyimpan implementasi fitur native Android yang berhub
 
 File| Fungsi
 MusicVerseNativePlugin.java| Plugin penghubung antara JavaScript dan Android native.
+RelaunchActivity.java| Activity transparan (proses :relaunch) yang membuka aplikasi lagi sesudah ikon diganti.
 MainActivity.java| Activity utama aplikasi Android.
 NetWatch.java| Memantau kondisi dan perubahan jaringan.
 PlaybackService.java| Layanan pemutaran musik di background.
@@ -655,8 +656,8 @@ DEVELOPMENT_RULES.md| Aturan pengembangan lanjutan: fitur baru, tutorial dan "Ya
 File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
-CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.5), terbaru di atas.
-CHANGES-0.5.51.7.md| Riwayat perubahan versi 0.5.51.7 (terbaru).
+CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
+CHANGES-0.5.51.8.md| Riwayat perubahan versi 0.5.51.8 (terbaru).
 
 ---
 
@@ -822,7 +823,7 @@ Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami peruba
   
 End of Project Structure Documentation
 Project: MusicVerse
-Reference Version: v0.5.51.7
+Reference Version: v0.5.51.8
 Document: PROJECT_STRUCTURE.md
 ## Lirik per kata (0.5.54 – 0.5.56)
 - `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`

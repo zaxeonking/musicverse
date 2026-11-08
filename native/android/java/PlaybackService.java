@@ -112,6 +112,8 @@ public class PlaybackService extends Service {
     boolean interrupted = false;
     boolean resetCover = false;
     Bitmap cover = null;
+    /** URL sampul (http/https) dari JS: cadangan bila sampul base64 tidak ada / gagal disusun; native mengunduhnya sendiri. */
+    String coverUrl = "";
   }
 
   private static PlaybackService instance;
@@ -754,10 +756,12 @@ public class PlaybackService extends Service {
 
     @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
       if (playWhenReady) {
+        focusLossAt = 0; // sudah berbunyi lagi
         if (resumer != null) resumer.end(); // sudah berbunyi lagi (oleh ExoPlayer, kami, atau pengguna)
         emitEngine("play", 0, null);
       } else {
         boolean focusLoss = reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS;
+        if (focusLoss) focusLossAt = SystemClock.elapsedRealtime();
         String why = focusLoss ? "focus"
             : reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY ? "noisy" : "user";
         // Hanya kehilangan fokus audio yang ditunggu lalu dilanjutkan. Jeda pengguna / notifikasi / headset dicabut /
@@ -1497,6 +1501,12 @@ public class PlaybackService extends Service {
   private static final long WATCHDOG_INTERVAL_MS = 15L * 1000L;
   /** Lama maksimum wake lock saat menunggu putar-ulang otomatis setelah gangguan. */
   private static final long INTERRUPT_WAKE_MS = 20L * 60L * 1000L;
+  /** Saat (elapsedRealtime) pemutar berhenti karena app lain mengambil fokus audio; 0 = tidak sedang terganggu. */
+  private long focusLossAt = 0;
+  /** Notifikasi yang disingkirkan sistem dalam jendela ini sesudah kehilangan fokus dianggap ulah ROM, bukan geseran pengguna. */
+  private static final long FOCUS_SWIPE_GRACE_MS = 3L * 60L * 1000L;
+  private long coverFetchAt = 0;
+  private String coverFetchUrl = "";
   private final Runnable watchdog = new Runnable() {
     @Override public void run() {
       if (stopped) return;
@@ -1604,10 +1614,15 @@ public class PlaybackService extends Service {
         case ACTION_PREVIOUS: handleAction("previous"); break;
         case ACTION_DISMISS: shutdown(); return START_NOT_STICKY;
         case ACTION_SWIPED:
-          if (!stopped && hasMedia && (current.interrupted || (resumer != null && resumer.isWaiting()))) {
-            // Gangguan sesaat: sebagian ROM (ColorOS/MIUI, Android 14+) menyingkirkan notifikasi media yang sedang jeda.
-            // Pasang lagi alih-alih mematikan pemutar, supaya lagu bisa lanjut sendiri setelah gangguan selesai.
+          boolean recentFocusLoss = focusLossAt != 0 && SystemClock.elapsedRealtime() - focusLossAt < FOCUS_SWIPE_GRACE_MS;
+          if (!stopped && hasMedia && (current.interrupted || recentFocusLoss || (resumer != null && resumer.isWaiting()))) {
+            // Gangguan sesaat (app lain mengambil audio): sebagian ROM (ColorOS/MIUI, Android 14+) menyingkirkan notifikasi media
+            // yang sedang jeda tepat saat tabrakan suara. Pasang lagi alih-alih mematikan pemutar, supaya lagu bisa lanjut sendiri
+            // setelah gangguan selesai. Dipasang sekali lagi sesaat kemudian: ROM kadang menyingkirkannya dua kali.
             startInForeground(buildNotification());
+            handler.postDelayed(() -> {
+              if (!stopped && hasMedia) startInForeground(buildNotification());
+            }, 800L);
             break;
           }
           shutdown();
@@ -2022,6 +2037,7 @@ public class PlaybackService extends Service {
         if (bmp == null) return;
         handler.post(() -> {
           if (stopped || token != coverToken) return; // sudah pindah lagu lagi
+          if (!item.title.equals(current.title)) return; // lagu aktif sudah berganti (mis. sampul dari JS tiba lebih dulu)
           State s = snapshot();
           s.cover = bmp;
           applyInternal(s, false);
@@ -2239,6 +2255,16 @@ public class PlaybackService extends Service {
     String memoKey = current.title + "\u0001" + current.artist;
     if (next.resetCover && next.cover == null && !current.title.isEmpty()) current.cover = coverMemo.get(memoKey);
     if (current.cover != null && !current.title.isEmpty()) coverMemo.put(memoKey, current.cover);
+    // Sampul belum ada (service baru dibuat ulang, atau JS gagal menyusunnya): unduh sendiri dari URL sampul. Dicoba lagi paling cepat
+    // tiap 20 dtk bila gagal; URL baru langsung diunduh.
+    if (fromJs && current.cover == null && next.coverUrl != null && !next.coverUrl.isEmpty() && !current.title.isEmpty()) {
+      long nowMs = SystemClock.elapsedRealtime();
+      if (!next.coverUrl.equals(coverFetchUrl) || nowMs - coverFetchAt > 20_000L) {
+        coverFetchUrl = next.coverUrl;
+        coverFetchAt = nowMs;
+        fetchCover(new UpcomingItem(0, "", null, current.title, current.artist, current.album, next.coverUrl, 0));
+      }
+    }
 
     updateSession();
     notifyWidget();
