@@ -26,7 +26,7 @@ function useLoop(ref: RefObject<HTMLElement | null>, frames: () => Frame[], deps
 }
 
 /** Titik jari beraksen, sama dengan peragaan jari di atas sorotan. */
-function Finger({ innerRef, className = '' }: { innerRef: RefObject<HTMLSpanElement | null>; className?: string }) {
+function Finger({ innerRef, className = '' }: { innerRef: RefObject<HTMLSpanElement>; className?: string }) {
   return (
     <span
       ref={innerRef}
@@ -52,7 +52,7 @@ function CardFace() {
   )
 }
 
-function Disc({ innerRef, className = '' }: { innerRef?: RefObject<HTMLDivElement | null>; className?: string }) {
+function Disc({ innerRef, className = '' }: { innerRef?: RefObject<HTMLDivElement>; className?: string }) {
   return (
     <div
       ref={innerRef}

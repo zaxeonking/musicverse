@@ -46,3 +46,6 @@ Tidak menyentuh: Mini Player -> Disc, BottomNav, playback/queue, warna, ukuran, 
 - Sudah patuh: semua pemakai WAAPI (`useExitGhost`, `useSheetDrag`, `usePulse`, `useListFlip`, FLIP `TrackList`, `UpcomingList`, `MiniPlayer`, `MarqueeText`, tur), mesin pegas `playerSheet` (langsung selesai), gulir halus lirik, `PageTransition`, dan animasi CSS lewat aturan global.
 - Celah yang diperbaiki: aturan global hanya memendekkan durasi, tapi jeda stagger (`animation-delay` 0–780 ms di `.mv-list`) tetap berjalan; karena fill-mode `backwards`, item daftar tetap tersembunyi selama jeda. Kini `animation-delay` dan `transition-delay` juga dinolkan.
 - Dengan Reduce Motion: sampul langsung di posisi akhir (tanpa terbang), sheet muncul/tutup langsung, equalizer diam, FLIP/pulse/hapus-baris tanpa animasi, toast tanpa membal.
+
+## Perbaikan build
+- `tour/DemoStage.tsx`: tipe prop `innerRef` di `Finger` dan `Disc` diubah dari `RefObject<T | null>` ke `RefObject<T>` (sesuai `@types/react` 18). Sebelumnya `tsc -b` di Vercel gagal (TS2322) di dua baris itu; tidak ada galat tipe lain yang dilaporkan.
