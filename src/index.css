@@ -73,10 +73,29 @@
 @layer components {
   /* Cahaya aksen di atas latar (Pengaturan > Tema > Cahaya latar). Latar polos tetap dari bg-bg; ini hanya lapisan gambar di atasnya. */
   .mv-glow {
-    background-image: radial-gradient(120% 50% at 50% 0%, rgb(var(--mv-accent, 29 185 84) / 0.24), transparent 72%);
+    background-image: radial-gradient(120% 50% at 50% 0%, rgb(var(--mv-accent, 29 185 84) / var(--mv-glow-a, 0.24)), transparent 72%);
   }
   html[data-theme='light'] .mv-glow {
-    background-image: radial-gradient(120% 50% at 50% 0%, rgb(var(--mv-accent, 29 185 84) / 0.16), transparent 72%);
+    background-image: radial-gradient(120% 50% at 50% 0%, rgb(var(--mv-accent, 29 185 84) / var(--mv-glow-a, 0.16)), transparent 72%);
+  }
+
+  /* Gaya permukaan (Pengaturan > Tema > Gaya). :where() menjaga spesifisitas rendah supaya hover/aktif bawaan tetap menang;
+     pemutar penuh (.mv-dark-scope) tidak ikut berubah. */
+  html[data-surface='kaca'] :where(.bg-card):not(:where(.mv-dark-scope *)) {
+    background-color: rgb(var(--mv-card) / 0.5);
+    box-shadow: inset 0 1px 0 rgb(var(--mv-veil) / 0.1), inset 0 0 0 1px rgb(var(--mv-veil) / 0.06);
+  }
+  html[data-surface='kaca'] :where(.bg-raised):not(:where(.mv-dark-scope *)) {
+    background-color: rgb(var(--mv-raised) / 0.58);
+    box-shadow: inset 0 1px 0 rgb(var(--mv-veil) / 0.12), inset 0 0 0 1px rgb(var(--mv-veil) / 0.07);
+  }
+  html[data-surface='garis'] :where(.bg-card):not(:where(.mv-dark-scope *)) {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 1px rgb(var(--mv-veil) / 0.14);
+  }
+  html[data-surface='garis'] :where(.bg-raised):not(:where(.mv-dark-scope *)) {
+    background-color: rgb(var(--mv-veil) / 0.05);
+    box-shadow: inset 0 0 0 1px rgb(var(--mv-veil) / 0.18);
   }
 
   /* Area yang selalu gelap apa pun temanya (pemutar penuh: latarnya sampul yang digelapkan). Variabel tema diganti ke nilai gelap. */

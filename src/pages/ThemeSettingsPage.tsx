@@ -21,7 +21,10 @@ import {
   resolveMode,
   saveCurrentTheme,
   THEME_PRESETS,
+  type GlowLevel,
   type RadiusStyle,
+  type SurfaceStyle,
+  type TextScale,
   type ThemeMode,
   type ThemeState,
   type ThemeTokens,
@@ -37,6 +40,24 @@ const RADII: ReadonlyArray<{ id: RadiusStyle; label: string }> = [
   { id: 'tajam', label: 'Tajam' },
   { id: 'normal', label: 'Normal' },
   { id: 'bulat', label: 'Bulat' },
+]
+
+const SURFACES: ReadonlyArray<{ id: SurfaceStyle; label: string; hint: string }> = [
+  { id: 'solid', label: 'Solid', hint: 'Kartu berisi penuh, bawaan.' },
+  { id: 'kaca', label: 'Kaca', hint: 'Kartu tembus pandang dengan tepi bercahaya. Paling cantik bersama Cahaya latar.' },
+  { id: 'garis', label: 'Garis', hint: 'Kartu hanya berupa kerangka tipis; tampilan paling ringan dan bersih.' },
+]
+
+const TEXT_SCALES: ReadonlyArray<{ id: TextScale; label: string }> = [
+  { id: 'kecil', label: 'Kecil' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'besar', label: 'Besar' },
+]
+
+const GLOW_LEVELS: ReadonlyArray<{ id: GlowLevel; label: string }> = [
+  { id: 'lembut', label: 'Lembut' },
+  { id: 'sedang', label: 'Sedang' },
+  { id: 'kuat', label: 'Kuat' },
 ]
 
 /** Warna aksen cepat untuk tema Kustom (tinggal ketuk; slider di bawahnya untuk yang lain). */
@@ -166,12 +187,25 @@ export default function ThemeSettingsPage() {
         </p>
       )}
 
-      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Tampilan</h2>
+      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Gaya</h2>
       <div className="space-y-2">
+        <div className="rounded-lg bg-card px-4 py-3">
+          <p className="mb-2 text-sm text-ink">Gaya permukaan</p>
+          <Segmented value={theme.surface} options={SURFACES.map(({ id, label }) => ({ id, label }))} onChange={(id) => setTheme({ surface: id })} label="Gaya permukaan" />
+          <p className="mt-1.5 text-xs text-ink-faint">{SURFACES.find((x) => x.id === theme.surface)?.hint}</p>
+        </div>
         <div className="rounded-lg bg-card px-4 py-3">
           <p className="mb-2 text-sm text-ink">Bentuk sudut</p>
           <Segmented value={theme.radius} options={RADII} onChange={(id) => setTheme({ radius: id })} label="Bentuk sudut" />
         </div>
+        <div className="rounded-lg bg-card px-4 py-3">
+          <p className="mb-2 text-sm text-ink">Ukuran teks</p>
+          <Segmented value={theme.textScale} options={TEXT_SCALES} onChange={(id) => setTheme({ textScale: id })} label="Ukuran teks" />
+        </div>
+      </div>
+
+      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Warna dinamis</h2>
+      <div className="space-y-2">
         <SettingSwitch
           checked={theme.dynamicAccent}
           onChange={() => setTheme({ dynamicAccent: !theme.dynamicAccent })}
@@ -186,6 +220,12 @@ export default function ThemeSettingsPage() {
           label="Cahaya latar"
           hint="Semburat lembut warna aksen di bagian atas layar."
         />
+        {theme.glow && (
+          <div className="rounded-lg bg-card px-4 py-3">
+            <p className="mb-2 text-sm text-ink">Kekuatan cahaya</p>
+            <Segmented value={theme.glowLevel} options={GLOW_LEVELS} onChange={(id) => setTheme({ glowLevel: id })} label="Kekuatan cahaya latar" />
+          </div>
+        )}
       </div>
 
       <div className="mb-2 mt-6 flex items-center justify-between">
@@ -277,7 +317,7 @@ export default function ThemeSettingsPage() {
 
       <button
         type="button"
-        onClick={() => setTheme({ mode: 'dark', preset: 'hijau', radius: 'normal', dynamicAccent: false, glow: false })}
+        onClick={() => setTheme({ mode: 'dark', preset: 'hijau', radius: 'normal', dynamicAccent: false, glow: false, glowLevel: 'sedang', surface: 'solid', textScale: 'normal' })}
         className="btn-secondary mt-6 w-full"
       >
         <RotateCcw className="h-4 w-4" aria-hidden="true" />

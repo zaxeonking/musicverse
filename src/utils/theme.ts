@@ -14,6 +14,16 @@ export type ResolvedMode = 'dark' | 'light'
 
 export const RADIUS_FACTOR: Record<RadiusStyle, number> = { tajam: 0.3, normal: 1, bulat: 1.6 }
 
+/** Gaya permukaan kartu/kolom: solid (bawaan), kaca (tembus pandang + garis cahaya), garis (kerangka tipis tanpa isi). Diterapkan lewat CSS `html[data-surface]`. */
+export type SurfaceStyle = 'solid' | 'kaca' | 'garis'
+/** Ukuran teks seluruh aplikasi (skala rem di <html>). */
+export type TextScale = 'kecil' | 'normal' | 'besar'
+export const TEXT_SCALE_PERCENT: Record<TextScale, number> = { kecil: 93.75, normal: 100, besar: 112.5 }
+/** Kekuatan cahaya latar. */
+export type GlowLevel = 'lembut' | 'sedang' | 'kuat'
+/** Opasitas cahaya latar per tingkat: [mode gelap, mode terang]. */
+export const GLOW_ALPHA: Record<GlowLevel, readonly [number, number]> = { lembut: [0.14, 0.09], sedang: [0.24, 0.16], kuat: [0.38, 0.26] }
+
 export interface ThemePreset {
   id: string
   label: string
@@ -34,6 +44,13 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
   { id: 'laut', label: 'Laut', accent: '#22D3EE', accentLight: '#0891B2', bgDark: '#0B1618', bgLight: '#E6F0F3' },
   { id: 'merah', label: 'Merah', accent: '#EF4444', accentLight: '#D32F2F', bgDark: '#160F0F', bgLight: '#F6ECEC' },
   // Id lama 'amoled' dipertahankan supaya pilihan tersimpan dari versi sebelumnya tetap berlaku.
+  { id: 'hutan', label: 'Hutan', accent: '#9BC53D', accentLight: '#5C7F0F', bgDark: '#10150E', bgLight: '#EDF1E4' },
+  { id: 'sakura', label: 'Sakura', accent: '#F9A8D4', accentLight: '#C2417A', bgDark: '#1A1217', bgLight: '#F7EDF1' },
+  { id: 'kopi', label: 'Kopi', accent: '#D4A373', accentLight: '#8A5A2B', bgDark: '#16110D', bgLight: '#F1EAE2' },
+  { id: 'neon', label: 'Neon', accent: '#D946EF', accentLight: '#A21CAF', bgDark: '#120A18', bgLight: '#F3EAF6' },
+  { id: 'emas', label: 'Emas', accent: '#F5C542', accentLight: '#9A6B00', bgDark: '#14120A', bgLight: '#F4EFDF' },
+  { id: 'malam', label: 'Malam', accent: '#818CF8', accentLight: '#4F46E5', bgDark: '#0C0E1C', bgLight: '#EBECF7' },
+  { id: 'batu', label: 'Batu', accent: '#94A3B8', accentLight: '#475569', bgDark: '#0F1215', bgLight: '#E9ECEF' },
   { id: 'amoled', label: 'Mono', accent: '#FFFFFF', accentLight: '#111111', bgDark: '#000000', bgLight: '#EEEEEE' },
 ]
 
@@ -51,6 +68,10 @@ export interface ThemeState {
   dynamicAccent: boolean
   /** Cahaya lembut warna aksen di bagian atas latar aplikasi. */
   glow: boolean
+  /** Kekuatan cahaya latar (dipakai bila `glow` aktif). */
+  glowLevel: GlowLevel
+  surface: SurfaceStyle
+  textScale: TextScale
 }
 
 const DEFAULT_STATE: ThemeState = {
@@ -62,6 +83,9 @@ const DEFAULT_STATE: ThemeState = {
   radius: 'normal',
   dynamicAccent: false,
   glow: false,
+  glowLevel: 'sedang',
+  surface: 'solid',
+  textScale: 'normal',
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -81,6 +105,9 @@ function sanitize(raw: unknown): ThemeState | null {
     radius: v.radius === 'tajam' || v.radius === 'bulat' ? v.radius : 'normal',
     dynamicAccent: v.dynamicAccent === true,
     glow: v.glow === true,
+    glowLevel: v.glowLevel === 'lembut' || v.glowLevel === 'kuat' ? v.glowLevel : 'sedang',
+    surface: v.surface === 'kaca' || v.surface === 'garis' ? v.surface : 'solid',
+    textScale: v.textScale === 'kecil' || v.textScale === 'besar' ? v.textScale : 'normal',
   }
 }
 
@@ -317,6 +344,9 @@ export function applyTheme(s: ThemeState = getTheme(), animate = false): void {
   set('--mv-danger', t.danger)
   set('--mv-on-danger', t.onDanger)
   set('--mv-radius', String(RADIUS_FACTOR[s.radius]))
+  set('--mv-glow-a', String(GLOW_ALPHA[s.glowLevel][mode === 'light' ? 1 : 0]))
+  root.dataset.surface = s.surface
+  root.style.fontSize = s.textScale === 'normal' ? '' : `${TEXT_SCALE_PERCENT[s.textScale]}%`
   root.style.colorScheme = mode
   root.dataset.theme = mode
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t.bgHex)
@@ -352,7 +382,7 @@ export function initTheme(): void {
 const CODE_PREFIX = 'MVT1.'
 
 export function encodeTheme(s: ThemeState): string {
-  const json = JSON.stringify({ m: s.mode, p: s.preset, a: s.customAccent, d: s.customBgDark, l: s.customBgLight, r: s.radius, y: s.dynamicAccent, g: s.glow })
+  const json = JSON.stringify({ m: s.mode, p: s.preset, a: s.customAccent, d: s.customBgDark, l: s.customBgLight, r: s.radius, y: s.dynamicAccent, g: s.glow, v: s.glowLevel, s: s.surface, t: s.textScale })
   return CODE_PREFIX + btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
@@ -363,7 +393,7 @@ export function decodeTheme(code: string): ThemeState | null {
   try {
     const b64 = text.slice(CODE_PREFIX.length).replace(/-/g, '+').replace(/_/g, '/')
     const v = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4))) as Record<string, unknown>
-    return sanitize({ mode: v.m, preset: v.p, customAccent: v.a, customBgDark: v.d, customBgLight: v.l, radius: v.r, dynamicAccent: v.y, glow: v.g })
+    return sanitize({ mode: v.m, preset: v.p, customAccent: v.a, customBgDark: v.d, customBgLight: v.l, radius: v.r, dynamicAccent: v.y, glow: v.g, glowLevel: v.v, surface: v.s, textScale: v.t })
   } catch {
     return null
   }

@@ -85,6 +85,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   // Pengguna mengetuk gelembung saat keyboard terbuka: keyboard ditutup dulu, kartu membesar sesudahnya.
   const pendingExpand = useRef(false)
   const showBubble = collapsed || kbBubble
+  // Dibaca di stopLeave (callback/timer): apakah disc sedang tampil, artinya kartu hantu sebentar lagi dilepas.
+  const showBubbleRef = useRef(showBubble)
   showBubbleRef.current = showBubble
   const dockRef = useRef<HTMLDivElement>(null)
   // Pembungkus mini player: z-40 (di depan nav). Saat kartu turun ke nav, diturunkan di bawah nav (z-20) supaya kartu masuk ke BELAKANG nav.
@@ -121,7 +123,6 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const [rollDir, setRollDir] = useState<-1 | 0 | 1>(0)
   // Disc asli dipasang tepat di bawah disc pratinjau (tanpa animasi masuk), lalu pratinjau memudar: serah-terima tanpa kedip.
   const [handoff, setHandoff] = useState(false)
-  const showBubbleRef = useRef(false)
   const rollDiscRef = useRef<HTMLSpanElement>(null)
   const rollRaf = useRef(0)
   const closeTimer = useRef(0)
