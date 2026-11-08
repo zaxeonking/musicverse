@@ -8,6 +8,7 @@ import { initOffline } from './native/offline'
 import { initNativeStorage } from './native/nativeStorage'
 import { startLyricsBackfill } from './native/offlineLyrics'
 import { isNativeApp } from './native/platform'
+import { initAppearance } from './native/appearance'
 import { initTheme } from './utils/theme'
 
 /**
@@ -47,6 +48,7 @@ async function bootstrap() {
     installNativeBackButton()
     await initNativeStorage()
     initTheme()
+    initAppearance()
     void initOffline().then(initDownloads).then(startLyricsBackfill)
     const { default: App } = await import('./App')
     root.render(

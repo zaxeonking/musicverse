@@ -373,6 +373,11 @@ export interface MusicVerseNativePlugin {
   isOtherAudioActive(): Promise<{ busy: boolean }>
   /** Sidik jari kode native APK ini (pembaruan tampilan OTA). Kosong bila tidak ada. */
   nativeHash(): Promise<{ hash: string }>
+  /**
+   * Tampilan native yang ikut tema: `bg` (#RRGGBB) jadi latar jendela saat membuka aplikasi; `icon` = id tema siap pakai
+   * (mis. "biru") untuk ikon peluncur, atau "hijau" (bawaan). Id tak dikenal diabaikan. Butuh APK v0.5.51+.
+   */
+  setAppearance(options: { bg: string; icon: string }): Promise<void>
   /** Mulai mengunduh APK pembaruan (progres tampil di notifikasi sistem; event `updateProgress` ke JS). */
   downloadUpdate(options: { url: string; version: string }): Promise<void>
   /** Membuka installer untuk APK yang sudah diunduh. Menolak dengan code NEED_PERMISSION jika izin pasang belum ada. */

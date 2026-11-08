@@ -9,6 +9,7 @@
 //  2. Menyalin ikon notifikasi + sampul bawaan ke android/app/src/main/res/ (aset di dalam APK)
 //  3. Mengisi versionName/versionCode di build.gradle dari package.json (dipakai cek pembaruan)
 //  3b. Menanam sidik jari native ke res/values/mv_native.xml (pembaruan tampilan OTA hanya cocok dengan APK yang sidik jarinya sama)
+//  3c. Ikon peluncur per tema: pintu LAUNCHER dipindah dari MainActivity ke satu <activity-alias> per tema (native/android/icon-presets.json)
 //  4. Menambah izin + <service> + usesCleartextTraffic ke AndroidManifest.xml
 //     (termasuk receiver widget layar utama dan AutoBrowserService + penanda aplikasi media untuk Android Auto)
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -292,6 +293,39 @@ if (!manifest.includes('com.google.android.gms.car.application')) {
 // Audio dari API bisa http://. WebView sudah diizinkan lewat allowMixedContent; ini untuk unduhan native.
 if (!/android:usesCleartextTraffic=/.test(manifest)) {
   manifest = manifest.replace('<application', '<application\n        android:usesCleartextTraffic="true"')
+}
+// Ikon peluncur ikut tema: pintu LAUNCHER dipindah dari MainActivity ke satu <activity-alias> per tema siap pakai. Hanya "hijau"
+// (ikon asli) yang menyala; MusicVerseNativePlugin.setAppearance menyalakan alias lain saat pengguna memilih "Ikon ikut tema".
+// Id yang sama dipakai di daftar Java (ICON_IDS) dan res (scripts/gen-icon-variants.py), jadi dicek di sini.
+{
+  const presets = JSON.parse(readFileSync(join(nativeDir, 'icon-presets.json'), 'utf8'))
+  const plugin = readFileSync(join(nativeDir, 'java', 'MusicVerseNativePlugin.java'), 'utf8')
+  for (const { id } of presets) {
+    if (!plugin.includes(`"${id}"`)) throw new Error(`Id ikon "${id}" belum ada di ICON_IDS (MusicVerseNativePlugin.java)`)
+    if (!existsSync(join(nativeDir, 'res', 'mipmap-anydpi-v26', `ic_launcher_${id}.xml`))) throw new Error(`Ikon "${id}" belum dibuat: jalankan python3 scripts/gen-icon-variants.py`)
+  }
+  // Buang pintu LAUNCHER dari MainActivity (intent-filter yang memuat category.LAUNCHER, di dalam blok MainActivity saja).
+  manifest = manifest.replace(/<activity\b(?:(?!<\/activity>)[\s\S])*?android:name="\.MainActivity"[\s\S]*?<\/activity>/, (block) =>
+    block.replace(/\s*<intent-filter>(?:(?!<\/intent-filter>)[\s\S])*?android\.intent\.category\.LAUNCHER[\s\S]*?<\/intent-filter>/, ''),
+  )
+  for (const { id } of presets) {
+    if (manifest.includes(`android:name=".MvIcon_${id}"`)) continue
+    const alias =
+      '        <activity-alias\n' +
+      `            android:name=".MvIcon_${id}"\n` +
+      '            android:targetActivity=".MainActivity"\n' +
+      `            android:enabled="${id === 'hijau'}"\n` +
+      '            android:exported="true"\n' +
+      `            android:icon="@mipmap/ic_launcher_${id}"\n` +
+      `            android:roundIcon="@mipmap/ic_launcher_${id}"\n` +
+      '            android:label="@string/app_name">\n' +
+      '            <intent-filter>\n' +
+      '                <action android:name="android.intent.action.MAIN" />\n' +
+      '                <category android:name="android.intent.category.LAUNCHER" />\n' +
+      '            </intent-filter>\n' +
+      '        </activity-alias>\n'
+    manifest = manifest.replace(/(\s*)<\/application>/, `\n${alias}$1</application>`)
+  }
 }
 writeFileSync(manifestPath, manifest)
 

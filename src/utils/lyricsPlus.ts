@@ -5,7 +5,7 @@ import { finalizeLines } from './lrc'
  * Adapter JSON LyricsPlus (`/v2/lyrics/get`) -> LyricLine[].
  *
  * BENTUK YANG DIASUMSIKAN (dari nama field di APK Auralys: `syllabus`, `singer`, `transliteration`; belum diuji ke
- * server sungguhan karena jaringan dimatikan saat ditulis; verifikasi dulu, lihat CHANGES-0.5.46.md, bagian 0.5.54):
+ * server sungguhan karena jaringan dimatikan saat ditulis; verifikasi dulu, lihat CHANGES.md, bagian 0.5.54):
  *   { type: "Word" | "Line", lyrics: [ { time: ms, duration: ms, text, 
  *       element?: { singer }, syllabus?: [ { time: ms, duration: ms, text, isBackground? } ] } ], metadata?, cached? }
  * Semua waktu dalam milidetik. Parser sengaja toleran: field yang hilang / salah tipe dilewati, bukan error.

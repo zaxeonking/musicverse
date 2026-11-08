@@ -375,4 +375,17 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
       },
     ],
   },
+  {
+    id: '0.5.51',
+    steps: [
+      {
+        id: 'wn-splash-icon',
+        route: '/settings/theme',
+        demo: 'theme',
+        nativeOnly: true,
+        title: 'Baru: layar pembuka & ikon ikut tema',
+        body: 'Animasi buka aplikasi kini memakai warna tema pilihanmu. Di Pengaturan > Tema > Layar pembuka & ikon, kamu juga bisa menyalakan Ikon aplikasi ikut tema (bawaan mati).',
+      },
+    ],
+  },
 ]

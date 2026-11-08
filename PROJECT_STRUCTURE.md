@@ -1,7 +1,7 @@
 MusicVerse — Project Structure
 
 Project: MusicVerse
-Version: v0.4.17
+Version: v0.5.51
 Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
 Platform: Web / Android
 
@@ -66,7 +66,7 @@ BottomNav.tsx| Navigasi bawah mobile bergaya kaca cair: pil melayang, lensa akti
 MobileHeader.tsx| Header khusus tampilan mobile.
 UpdateBanner.tsx| Menampilkan pemberitahuan pembaruan aplikasi.
 OfflineBanner.tsx| Menampilkan status atau pemberitahuan ketika offline.
-ApkPromo.tsx| Menampilkan promosi atau informasi unduhan APK.
+PageTransition.tsx| Transisi antarhalaman: halaman lama memudar, halaman baru masuk geser maju/mundur.
 
 components/ui/
 
@@ -81,6 +81,10 @@ PauseLines.tsx| Komponen animasi indikator jeda.
 SettingSwitch.tsx| Komponen tombol pengaturan ON/OFF.
 Chip.tsx| Komponen label atau kategori kecil.
 SectionHeader.tsx| Komponen judul bagian atau section.
+OverlayPortal.tsx| Akar semua menu bawah (sheet), dirender di <body> pada lapisan paling atas.
+PlayingBars.tsx| Indikator equalizer tiga batang untuk lagu yang sedang diputar.
+Presence.tsx| Menahan komponen tetap terpasang selama animasi keluar berjalan.
+RoundAction.tsx| Tombol aksi bulat berikon (label hanya untuk pembaca layar).
 
 components/music/
 
@@ -106,6 +110,11 @@ AddToPlaylistSheet.tsx| Panel untuk menambahkan lagu ke playlist.
 TrackRow.tsx| Menampilkan satu lagu dalam daftar playlist.
 PlaylistView.tsx| Tampilan utama playlist.
 PlaylistImportForm.tsx| Form untuk mengimpor playlist.
+ArtistList.tsx| Daftar hasil pencarian artis (foto bulat, jumlah penggemar).
+ArtistMatches.tsx| Blok "Artis" di atas hasil lagu pada tab Cari.
+ArtistPlaylistSheet.tsx| Menu bawah untuk menyimpan lagu artis atau album ke playlist.
+ArtistSearchPanel.tsx| Panel pencarian artis: daftar artis, halaman artis, lagu, dan diskografi album.
+AvailabilityPanel.tsx| Panel status ketersediaan sumber audio tiap lagu playlist dan jalan ke Cari manual.
 
 components/library/
 
@@ -124,6 +133,10 @@ LocalFolder.tsx| Folder "Lokal" di tab Unduhan: semua audio di HP kecuali unduha
 PlaylistTransferPanel.tsx| Panel pemindahan atau transfer playlist.
 RecentlyPlayedList.tsx| Menampilkan daftar musik yang baru diputar.
 MyPlaylistsSection.tsx| Menampilkan playlist milik pengguna.
+RefreshChoiceSheet.tsx| Pilihan cara menyegarkan playlist Spotify yang tersimpan.
+SavedPlaylistMenuSheet.tsx| Menu aksi untuk playlist Spotify yang tersimpan.
+TrackSelectionBar.tsx| Bilah mode pilih banyak lagu (pilih semua, salin, pindah, hapus).
+TrackTransferSheet.tsx| Menu bawah untuk menyalin atau memindahkan lagu terpilih antarplaylist.
 
 components/player/
 
@@ -149,6 +162,21 @@ PlayerDock.tsx| Pengatur posisi atau area pemutar.
 SeekBar.tsx| Pengatur posisi waktu pemutaran lagu.
 SleepTimerSheet.tsx| Panel pengaturan sleep timer.
 QueuePanel.tsx| Panel daftar antrean pemutaran.
+AutoRadioSync.tsx| Mengisi ulang antrean (radio) saat lagu tersisa tinggal sedikit, juga untuk rantai native.
+AutoSync.tsx| Menerbitkan daftar telusur (Baru diputar, Antrean, pustaka) ke Android Auto lewat native.
+KaraokeWords.tsx| Tampilan lirik per kata dengan sapuan warna mengikuti waktu lagu.
+SpeedSheet.tsx| Menu bawah pilihan kecepatan putar (nada tetap).
+ThemeAccentSync.tsx| Menyelaraskan aksen aplikasi dengan sampul lagu yang diputar (aksen dinamis).
+VolumeNormSync.tsx| Meneruskan kekerasan lagu ke mesin audio untuk penyeragaman volume.
+WidgetLyricsSync.tsx| Mengirim baris lirik berwaktu ke widget layar utama.
+
+components/settings/
+
+Berisi komponen khusus halaman pengaturan.
+
+File| Fungsi
+ColorField.tsx| Kolom pemilih warna (hex) untuk pengaturan tema.
+LyricProviderSettings.tsx| Pengaturan sumber lirik dan tampilan terjemahan/romanisasi.
 
 ---
 
@@ -170,6 +198,10 @@ DownloadSettingsPage.tsx| Halaman pengaturan unduhan.
 PlaylistSettingsPage.tsx| Halaman pengaturan playlist.
 EqualizerPage.tsx| Halaman equalizer audio.
 BackupPage.tsx| Halaman pencadangan dan pemulihan data.
+LegalPage.tsx| Pengaturan > Kebijakan Privasi / Ketentuan Layanan di APK.
+RecapPage.tsx| Rekap dengar (7 hari, 30 hari, semua) dan kartu bagikan.
+ThemeSettingsPage.tsx| Pengaturan > Tema: mode, aksen, gaya permukaan, tema siap pakai, layar pembuka & ikon.
+UpdateSettingsPage.tsx| Pengaturan > Pembaruan: cek, unduh, dan pasang APK terbaru.
 
 ---
 
@@ -206,6 +238,19 @@ useOnlineStatus.ts| Memantau status koneksi internet.
 useLyricTiming.ts| Mengatur sinkronisasi waktu lirik.
 useNowPlaying.ts| Mengakses informasi lagu yang sedang diputar.
 useOverlayHistory.ts| Mengelola riwayat tampilan overlay.
+useCoverGlow.ts| Mengambil warna dominan sampul untuk cahaya latar.
+useEnterClosesKeyboard.ts| Tombol Enter menutup keyboard layar pada kolom teks.
+useExitGhost.ts| Animasi keluar sheet/panel lewat salinan bayangan di <body>.
+useListFlip.ts| Animasi FLIP: baris yang berpindah tempat meluncur ke slot baru.
+useLyricDisplayPrefs.ts| Preferensi tampilan terjemahan/romanisasi lirik (reaktif).
+useOfflineBlock.ts| Menolak memutar lagu yang belum diunduh saat offline.
+usePlaylistPlayback.ts| Status tombol utama Putar semua / Jeda mengikuti pemutar.
+usePulse.ts| Membal kecil sebagai umpan balik (suka, antrean, playlist, unduhan).
+useSheetDrag.ts| Seret menu bawah untuk menutup.
+useSwipeSelect.ts| Geser baris untuk memilih (dasar geser lagu).
+useTheme.ts| Membaca dan mengubah tema aplikasi.
+useTrackAvailability.ts| Memeriksa ketersediaan sumber audio tiap lagu (ok / missing / unknown).
+useTrackSwipe.ts| Aksi geser pada baris lagu (antre, suka, pilih).
 
 ---
 
@@ -218,6 +263,13 @@ audioEngine.ts| Mesin utama untuk pemutaran audio.
 lyricsApi.ts| Mengelola komunikasi dengan API lirik.
 spotifyApi.ts| Mengelola integrasi API Spotify.
 equalizer.ts| Mengatur pemrosesan dan pengaturan equalizer audio.
+artistApi.ts| Pencarian artis dari luar (Deezer + iTunes): profil, lagu, diskografi.
+coverOrigin.ts| Asal thumbnail sampul untuk transisi sampul terbang ke pemutar penuh.
+playbackSpeed.ts| Kecepatan putar tersimpan (nada tetap).
+playerSheet.ts| Mesin gerak tunggal mini player <-> pemutar penuh.
+radio.ts| Radio: mencari lagu mirip saat antrean hampir habis.
+titleAliases.ts| Nama lain judul lagu di aksara/bahasa lain (katalog iTunes) untuk pencocokan.
+volumeNorm.ts| Pengaturan penyeragaman volume antarlagu.
 
 ---
 
@@ -235,6 +287,8 @@ ytmusic.ts| Integrasi sumber YouTube Music.
 ytvideo.ts| Integrasi sumber video YouTube.
 thirdParty.ts| Mengelola integrasi pihak ketiga.
 types.ts| Definisi tipe data untuk sistem plugin.
+manualPins.ts| Pilihan Cari manual pengguna per lagu, dipakai lagi saat diputar/diunduh.
+ytLyrics.ts| Lirik dari YouTube Music (sumber pertama lirik).
 
 ---
 
@@ -254,6 +308,13 @@ backButton.ts| Mengelola tombol kembali Android.
 downloads.ts| Mengelola proses unduhan native.
 connection.ts| Mengelola koneksi jaringan.
 nativeStorage.ts| Mengelola penyimpanan data native.
+appearance.ts| Tema ke luar layar aplikasi: splash web, latar jendela native, dan ikon aplikasi ikut tema.
+backgroundGuard.ts| Izin agar pemutaran latar tidak dibekukan sistem (penghemat baterai, jeda aktivitas).
+clipboard.ts| Clipboard lewat plugin native di APK, API web di peramban.
+liveUpdate.ts| Pembaruan tampilan tanpa APK baru (OTA).
+nativeSession.ts| Membaca sesi pemutaran native (lagu dan posisi) saat app dibuka lagi.
+playJournal.ts| Membaca jurnal lagu yang diputar native saat JS beku.
+radioExtras.ts| Membaca tambahan radio yang dicari native saat JS beku.
 
 ---
 
@@ -294,6 +355,21 @@ playerQueue.ts| Mengelola antrean pemutaran.
 safeStorage.ts| Mengelola penyimpanan data secara aman.
 lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
 localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
+artistSearchStore.ts| State pencarian artis di Beranda (mode, fase, urutan lagu).
+deezerMatch.ts| Pencocokan lagu dengan hasil pencarian Deezer.
+lyricDisplayPrefs.ts| Penyimpanan pengaturan tampilan terjemahan/romanisasi lirik.
+lyricSubtext.ts| Teks tambahan di bawah baris lirik setelah pengaturan diterapkan.
+nativeAdvance.ts| Penjaga rantai lagu native agar tidak memutar ulang lagu yang sama.
+playbackLog.ts| Log pemutaran ringan di aplikasi (200 baris terakhir).
+playlistMembership.ts| Menghitung keanggotaan lagu di playlist-playlist pengguna.
+recap.ts| Perhitungan rekap dengar per periode.
+romanize.ts| Romanisasi lokal lirik (kana, Hangul, Devanagari, Sirilik).
+sameSong.ts| Mengenali lagu yang sama antarsumber (playlist, unduhan, lokal, riwayat).
+shareCard.ts| Membuat kartu bagikan bergaya story 9:16.
+spring.ts| Easing pegas untuk animasi sheet dan umpan balik.
+theme.ts| Mesin tema: warna, mode gelap/terang/otomatis, sudut, aksen dari sampul.
+viewportSettle.ts| Menunggu ukuran layar tenang setelah keyboard naik.
+ytLyricsParse.ts| Pengurai respons lirik YouTube Music.
 
 ---
 
@@ -313,6 +389,7 @@ Menyimpan konfigurasi internal aplikasi.
 File| Fungsi
 navigation.ts| Mengatur konfigurasi navigasi.
 apk.ts| Menyimpan konfigurasi terkait APK.
+site.ts| Info situs dan tanggal terakhir dokumen hukum diubah.
 
 ---
 
@@ -335,6 +412,41 @@ App.tsx| Komponen utama dan pengatur struktur aplikasi React.
 main.tsx| Entry point utama aplikasi React.
 index.css| Style global aplikasi.
 vite-env.d.ts| Deklarasi tipe lingkungan Vite.
+
+---
+
+3.13. src/legal/
+
+Menyimpan dokumen hukum (Kebijakan Privasi dan Ketentuan Layanan) yang dipakai bersama oleh situs web dan APK.
+
+File| Fungsi
+content.ts| Isi dokumen hukum. Satu-satunya sumber; ubah di sini lalu perbarui LEGAL_UPDATED di config/site.ts.
+LegalDocument.tsx| Tampilan dokumen hukum (nada gelap di APK, terang di situs).
+
+3.14. src/site/
+
+Menyimpan situs web untuk peramban biasa. MusicVerse tidak punya versi web: satu-satunya halaman adalah landing untuk memasang APK, ditambah Kebijakan Privasi dan Ketentuan Layanan. Versi lengkap hanya dimuat di APK lewat src/App.tsx.
+
+File| Fungsi
+SiteApp.tsx| Aplikasi untuk peramban biasa; alamat lain dialihkan ke "/".
+SiteLayout.tsx| Kerangka situs: header, konten, footer.
+LandingPage.tsx| Halaman landing pemasangan APK.
+PhoneMock.tsx| Ilustrasi ponsel di landing (lirik karangan sendiri).
+EqBars.tsx| Batang equalizer animasi seperti logo.
+FeedbackSection.tsx| Formulir saran, ulasan, dan laporan bug.
+SiteLegalPage.tsx| Halaman /privacy dan /terms di situs web.
+SiteLogo.tsx| Logo untuk latar terang.
+
+3.15. src/tour/
+
+Menyimpan tutorial interaktif dan tur "Yang baru" di APK.
+
+File| Fungsi
+steps.ts| Definisi langkah tutorial utama, tur per halaman, dan daftar WHATS_NEW per rilis.
+tourStore.ts| State tur dan penanda sudah dilihat/selesai (disimpan di perangkat).
+TourHost.tsx| Penampil tur: sorotan, kartu langkah, dan navigasi antarlangkah.
+DemoStage.tsx| Peragaan animasi kecil di dalam kartu.
+PracticeStage.tsx| Latihan langsung di dalam kartu (geser, tahan, suka, pilih lagu, kuis).
 
 ---
 
@@ -369,6 +481,26 @@ LocalAudioScanner.java| Memindai audio di HP lewat MediaStore (tanpa milik Music
 UpdateFileProvider.java| Menyediakan akses file untuk proses pembaruan.
 DownloadService.java| Layanan unduhan Android.
 StreamProxy.java| Mengelola proxy streaming audio.
+AutoBridge.java| Penghubung Android Auto <-> JavaScript (daftar telusur dari JS).
+AutoBrowserService.java| Pintu masuk Android Auto, Asisten Google, dan kontrol media sistem.
+MediaSessionHolder.java| Memegang satu MediaSession untuk seluruh proses (dipakai PlaybackService dan Auto).
+MusicVerseWidget.java| Kelas dasar widget layar utama (logika semua bentuk widget).
+MusicVerseWidgetConfig.java| Pengaturan per widget (tema, aksen, sampul, sudut) di SharedPreferences.
+MusicVerseWidgetConfigActivity.java| Layar pengaturan widget dengan pratinjau langsung.
+MusicVerseWidgetTiny.java| Widget bentuk Mini 1×1.
+MusicVerseWidgetStrip.java| Widget bentuk Strip 4×1.
+MusicVerseWidgetSquare.java| Widget bentuk Kotak 2×2.
+MusicVerseWidgetTall.java| Widget bentuk Tinggi 2×3.
+MusicVerseWidgetLarge.java| Widget bentuk Besar 4×2.
+NativeSession.java| Mencatat lagu aktif dan posisi menurut pemutar native.
+PlayJournal.java| Jurnal lagu yang diputar native saat JS beku atau activity dihancurkan.
+RadioExtras.java| Daftar tambahan radio yang dicari native saat JS beku.
+RadioFinder.java| Pencarian lagu mirip untuk radio secara native (padanan radio.ts).
+TrackMatch.java| Pencocokan lagu native (padanan matchTrack.ts, clipDetect.ts, trackTitle.ts).
+WidgetColors.java| Hitungan warna widget yang murni (bisa diuji di JVM).
+WidgetGlass.java| Menggambar latar widget (frost, kilau kaca, sudut) sebagai satu bitmap.
+YtMatcher.java| Pencarian lagu native: judul + artis -> video YouTube dan stream, tanpa JS.
+YtResolver.java| Pengambil stream YouTube native untuk link baru saat JS beku.
 
 5.2. Android Resources
 
@@ -385,11 +517,15 @@ res/xml/
 
 File| Fungsi
 update_file_paths.xml| Mengatur konfigurasi jalur file untuk proses pembaruan aplikasi.
+automotive_app_desc.xml| Deskripsi aplikasi untuk Android Auto (aplikasi media).
+widget_tiny_info.xml / widget_strip_info.xml / widget_square_info.xml / widget_tall_info.xml / widget_large_info.xml| Info penyedia widget layar utama per bentuk.
 
 res/values/
 
 File| Fungsi
 mv_colors.xml| Menyimpan definisi warna untuk tampilan native MusicVerse.
+mv_icon_variants.xml| Warna latar tiap varian ikon launcher per tema (hasil gen-icon-variants.py).
+mv_splash.xml| Warna dan pengaturan splash sistem Android.
 
 res/drawable/
 
@@ -421,6 +557,33 @@ Menyimpan ikon launcher adaptif untuk Android versi yang mendukung adaptive icon
 
 ---
 
+5.3. File lain di native/android/
+
+File| Fungsi
+AndroidManifest.additions.xml| Contoh entri yang ditambahkan ke AndroidManifest.xml (bukan bagian build).
+icon-presets.json| Daftar tema siap pakai (id, aksen, latar) untuk ikon aplikasi ikut tema.
+
+res/layout/
+
+File| Fungsi
+widget_tiny.xml / widget_strip.xml / widget_square.xml / widget_tall.xml / widget_large.xml / widget_player.xml| Tata letak widget layar utama per bentuk.
+
+res/xml-v31/
+
+File| Fungsi
+widget_*_info.xml| Info penyedia widget untuk Android 12+ (ukuran dan perilaku ubah ukuran).
+
+test/
+
+Tes JVM murni (tanpa Android) untuk logika native; lihat test/README.md.
+
+File| Fungsi
+mv/RadioTest.java| Tes logika RadioFinder.
+mv/WidgetColorsTest.java| Tes hitungan warna widget.
+org/json/| Pengganti ringan org.json agar tes jalan di JVM biasa.
+
+---
+
 6. API/
 
 Folder "api/" menyimpan kode yang digunakan untuk mendukung layanan backend atau API.
@@ -437,6 +600,10 @@ Folder "scripts/" menyimpan skrip pendukung untuk proses konfigurasi dan pengemb
 File| Fungsi
 setup-android.mjs| Membantu menyiapkan konfigurasi Android.
 check-android-env.sh| Memeriksa konfigurasi dan lingkungan pengembangan Android.
+gen-icon-variants.py| Membuat ikon launcher per tema dari native/android/icon-presets.json.
+make-ota.mjs| Membuat paket pembaruan tampilan (OTA) dari folder dist.
+native-hash.mjs| Sidik jari bagian native; pemasangan OTA hanya bila sama dengan APK.
+ts-resolve.mjs| Resolver tes Node agar import tanpa ekstensi menjadi .ts.
 
 ---
 
@@ -446,6 +613,8 @@ Folder "docs/" menyimpan dokumentasi teknis project.
 
 File| Fungsi
 ANDROID.md| Dokumentasi mengenai konfigurasi dan pengembangan Android MusicVerse.
+ANIMASI-BELUM-DIKERJAKAN.md| Catatan pekerjaan animasi premium yang belum selesai dan yang perlu diuji.
+HANDOFF-lyrics-wordsync.md| Catatan serah terima fitur lirik per kata.
 
 ---
 
@@ -455,6 +624,7 @@ Folder ".github/workflows/" berisi konfigurasi otomatisasi GitHub Actions.
 
 File| Fungsi
 apk.yml| Mengatur workflow otomatis untuk proses build APK.
+ota.yml| Workflow pembaruan tampilan (OTA) otomatis tiap push.
 
 ---
 
@@ -476,6 +646,7 @@ vercel.json| Konfigurasi deployment Vercel.
 .env.example| Contoh konfigurasi environment variables.
 .gitignore| Menentukan file dan folder yang diabaikan oleh Git.
 README.md| Dokumentasi pengenalan project.
+DEVELOPMENT_RULES.md| Aturan pengembangan lanjutan: fitur baru, tutorial dan "Yang baru", versi, catatan perubahan, APK/OTA.
 
 ---
 
@@ -484,26 +655,8 @@ README.md| Dokumentasi pengenalan project.
 File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
-CHANGES-0.3.7.md| Riwayat perubahan versi 0.3.7.
-CHANGES-0.3.8.md| Riwayat perubahan versi 0.3.8.
-CHANGES-0.4.0.md| Riwayat perubahan versi 0.4.0.
-CHANGES-0.4.1.md| Riwayat perubahan versi 0.4.1.
-CHANGES-0.4.2.md| Riwayat perubahan versi 0.4.2.
-CHANGES-0.4.3.md| Riwayat perubahan versi 0.4.3.
-CHANGES-0.4.4.md| Riwayat perubahan versi 0.4.4.
-CHANGES-0.4.5.md| Riwayat perubahan versi 0.4.5.
-CHANGES-0.4.6.md| Riwayat perubahan versi 0.4.6.
-CHANGES-0.4.7.md| Riwayat perubahan versi 0.4.7.
-CHANGES-0.4.8.md| Riwayat perubahan versi 0.4.8.
-CHANGES-0.4.9.md| Riwayat perubahan versi 0.4.9.
-CHANGES-0.4.10.md| Riwayat perubahan versi 0.4.10.
-CHANGES-0.4.11.md| Riwayat perubahan versi 0.4.11.
-CHANGES-0.4.12.md| Riwayat perubahan versi 0.4.12.
-CHANGES-0.4.13.md| Riwayat perubahan versi 0.4.13.
-CHANGES-0.4.14.md| Riwayat perubahan versi 0.4.14.
-CHANGES-0.4.15.md| Riwayat perubahan versi 0.4.15.
-CHANGES-0.4.16.md| Riwayat perubahan versi 0.4.16.
-CHANGES-0.4.17.md| Riwayat perubahan versi 0.4.17.
+CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.50.7), terbaru di atas.
+CHANGES-0.5.51.md| Riwayat perubahan versi 0.5.51 (terbaru).
 
 ---
 
@@ -624,6 +777,8 @@ Jika perubahan berhubungan dengan Android native:
 5. Jangan menghapus layanan background yang masih digunakan.
 6. Pastikan perubahan tidak mengganggu playback dan download service.
 
+Aturan lanjutan (fitur baru, tutorial dan "Yang baru", versi, catatan perubahan, APK/OTA, pemeriksaan) ada di berkas terpisah: `DEVELOPMENT_RULES.md`.
+
 ---
 
 14. PROJECT STRUCTURE MAINTENANCE
@@ -667,7 +822,7 @@ Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami peruba
   
 End of Project Structure Documentation
 Project: MusicVerse
-Reference Version: v0.4.17
+Reference Version: v0.5.51
 Document: PROJECT_STRUCTURE.md
 ## Lirik per kata (0.5.54 – 0.5.56)
 - `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`

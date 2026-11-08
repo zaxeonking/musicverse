@@ -755,6 +755,50 @@ public class MusicVerseNativePlugin extends Plugin {
     }
   }
 
+  /**
+   * Tampilan native yang ikut tema. `bg` (#RRGGBB) disimpan dan dipakai MainActivity sebagai latar jendela saat membuka aplikasi
+   * (tanpa kedipan gelap di tema terang). `icon` = id tema siap pakai: ikon peluncur diganti dengan menyalakan activity-alias
+   * yang bersangkutan dan mematikan sisanya (DONT_KILL_APP: aplikasi tidak ditutup). Id tak dikenal diabaikan.
+   */
+  @PluginMethod
+  public void setAppearance(PluginCall call) {
+    String bg = call.getString("bg");
+    Integer color = WidgetColors.parseHex(bg);
+    if (color != null) {
+      getContext().getSharedPreferences(MainActivity.APPEARANCE_PREFS, Context.MODE_PRIVATE).edit().putInt(MainActivity.PREF_BG, color).apply();
+    }
+    String icon = call.getString("icon");
+    if (icon != null) applyLauncherIcon(icon);
+    call.resolve();
+  }
+
+  /** Daftar id ikon = native/android/icon-presets.json (setup-android.mjs memeriksa kecocokannya). */
+  private static final String[] ICON_IDS = {"hijau", "biru", "ungu", "mawar", "oranye", "laut", "merah", "hutan", "sakura", "kopi", "neon", "emas", "malam", "batu", "amoled"};
+  private static final String ICON_PREF = "icon";
+
+  private void applyLauncherIcon(String id) {
+    boolean known = false;
+    for (String candidate : ICON_IDS) if (candidate.equals(id)) known = true;
+    if (!known) return;
+    Context ctx = getContext();
+    android.content.SharedPreferences prefs = ctx.getSharedPreferences(MainActivity.APPEARANCE_PREFS, Context.MODE_PRIVATE);
+    if (id.equals(prefs.getString(ICON_PREF, null))) return; // sudah aktif: jangan memicu peluncur memuat ulang
+    android.content.pm.PackageManager pm = ctx.getPackageManager();
+    try {
+      // Nyalakan yang baru lebih dulu, baru matikan sisanya: selalu ada tepat satu pintu peluncur yang aktif.
+      pm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + id),
+          android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+      for (String other : ICON_IDS) {
+        if (other.equals(id)) continue;
+        pm.setComponentEnabledSetting(new android.content.ComponentName(ctx, "__APP_ID__.MvIcon_" + other),
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP);
+      }
+      prefs.edit().putString(ICON_PREF, id).apply();
+    } catch (RuntimeException e) {
+      // Alias belum ada (manifest lama) atau peluncur menolak: ikon tetap seperti semula.
+    }
+  }
+
   /** Jenis koneksi aktif: dipakai pilihan "Unduh hanya lewat Wi-Fi". Tanpa izin / gagal baca = "unknown" (tidak dianggap seluler). */
   /** Sidik jari kode native APK ini (ditanam setup-android.mjs). Dipakai pembaruan tampilan OTA untuk mengecek kecocokan. */
   @PluginMethod

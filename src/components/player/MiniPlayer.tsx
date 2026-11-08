@@ -109,6 +109,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     vx: 0,
     // Animasi penutup/gulungan sedang berjalan: sentuhan baru diabaikan sampai selesai.
     busy: false,
+    // Kapan `busy` dinyalakan: pengaman bila pembersihnya (timer) terhapus di tengah jalan.
+    busySince: 0,
     // Seretan ke atas yang menggerakkan lapisan pemutar penuh (bukan kartu), dan progress awalnya (bila lapisan "ditangkap" di tengah gerakan).
     sheet: false,
     base: 0,
@@ -266,6 +268,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const closeMusic = () => {
     const el = cardRef.current
     drag.current.busy = true
+    drag.current.busySince = performance.now()
     navigator.vibrate?.(12)
     if (!el || reducedMotion()) {
       cleanup()
@@ -290,6 +293,23 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const rollDistance = () => Math.max(ROLL_MIN, Math.min(ROLL_MAX, dockWidth * 0.4))
 
   /**
+   * Selama kartu berubah bentuk (clip-path berubah tiap frame) blur kaca (backdrop-filter) dimatikan: blur 40-64 px pada
+   * area yang bentuknya berubah tiap frame dihitung ulang total tiap frame di HP dan itulah yang membuat gerakan patah-patah.
+   * Latar kartu 95% buram, jadi tanpa blur nyaris tak terlihat bedanya; blur kembali saat gerakan selesai.
+   */
+  const setMorphing = (on: boolean) => {
+    const el = regionRef.current
+    if (!el) return
+    if (on) {
+      if (!el.hasAttribute('data-morphing')) el.setAttribute('data-morphing', '')
+    } else if (el.hasAttribute('data-morphing')) {
+      el.removeAttribute('data-morphing')
+    }
+  }
+  // Ukuran kartu tetap selama gulungan: dibaca sekali (membaca offsetWidth/Height tiap frame memaksa layout ulang tiap frame).
+  const rollSize = useRef({ w: 0, h: 0 })
+
+  /**
    * Gambar satu frame gulungan untuk progress `p` (0 = kartu utuh, 1 = disc di pojok sisi `dir`).
    *  - bentuk kartu dipotong (clip-path) mengerut ke pojok tempat disc menempel, lalu kartu memudar;
    *  - disc pratinjau berguling dari tengah kartu ke pojok: bergeser, turun, membesar, dan berputar satu putaran penuh
@@ -301,12 +321,19 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const card = cardRef.current
     if (!region || !card) return
     const e = Math.min(1, Math.max(0, p))
-    const w = region.offsetWidth
-    const h = region.offsetHeight
+    const size = rollSize.current
+    if (size.w === 0) {
+      size.w = region.offsetWidth
+      size.h = region.offsetHeight
+    }
+    const w = size.w
+    const h = size.h
     if (e <= 0) {
       region.style.clipPath = ''
       card.style.opacity = ''
+      setMorphing(false)
     } else {
+      setMorphing(true)
       const discTop = Math.max(0, h - BUBBLE_PX)
       const discLeft = dir > 0 ? Math.max(0, w - BUBBLE_PX) : 0
       const discRight = dir > 0 ? 0 : Math.max(0, w - BUBBLE_PX)
@@ -342,6 +369,8 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     }
     if (cardRef.current) cardRef.current.style.opacity = ''
     if (rollDiscRef.current) rollDiscRef.current.style.opacity = '0'
+    setMorphing(false)
+    rollSize.current.w = 0
     drag.current.roll = 0
     drag.current.shown = 0
     setRollDir(0)
@@ -351,6 +380,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const followRoll = () => {
     const d = drag.current
     window.cancelAnimationFrame(rollRaf.current)
+    rollSize.current.w = 0
     let last = performance.now()
     const step = (now: number) => {
       const dt = Math.min(48, now - last)
@@ -385,6 +415,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const commitRoll = (dir: -1 | 1) => {
     const d = drag.current
     d.busy = true
+    d.busySince = performance.now()
     navigator.vibrate?.(10)
     const finish = () => {
       const disc = rollDiscRef.current
@@ -428,6 +459,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const cancelRoll = () => {
     const d = drag.current
     d.busy = true
+    d.busySince = performance.now()
     const done = () => {
       clearRoll()
       d.busy = false
@@ -477,9 +509,18 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       regionRef.current.style.willChange = ''
       regionRef.current.style.clipPath = ''
       regionRef.current.style.visibility = ''
+      regionRef.current.removeAttribute('data-morphing')
     }
     behindNav(false)
     setLeaving(false)
+    // Timer pembersih commitRoll sudah dihapus di atas: kerjakan bagiannya di sini supaya kartu tidak terkunci
+    // (busy tertinggal) dan disc pratinjau / penanda serah-terima tidak menggantung.
+    const d = drag.current
+    if (d.busy && d.mode === 'h') {
+      d.busy = false
+      setRollDir(0)
+      setHandoff(false)
+    }
   }
 
   /**
@@ -520,6 +561,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     const open = `inset(-48px -48px ${-(48 + dragY)}px -48px round 24px)`
     const disc = `inset(${discTop}px ${discRight}px 0px ${discLeft}px round ${BUBBLE_PX / 2}px)`
     region.style.pointerEvents = 'none'
+    setMorphing(true)
     region.style.willChange = 'clip-path, opacity'
     // Lepas transisi sisa seretan; gerakan dilanjutkan dari posisi jari (fromTransform), bukan melompat ke tempat awal.
     card.style.transition = 'none'
@@ -559,7 +601,20 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
 
   const shrink = () => flyToBubble(true)
 
+  // Disc -> kartu (animasi CSS card-from-*, 460 ms, juga clip-path): blur kaca dimatikan selama membuka lalu dikembalikan.
+  useLayoutEffect(() => {
+    if (showBubble || !growFrom) return undefined
+    setMorphing(true)
+    const timer = window.setTimeout(() => setMorphing(false), 520)
+    return () => {
+      window.clearTimeout(timer)
+      setMorphing(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBubble, growFrom])
+
   const expand = () => {
+    window.cancelAnimationFrame(rollRaf.current)
     if (leaving) stopLeave(true)
     if (keyboardOpen) {
       pendingExpand.current = true
@@ -640,8 +695,12 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     // Seek bar punya geseran sendiri (horizontal): jangan dibajak.
     if ((event.target as HTMLElement).closest('input[type="range"], [role="progressbar"]')) return
     const d = drag.current
-    // Kartu sedang menutup / menggulir jadi disc: jangan dibajak lagi.
-    if (d.busy) return
+    // Kartu sedang menutup / menggulir jadi disc: jangan dibajak lagi. Tapi `busy` yang tertinggal (pembersihnya terhapus
+    // saat disc diketuk cepat-cepat) tidak boleh mengunci kartu selamanya: lewat 700 ms dianggap basi dan dilepas.
+    if (d.busy) {
+      if (performance.now() - d.busySince < 700) return
+      d.busy = false
+    }
     d.id = event.pointerId
     d.x = event.clientX
     d.y = event.clientY

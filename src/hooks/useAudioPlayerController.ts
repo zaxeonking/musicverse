@@ -336,6 +336,8 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
   const mergeExtrasRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false))
   const mergingExtrasRef = useRef<Promise<boolean> | null>(null)
   const handleEngineEventRef = useRef<(event: AudioEngineEvent) => void>(() => {})
+  /** Menyamakan lagu aktif JS dengan pemutar native (dipanggil saat app kembali ke depan / event native tak terpetakan). */
+  const syncFromNativeRef = useRef<() => void>(() => {})
   /** Kapan status terakhir berubah jadi `paused` (ms). Jeda lama = tautan audio lama tidak boleh dipakai lagi. */
   const pausedAtRef = useRef(0)
   // Detik tujuan setelah audio termuat (lanjut dari posisi tersimpan); null = mulai dari awal.
@@ -645,7 +647,11 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
               }
               break
             }
-            if (verdict !== 'accept' || !track || !nativeInfo) break
+            if (verdict !== 'accept' || !track || !nativeInfo) {
+              // Native sudah pindah lagu tetapi JS tidak bisa memetakannya dari event: baca langsung sesi native.
+              syncFromNativeRef.current()
+              break
+            }
             if (!saved && !lazyInfo) playedCacheRef.current.set(track.id, { info: nativeInfo, at: Date.now() })
             console.info(`[MusicVerse] rantai native pindah ke lagu #${index} (dari #${activeIndex})`)
             preloadRef.current?.controller.abort()
@@ -1625,6 +1631,65 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
       cancelled = true
     }
   }, [commit, updateTime, bootSavedAt])
+
+  // App kembali ke depan (mis. dari ketukan notifikasi) padahal JS tidak mengalami pindah lagu yang dilakukan native saat
+  // JS beku / di latar belakang: notifikasi menampilkan lagu baru, tetapi state JS masih di lagu lama dan tombol putar
+  // menyetel lagu lama. Samakan lagu aktif JS dengan pemutar native yang masih hidup. Jalur boot (sesi tersimpan) di atas
+  // menangani activity yang dibuat ulang; ini untuk JS yang tetap hidup.
+  useEffect(() => {
+    if (!isNativeApp()) return undefined
+    let busy = false
+    let cancelled = false
+    const busyStatus = (status: PlaybackStatus) => status === 'resolving' || status === 'loading'
+    const sync = async () => {
+      if (busy || cancelled || document.visibilityState !== 'visible') return
+      if (restoredRef.current) return // masih sesi tersimpan: efek boot yang mengurus
+      const first = stateRef.current
+      if (!first.currentTrack || first.currentIndex === null || busyStatus(first.status)) return
+      busy = true
+      try {
+        await mergeExtrasRef.current()
+        const session = await readNativeSession()
+        if (!session || cancelled || session.live !== true) return
+        const now = stateRef.current
+        // Pengguna baru memilih lagu / app sedang memuat: JS yang memegang kendali.
+        if (restoredRef.current || !now.currentTrack || now.currentIndex === null || busyStatus(now.status)) return
+        const index = matchSessionIndex(now.queue, session, now.currentIndex)
+        if (index === null) return
+        const track = now.queue[index]
+        if (!track || (index === now.currentIndex && track.id === now.currentTrack.id)) return // sudah sama
+        const playing = session.playing === true
+        const at = typeof session.at === 'number' ? session.at : 0
+        const elapsedSec = playing && at > 0 ? Math.max(0, (Date.now() - at) / 1000) : 0
+        const durationSec = typeof session.durationMs === 'number' && session.durationMs > 0 ? session.durationMs / 1000 : null
+        const rawPos = (typeof session.positionMs === 'number' ? session.positionMs : 0) / 1000 + elapsedSec
+        const position = Math.max(0, durationSec !== null ? Math.min(rawPos, durationSec) : rawPos)
+        const handed = upcomingByIndexRef.current.get(index)
+        const info = (handed && handed.trackId === track.id ? handed.info : undefined) ?? playedCacheRef.current.get(track.id)?.info ?? null
+        plog(`sinkron dari native: #${index} (JS #${now.currentIndex}) ${Math.round(position)}s`)
+        requestIdRef.current++
+        commit({ currentTrack: track, currentIndex: index, playbackInfo: info, status: playing ? 'playing' : 'paused', error: null })
+        updateTime(() => ({
+          currentTime: position,
+          duration: durationSec ?? parseDurationText(track.duration),
+          seekable: true,
+        }))
+        savePlayerPosition(track.id, position)
+      } finally {
+        busy = false
+      }
+    }
+    syncFromNativeRef.current = () => void sync()
+    const onVisible = () => void sync()
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      cancelled = true
+      syncFromNativeRef.current = () => {}
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [commit, updateTime])
 
   // App ke background / ditutup: simpan posisi terakhir.
   useEffect(() => {

@@ -4,6 +4,7 @@ import { Link, Navigate } from 'react-router-dom'
 import ColorField from '../components/settings/ColorField'
 import SettingSwitch from '../components/ui/SettingSwitch'
 import { useTheme } from '../hooks/useTheme'
+import { useIconFollowsTheme } from '../native/appearance'
 import { readClipboardText, writeClipboardText } from '../native/clipboard'
 import { isNativeApp } from '../native/platform'
 import {
@@ -66,6 +67,7 @@ const QUICK_ACCENTS = ['#1DB954', '#22D3EE', '#4F8CFF', '#6366F1', '#A78BFA', '#
 /** Tema (APK): mode gelap/terang, tema siap pakai atau warna sendiri, bentuk sudut, aksen ikut sampul, dan bagikan tema. */
 export default function ThemeSettingsPage() {
   const [theme, setTheme] = useTheme()
+  const [iconFollows, setIconFollows] = useIconFollowsTheme()
   const [codeInput, setCodeInput] = useState('')
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [saved, setSaved] = useState<ThemeState[]>(() => getSavedThemes())
@@ -226,6 +228,20 @@ export default function ThemeSettingsPage() {
             <Segmented value={theme.glowLevel} options={GLOW_LEVELS} onChange={(id) => setTheme({ glowLevel: id })} label="Kekuatan cahaya latar" />
           </div>
         )}
+      </div>
+
+      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Layar pembuka &amp; ikon</h2>
+      <div className="space-y-2">
+        <p className="rounded-lg bg-card px-4 py-3 text-xs text-ink-muted">
+          Animasi saat aplikasi dibuka (logo dan nama) otomatis memakai warna tema. Aksen yang mengikuti sampul lagu tidak dipakai di sini.
+        </p>
+        <SettingSwitch
+          checked={iconFollows}
+          onChange={() => setIconFollows(!iconFollows)}
+          icon={Smartphone}
+          label="Ikon aplikasi ikut tema"
+          hint="Ikon di layar utama berganti warna mengikuti tema (tema Kustom memakai warna siap pakai yang paling mirip). Bisa butuh beberapa detik, dan sebagian peluncur melepas pintasan yang sudah ditempel."
+        />
       </div>
 
       <div className="mb-2 mt-6 flex items-center justify-between">

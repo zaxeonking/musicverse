@@ -7,6 +7,9 @@ import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+  /** Warna latar tema terakhir (ditulis MusicVerseNativePlugin.setAppearance), dipakai sejak frame pertama pada pembukaan berikutnya. */
+  static final String APPEARANCE_PREFS = "musicverse_appearance";
+  static final String PREF_BG = "bg";
   /** Selama activity tidak terlihat, timer WebView didorong tetap jalan tiap sekian ms (antrean unduhan, putar-ulang otomatis, pergantian lagu). */
   private static final long KEEPALIVE_MS = 5000L;
   private final Handler keepAliveHandler = new Handler(Looper.getMainLooper());
@@ -24,6 +27,7 @@ public class MainActivity extends BridgeActivity {
     // Plugin lokal harus didaftarkan SEBELUM super.onCreate().
     registerPlugin(MusicVerseNativePlugin.class);
     super.onCreate(savedInstanceState);
+    applyThemeBackground();
     // Hanya saat benar-benar dibuka dari widget (bukan dibuat ulang karena rotasi layar).
     if (savedInstanceState == null) handleWidgetPlay(getIntent());
     if (getBridge() != null) {
@@ -34,6 +38,15 @@ public class MainActivity extends BridgeActivity {
         webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
       }
     }
+  }
+
+  /** Latar jendela + WebView mengikuti tema, supaya tema terang tidak diawali kedipan #121212 sebelum halaman tergambar. */
+  private void applyThemeBackground() {
+    android.content.SharedPreferences prefs = getSharedPreferences(APPEARANCE_PREFS, MODE_PRIVATE);
+    if (!prefs.contains(PREF_BG)) return;
+    int color = prefs.getInt(PREF_BG, 0xFF121212);
+    getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(color));
+    if (getBridge() != null && getBridge().getWebView() != null) getBridge().getWebView().setBackgroundColor(color);
   }
 
   @Override

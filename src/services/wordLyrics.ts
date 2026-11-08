@@ -10,7 +10,7 @@ import { activeWordProviders, type WordProviderId } from '../utils/lyricProvider
  *
  * PENTING: nama parameter query & bentuk respons berasal dari ingatan atas kode Metrolist + nama field di DEX Auralys,
  * BELUM diuji ke server sungguhan (jaringan dimatikan saat ini ditulis). Semua provider best-effort: gagal / bentuk
- * tak dikenal = dilewati diam-diam, sumber lama (LRCLIB dkk.) tetap jalan. Lihat CHANGES-0.5.46.md, bagian 0.5.54 "Verifikasi".
+ * tak dikenal = dilewati diam-diam, sumber lama (LRCLIB dkk.) tetap jalan. Lihat CHANGES.md, bagian 0.5.54 "Verifikasi".
  */
 
 export interface WordLyricsQuery {

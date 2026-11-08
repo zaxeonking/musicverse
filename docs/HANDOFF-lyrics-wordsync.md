@@ -33,7 +33,7 @@ src/
 └─ native/offlineLyrics.ts   [UBAH]  validasi field baru di cache
 scripts/test-lyrics.mjs, scripts/ts-resolve.mjs  [BARU]  20 tes, `npm run test:lyrics`
 docs/HANDOFF-lyrics-wordsync.md                  [BARU]  file ini
-CHANGES-0.5.46.md (bagian 0.5.54)                [BARU]
+CHANGES.md (bagian 0.5.54)                [BARU]
 package.json                                     [UBAH]  hanya script test:lyrics
 ```
 Aliran data: `useLyrics` -> `fetchLyrics` -> (provider kata ‖ sumber lama) -> `LyricsResult{synced, lines[].words?}` -> `useLyricTiming` (pilih baris aktif) -> `LyricLine.tsx` (`wordsFor` + `activeWordIndex`).
@@ -69,7 +69,7 @@ APK aman (CapacitorHttp). Untuk web tambahkan seperti `netease`: `api/proxy.js` 
 Sekarang hanya lagu unduhan yang tersimpan offline (`offlineLyrics.ts`); lagu streaming dicari ulang tiap sesi. Auralys menyimpan semua di DB. Usulan: IndexedDB / Filesystem LRU (±500 lagu), kunci = `cacheKey` di `useLyrics.ts`, TTL ±30 hari, JANGAN simpan "tidak ditemukan" (sama seperti sekarang).
 
 ### 3.6 Pencocokan lebih akurat — SEBAGIAN di 0.5.57 (jalur ISRC + Binimum jadi; data ISRC belum terisi)
-(Rincian temuan dex Auralys dan sisa pekerjaan: `CHANGES-0.5.46.md`, bagian 0.5.57.) Catatan: playlist Spotify tidak punya ISRC; hanya lagu Deezer lewat `/track/{id}` (otomatis di 0.5.58, `resolveIsrc`). Terjemahan/romanisasi dari server: lihat `CHANGES-0.5.46.md`, bagian 0.5.58.
+(Rincian temuan dex Auralys dan sisa pekerjaan: `CHANGES.md`, bagian 0.5.57.) Catatan: playlist Spotify tidak punya ISRC; hanya lagu Deezer lewat `/track/{id}` (otomatis di 0.5.58, `resolveIsrc`). Terjemahan/romanisasi dari server: lihat `CHANGES.md`, bagian 0.5.58.
 Deezer (sumber lagu Musicverse) menyediakan `isrc`; Auralys memakai ISRC di LyricsPlus/Binimum. Teruskan ISRC ke `WordLyricsQuery` setelah 3.1 memastikan nama parameternya. Tambahkan `matchesTrack` pada hasil provider kata (judul/artis dari metadata respons) bila server menyediakannya.
 
 ### 3.7 Ide "lebih powerful" berikutnya (di luar lirik inti)
@@ -83,6 +83,6 @@ Deezer (sumber lagu Musicverse) menyediakan `isrc`; Auralys memakai ISRC di Lyri
 - Kemungkinan lint `react-hooks/exhaustive-deps` pada `LyricLine.tsx` (deps `useMemo` sudah lengkap menurut pembacaan, tapi belum dijalankan).
 
 ## 5. Catatan housekeeping proyek
-- `package.json` kini `0.5.46`; catatan 0.5.44 sampai 0.5.62 digabung di `CHANGES-0.5.46.md`.
+- `package.json` kini `0.5.46`; catatan 0.5.44 sampai 0.5.62 digabung di `CHANGES.md`.
 - `PROJECT_STRUCTURE.md ` (nama file berakhiran spasi) masih "v0.4.17" dan belum mencantumkan file baru di atas.
 - `native/android/java/PlaybackService.java.orig` ikut di repo (sisa patch).

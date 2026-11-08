@@ -1,0 +1,17 @@
+[
+  { "id": "hijau", "accent": "#1DB954", "bg": "#121212" },
+  { "id": "biru", "accent": "#4F8CFF", "bg": "#0E1420" },
+  { "id": "ungu", "accent": "#A78BFA", "bg": "#15111F" },
+  { "id": "mawar", "accent": "#FF5C8A", "bg": "#1A1115" },
+  { "id": "oranye", "accent": "#FF9A3C", "bg": "#17120D" },
+  { "id": "laut", "accent": "#22D3EE", "bg": "#0B1618" },
+  { "id": "merah", "accent": "#EF4444", "bg": "#160F0F" },
+  { "id": "hutan", "accent": "#9BC53D", "bg": "#10150E" },
+  { "id": "sakura", "accent": "#F9A8D4", "bg": "#1A1217" },
+  { "id": "kopi", "accent": "#D4A373", "bg": "#16110D" },
+  { "id": "neon", "accent": "#D946EF", "bg": "#120A18" },
+  { "id": "emas", "accent": "#F5C542", "bg": "#14120A" },
+  { "id": "malam", "accent": "#818CF8", "bg": "#0C0E1C" },
+  { "id": "batu", "accent": "#94A3B8", "bg": "#0F1215" },
+  { "id": "amoled", "accent": "#FFFFFF", "bg": "#000000" }
+]
