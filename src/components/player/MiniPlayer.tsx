@@ -131,7 +131,17 @@ function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
   rotator.appendChild(clip)
   wrap.appendChild(rotator)
   document.body.appendChild(wrap)
-  cover.style.opacity = '0'
+  // Kotak sampul di kartu: sampulnya disembunyikan (sedang terbang di luar), kotak KOSONG membesar + memudar masuk selama disc terbang.
+  const art = cover.lastElementChild as HTMLElement | null
+  const slot = cover.querySelector<HTMLElement>('[data-mini-slot]')
+  if (art) art.style.opacity = '0'
+  const slotIn = slot
+    ? slot.animate([{ opacity: 0, transform: 'scale(0.4)' }, { opacity: 1, transform: 'scale(1)' }], {
+        duration: FLY_MS * 0.55,
+        easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        fill: 'both',
+      })
+    : null
   // Satu kurva mulus untuk geser dan putar (meroda = putaran sebanding jarak): kecepatan tidak pernah kembali ke 0 di tengah.
   const glide = 'cubic-bezier(0.3, 0.1, 0.2, 1)'
   const animations: Animation[] = [
@@ -157,21 +167,32 @@ function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
   inner.querySelectorAll<HTMLElement>('svg, span[class*="border-veil"]').forEach((el) => {
     animations.push(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FLY_MS * 0.35, fill: 'forwards', easing: 'ease-out' }))
   })
+  const resetSlot = () => {
+    slotIn?.cancel()
+    if (slot) slot.style.opacity = '0'
+  }
   const finish = () => {
-    cover.style.transition = 'opacity 140ms ease-out'
-    cover.style.opacity = '1'
+    // Disc mendarat di kotak: sampul memudar masuk di atas kotak kosong, lalu kotaknya memudar (sudah tertutup sampul).
+    if (art) {
+      art.style.transition = 'opacity 140ms ease-out'
+      art.style.opacity = '1'
+    }
+    slot?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' }).finished.then(resetSlot, resetSlot)
     wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards' }).finished.then(
       () => wrap.remove(),
       () => wrap.remove(),
     )
     window.setTimeout(() => {
-      cover.style.transition = ''
-      cover.style.opacity = ''
+      if (art) {
+        art.style.transition = ''
+        art.style.opacity = ''
+      }
     }, 220)
   }
   animations[0].finished.then(finish, () => {
     wrap.remove()
-    cover.style.opacity = ''
+    if (art) art.style.opacity = ''
+    resetSlot()
   })
 }
 
@@ -522,6 +543,24 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       const ring = rollRingRef.current
       if (ring) ring.style.strokeDashoffset = String(RING_CIRC * (1 - size.frac * smooth((e - 0.5) / 0.5)))
     }
+    applyCoverSlot(e)
+  }
+
+  /**
+   * Kartu -> disc: sampul di kartu ikut "terbawa" disc pratinjau, jadi kotaknya dikosongkan (sampul disembunyikan) dan kotak kosong
+   * itu mengecil sambil memudar bersama kartu, bukan tertinggal dengan sampul yang cuma tertutup disc.
+   */
+  const applyCoverSlot = (e: number) => {
+    const box = regionRef.current?.querySelector<HTMLElement>('[data-mini-cover]')
+    if (!box) return
+    const art = box.lastElementChild as HTMLElement | null
+    const slot = box.querySelector<HTMLElement>('[data-mini-slot]')
+    if (art) art.style.opacity = e <= 0 ? '' : String(Math.max(0, 1 - e / 0.05))
+    if (slot) {
+      slot.style.transition = 'none'
+      slot.style.opacity = e <= 0 ? '0' : String(Math.min(1, e / 0.05) * (1 - smooth((e - 0.3) / 0.5)))
+      slot.style.transform = e <= 0 ? '' : `scale(${1 - 0.4 * smooth(e / 0.7)})`
+    }
   }
 
   /** Bersihkan sisa gaya gulungan dari kartu dan disc pratinjau. */
@@ -538,6 +577,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     if (rollRingBoxRef.current) rollRingBoxRef.current.style.opacity = '0'
     if (rollChromeRef.current) rollChromeRef.current.style.opacity = '0'
     if (rollHoleRef.current) rollHoleRef.current.style.opacity = '0'
+    applyCoverSlot(0)
     setMorphing(false)
     rollSize.current.w = 0
     drag.current.roll = 0
@@ -1105,7 +1145,9 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           aria-label={`Buka pemutar penuh (tahan lama untuk opsi lagu): ${now.title}${now.artists ? `, ${now.artists}` : ''}`}
           className="flex min-w-0 items-center gap-3 rounded-md text-left transition-opacity active:opacity-80 focus-ring lg:row-span-2"
         >
-          <div data-mini-cover className="w-11 shrink-0 lg:w-14">
+          <div data-mini-cover className="relative isolate w-11 shrink-0 lg:w-14">
+            {/* Kotak kosong tempat sampul: tampil (tanpa sampul) selama sampul sedang di luar kotak, lihat applyRoll / runDiscFly / index.css. */}
+            <span data-mini-slot aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-veil/10 ring-1 ring-inset ring-veil/10" style={{ opacity: 0 }} />
             <CoverArt cover={now.cover} src={now.coverSrc} crossfade />
           </div>
           <span className="min-w-0">

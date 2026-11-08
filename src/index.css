@@ -428,9 +428,22 @@ html.theme-anim *::after {
   }
 }
 
-/* Mini player: sampulnya disembunyikan selama pemutar penuh terbuka (sampul "terbang" dari/ke posisi ini). */
-html[data-fp-open] [data-mini-cover] {
+/* Mini player: sampulnya disembunyikan selama pemutar penuh terbuka (sampul "terbang" dari/ke posisi ini). Kotaknya TIDAK ikut
+   hilang mendadak: kotak kosong memudar masuk saat sampul keluar, dan memudar keluar (tertutup sampul yang kembali) saat pemutar
+   penuh ditutup. */
+[data-mini-slot] {
+  transition: opacity 220ms ease-out;
+}
+html[data-fp-open] [data-mini-cover] > :not([data-mini-slot]) {
   visibility: hidden;
+}
+html[data-fp-open] [data-mini-slot] {
+  opacity: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-mini-slot] {
+    transition: none;
+  }
 }
 
 /* ---------- Splash ----------

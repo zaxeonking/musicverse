@@ -7,12 +7,18 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 /**
  * Pembuka-ulang aplikasi sesudah ikon diganti. Berjalan di proses TERSENDIRI (android:process=":relaunch"), jadi tetap hidup
  * walau ROM menutup proses utama saat pintu peluncur (activity-alias) berganti. Activity ini dibuka SAAT aplikasi masih di depan,
  * sehingga sistem mengizinkannya (activity terlihat = latar depan); dari sinilah aplikasi dibuka lagi lewat ikon baru, tanpa
- * bergantung pada izin "buka dari latar belakang" milik ROM. Transparan dan menutup dirinya sendiri begitu selesai.
+ * bergantung pada izin "buka dari latar belakang" milik ROM. Menutup dirinya sendiri begitu selesai.
+ *
+ * Tampilannya BUKAN transparan: layar penuh berlatar warna tema + ikon aplikasi, memudar masuk. Dulu transparan, jadi saat proses
+ * utama ditutup ROM pengguna melihat layar utama (terasa "keluar aplikasi"); kini terlihat seperti aplikasi dimulai ulang.
  */
 public class RelaunchActivity extends Activity {
   static final String EXTRA_ICON = "icon_id";
@@ -28,7 +34,29 @@ public class RelaunchActivity extends Activity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     iconId = getIntent() != null ? getIntent().getStringExtra(EXTRA_ICON) : null;
+    showRestartScreen();
     handler.postDelayed(this::launch, FIRST_DELAY_MS);
+  }
+
+  /** Layar "memulai ulang": latar sama dengan latar jendela MainActivity (tanpa kedipan) dan ikon aplikasi di tengah. */
+  private void showRestartScreen() {
+    int bg = getSharedPreferences(MainActivity.APPEARANCE_PREFS, MODE_PRIVATE).getInt(MainActivity.PREF_BG, 0xFF121212);
+    getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bg));
+    getWindow().setStatusBarColor(bg);
+    getWindow().setNavigationBarColor(bg);
+    FrameLayout root = new FrameLayout(this);
+    root.setBackgroundColor(bg);
+    try {
+      ImageView logo = new ImageView(this);
+      logo.setImageDrawable(getPackageManager().getApplicationIcon(getPackageName()));
+      int size = Math.round(96 * getResources().getDisplayMetrics().density);
+      root.addView(logo, new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+      logo.setAlpha(0f);
+      logo.animate().alpha(1f).setDuration(220L).start();
+    } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException ignored) {
+      // Tanpa ikon: layar polos berlatar tema tetap menutupi layar utama.
+    }
+    setContentView(root);
   }
 
   private void launch() {

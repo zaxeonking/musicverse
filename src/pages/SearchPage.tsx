@@ -54,12 +54,12 @@ export default function SearchPage() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">Cari</h1>
 
-      {/* Tanpa latar pekat: cahaya latar (mv-glow di AppShell) tetap menyambung di belakang kolom cari. Lapisan blur + pudar di
-          bawahnya hanya menjaga daftar yang tergulir tidak menabrak kolom cari. */}
+      {/* Tanpa latar pekat: cahaya latar (mv-glow di AppShell) tetap menyambung di belakang kolom cari. Lapisan blur tanpa warna, memudar di
+          atas dan bawah (tanpa tepi keras), hanya menjaga daftar yang tergulir tidak menabrak kolom cari. */}
       <div className="sticky top-0 z-10 -mx-4 px-4 py-2 lg:-mx-8 lg:px-8">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -top-2 -z-10 bottom-[-14px] bg-bg/30 backdrop-blur-xl [-webkit-mask-image:linear-gradient(to_bottom,black_65%,transparent)] [mask-image:linear-gradient(to_bottom,black_65%,transparent)]"
+          className="pointer-events-none absolute inset-x-0 -top-6 -z-10 bottom-[-14px] backdrop-blur-md [-webkit-mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)] [mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)]"
         />
         <label htmlFor="search-input" className="sr-only">
           Cari lagu berdasarkan judul atau artis

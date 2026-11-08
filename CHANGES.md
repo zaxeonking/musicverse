@@ -1,6 +1,6 @@
 # Riwayat perubahan MusicVerse (arsip)
 
-Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.8.md`.
+Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.51.85.md`.
 Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
 
 ## Daftar isi
