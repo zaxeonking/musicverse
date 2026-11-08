@@ -121,7 +121,13 @@ jobs:
             if ./gradlew --version; then break; fi
             echo "Gagal dengan $URL, coba sumber berikutnya..."
           done
-          ./gradlew assembleRelease --no-daemon
+          # Unduhan dependency sering kena 504 dari GitHub/Maven; yang sudah terunduh tersimpan, jadi ulangi saja.
+          for i in 1 2 3 4 5; do
+            ./gradlew assembleRelease --no-daemon && exit 0
+            echo "Build gagal (percobaan $i), ulangi setelah jeda..."
+            sleep $((i * 15))
+          done
+          exit 1
 
       - name: Tanda tangani APK
         if: steps.ver.outputs.build == 'true'
