@@ -281,7 +281,10 @@ export default function ArtistSearchPanel() {
         </div>
       )}
 
-      {body}
+      {/* Ganti tab Lagu/Album atau buka album: isi memudar masuk; kuncinya hanya tampilan, bukan fase muat, jadi tidak berulang. */}
+      <div key={inAlbum ? `album-${album.id}` : tab} className="mv-swap space-y-4">
+        {body}
+      </div>
 
       {sheetOpen && <ArtistPlaylistSheet artist={subject} songs={viewSongs} onClose={() => setSheetOpen(false)} onDone={showToast} />}
     </section>

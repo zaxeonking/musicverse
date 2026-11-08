@@ -425,9 +425,15 @@ const QUIZ: readonly QuizQuestion[] = [
     answer: 2,
     explain: 'Lagu Disukai selalu jadi kartu pertama di tab Playlist.',
   },
+  {
+    question: 'Bagaimana mengecilkan pemutar mini jadi disc?',
+    options: ['Geser ke samping', 'Geser ke bawah', 'Ketuk dua kali'],
+    answer: 0,
+    explain: 'Geser samping = jadi disc. Geser ke bawah menutup musik.',
+  },
 ]
 
-/** Tiga pertanyaan pilihan ganda. Jawaban salah boleh dicoba lagi; lulus = lencana di Pengaturan. */
+/** Empat pertanyaan pilihan ganda. Jawaban salah boleh dicoba lagi; lulus = lencana di Pengaturan. */
 function QuizPractice({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState(0)
   const [wrong, setWrong] = useState<ReadonlySet<number>>(new Set<number>())

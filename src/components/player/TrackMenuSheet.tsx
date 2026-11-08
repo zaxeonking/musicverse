@@ -2,7 +2,7 @@ import { ArrowRightLeft, Copy, Download, ExternalLink, FolderInput, FolderPlus, 
 import { writeClipboardText } from '../../native/clipboard'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { myPlaylistErrorText, useMyPlaylists } from '../../context/MyPlaylistsContext'
-import type { ToastAction, TrackMenuPlace } from '../../context/TrackMenuContext'
+import type { ToastAction, ToastTone, TrackMenuPlace } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { forgetAvailability } from '../../hooks/useTrackAvailability'
@@ -43,7 +43,7 @@ interface TrackMenuSheetProps {
   /** Waktu putar entri Riwayat yang ditekan lama; dipakai bersama place 'history'. */
   historyAt?: number
   onClose: () => void
-  onToast: (message: string, action?: ToastAction) => void
+  onToast: (message: string, action?: ToastAction, tone?: ToastTone) => void
 }
 
 /**
@@ -107,7 +107,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   }, [picking, relocate])
 
   const run = (action: () => QueueAddResult) => {
-    onToast(QUEUE_RESULT_TEXT[action()])
+    const result = action()
+    onToast(QUEUE_RESULT_TEXT[result], undefined, result === 'added' || result === 'moved' ? 'added' : undefined)
     onClose()
   }
 
@@ -121,6 +122,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
     const result = downloadTrack(track)
     onToast(
       result === 'queued' ? 'Mengunduh… lihat progres di Unduhan' : result === 'already' ? 'Lagu sudah diunduh' : 'Sedang diunduh',
+      undefined,
+      result === 'queued' ? 'added' : undefined,
     )
     onClose()
   }
@@ -128,7 +131,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
   const removeFromPlaylist = () => {
     if (!sourcePlaylist) return
     const result = removeTrack(sourcePlaylist.id, track.id)
-    onToast(result.ok ? 'Dihapus dari playlist' : myPlaylistErrorText(result.reason))
+    onToast(result.ok ? 'Dihapus dari playlist' : myPlaylistErrorText(result.reason), undefined, result.ok ? 'removed' : undefined)
     onClose()
   }
 
@@ -147,7 +150,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
 
   const deleteDownload = () => {
     void removeDownload(dlKey)
-    onToast('Unduhan dihapus')
+    onToast('Unduhan dihapus', undefined, 'removed')
     onClose()
   }
 
@@ -253,7 +256,7 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                   label="Hapus dari antrean"
                   onClick={() => {
                     player.removeUpcoming(upcomingPosition)
-                    onToast('Dihapus dari antrean')
+                    onToast('Dihapus dari antrean', undefined, 'removed')
                     onClose()
                   }}
                   danger

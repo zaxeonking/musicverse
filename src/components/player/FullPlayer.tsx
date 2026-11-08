@@ -31,12 +31,32 @@ import {
   subscribeSheet,
   subscribeSheetHold,
 } from '../../services/playerSheet'
+import { takeCoverOrigin, type CoverOrigin } from '../../services/coverOrigin'
+import { isSameSong } from '../../utils/sameSong'
 import SleepTimerSheet, { SleepTimerButton } from './SleepTimerSheet'
 
 /** Sampul kecil di mini player: titik awal/akhir terbang sampul. */
 const miniCoverRect = () => {
   const rect = document.querySelector<HTMLElement>('[data-mini-cover]')?.getBoundingClientRect()
   return rect && rect.width > 0 ? rect : null
+}
+
+/**
+ * Disc Player (gelembung): sampul berupa lingkaran 5px di dalam tombol disc. Dipakai bila kartu mini tidak ada, supaya sampul
+ * terbang ke/dari disc, bukan sekadar memudar. Kotak diukur dari tombol (bukan dari piringan yang berputar).
+ */
+const discCoverRect = (): Box | null => {
+  const rect = document.querySelector<HTMLElement>('[data-mini-disc]')?.getBoundingClientRect()
+  if (!rect || rect.width <= 0) return null
+  const inset = (5 / 56) * rect.width
+  return { left: rect.left + inset, top: rect.top + inset, width: rect.width - inset * 2 }
+}
+
+/** Radius sudut elemen sumber (px), dibatasi setengah lebarnya; cadangan 8 bila tak terbaca. */
+const radiusOf = (el: Element | null | undefined, width: number) => {
+  const target = el?.firstElementChild ?? el
+  const r = target ? parseFloat(getComputedStyle(target).borderTopLeftRadius) : Number.NaN
+  return Math.min(Number.isFinite(r) ? r : 8, width / 2)
 }
 
 /** Radius sudut sampul mini player (px), dibatasi setengah lebarnya; cadangan 8 bila tak terbaca. */
@@ -59,6 +79,10 @@ interface CoverGeometry {
   rFull: number
   /** Tidak ada sampul mini sebagai titik awal (gelembung / belum ada): sampul membesar sambil memudar. */
   fade: boolean
+  /** Radius ikut berinterpolasi (thumbnail daftar / disc bulat). Mini player biasa tetap memakai radius tetap yang murah. */
+  animateRadius?: boolean
+  /** Thumbnail daftar yang sedang "dipinjam": disembunyikan selama sampul terbang, dimunculkan lagi saat kembali. */
+  src?: HTMLElement
 }
 
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value)
@@ -165,6 +189,8 @@ export default function FullPlayer({
   const coverRef = useRef<HTMLDivElement>(null)
   const bgRef = useRef<HTMLDivElement>(null)
   const geoRef = useRef<CoverGeometry | null>(null)
+  // Thumbnail daftar yang diketuk untuk membuka pemutar ini (shared element); null bila dibuka dari mini player / seretan.
+  const originRef = useRef<CoverOrigin | null>(null)
   const itemsRef = useRef<HTMLElement[]>([])
   // Lapisan dipasang karena seretan dari mini player dan belum resmi terbuka: tidak interaktif.
   const dragHold = useSyncExternalStore(subscribeSheetHold, getSheetHold, () => false)
@@ -283,6 +309,13 @@ export default function FullPlayer({
       // Radius tetap (kelas bawaan): mengubahnya tiap frame menggambar ulang sampul + bayangan besar. Sudut tampak ikut
       // membesar bersama skala, cukup dekat dengan sudut sampul mini.
       cover.style.opacity = geo.fade && p < BG_FADE ? String(p / BG_FADE) : ''
+      if (geo.animateRadius) {
+        // Radius lokal dibagi skala = sudut tampak yang mengalir dari sudut sumber ke sudut penuh. Hanya untuk thumbnail/disc (sekali ~0,4 dtk).
+        const r0 = geo.rMini / s0
+        cover.style.borderRadius = p >= 1 ? '' : `${r0 + (geo.rFull - r0) * p}px`
+      }
+      // Thumbnail sumber tidak boleh terlihat ganda dengan sampul yang terbang di atasnya.
+      if (geo.src) geo.src.style.visibility = p > 0.002 ? 'hidden' : ''
       if (slotRef.current) slotRef.current.style.opacity = ''
     } else if (slotRef.current) {
       // Lirik terbuka (tidak ada sampul): seluruh slot memudar masuk bersama elemen lain.
@@ -296,26 +329,45 @@ export default function FullPlayer({
     const dialog = dialogRef.current
     const cover = coverRef.current
     itemsRef.current = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('.fp-item')) : []
+    const prevSrc = geoRef.current?.src
     if (!cover || coverSize <= 0) {
+      if (prevSrc) prevSrc.style.visibility = ''
       geoRef.current = null
       return
     }
     // Dialog memenuhi layar dan menjadi offsetParent sampul, jadi offset = koordinat layar saat tidak bergeser.
     const full: Box = { left: cover.offsetLeft, top: cover.offsetTop, width: coverSize }
     const rFull = parseFloat(getComputedStyle(cover).borderTopLeftRadius) || SHEET_RADIUS
-    const miniRect = miniCoverRect()
-    if (miniRect) {
-      geoRef.current = { mini: miniRect, full, rMini: miniCoverRadius(miniRect.width), rFull, fade: false }
-    } else {
-      // Mini player berupa gelembung / belum ada: sampul membesar dari dekat dasar layar sambil memudar.
-      const mini: Box = { left: window.innerWidth / 2 - 22, top: getSheetTravel() - 56, width: 44 }
-      geoRef.current = { mini, full, rMini: 22, rFull, fade: true }
+    // 1) Shared element: thumbnail lagu yang sama di daftar tempat pemutar dibuka (masih terpasang dan terlihat di layar).
+    const origin = originRef.current
+    let geo: CoverGeometry | null = null
+    if (origin && origin.el.isConnected && currentTrack && isSameSong(origin.track, currentTrack)) {
+      const r = origin.el.getBoundingClientRect()
+      if (r.width > 0 && r.bottom > 0 && r.top < window.innerHeight) {
+        geo = { mini: r, full, rMini: radiusOf(origin.el, r.width), rFull, fade: false, animateRadius: true, src: origin.el }
+      }
     }
-  }, [coverSize])
+    // 2) Sampul di kartu mini player.
+    const miniRect = geo ? null : miniCoverRect()
+    if (!geo && miniRect) geo = { mini: miniRect, full, rMini: miniCoverRadius(miniRect.width), rFull, fade: false }
+    // 3) Disc Player (gelembung): terbang ke/dari piringan bulat.
+    const disc = geo ? null : discCoverRect()
+    if (!geo && disc) geo = { mini: disc, full, rMini: disc.width / 2, rFull, fade: false, animateRadius: true }
+    // 4) Tidak ada titik awal: membesar dari dekat dasar layar sambil memudar.
+    if (!geo) {
+      const mini: Box = { left: window.innerWidth / 2 - 22, top: getSheetTravel() - 56, width: 44 }
+      geo = { mini, full, rMini: 22, rFull, fade: true }
+    }
+    if (prevSrc && prevSrc !== geo.src) prevSrc.style.visibility = ''
+    geoRef.current = geo
+  }, [coverSize, currentTrack])
 
   // Dibuka lewat ketukan (bukan seretan): ukur jarak tempuh dari mini player yang sedang diam dan mulai dari progress 0.
+  // Bila diketuk dari baris daftar, ambil thumbnail-nya sebagai titik awal sampul (shared element). StrictMode menjalankan efek dua kali: jangan timpa dengan null.
   useLayoutEffect(() => {
     if (getSheetHold()) return
+    const taken = takeCoverOrigin()
+    if (taken) originRef.current = taken
     measureSheetTravel()
     setSheetProgress(0)
   }, [])
@@ -342,6 +394,9 @@ export default function FullPlayer({
     () => () => {
       stopSheetAnimation()
       setSheetProgress(0)
+      // Thumbnail daftar yang dipinjam sampul harus tampil lagi.
+      const src = geoRef.current?.src
+      if (src) src.style.visibility = ''
     },
     [],
   )
@@ -352,10 +407,20 @@ export default function FullPlayer({
   useEffect(() => {
     if (closing) {
       closingRef.current = true
+      // Ditutup dari posisi penuh (tombol turun / Kembali): ukur ulang tujuan, supaya sampul kembali ke thumbnail yang SEKARANG
+      // (atau ke mini player/disc bila lagunya sudah berganti). Ditutup lewat seretan: tujuan dari saat dibuka dipertahankan, tanpa lompatan.
+      if (getSheetProgress() > 0.98) measureGeometry()
       animateSheet(0, undefined, () => onClosedRef.current?.())
       return
     }
     closingRef.current = false
+    // Dibuka lagi (dari baris daftar) selagi pemutar ini masih terpasang menutup: pakai thumbnail yang baru.
+    const taken = takeCoverOrigin()
+    if (taken) {
+      originRef.current = taken
+      measureGeometry()
+      renderSheet(getSheetProgress())
+    }
     if (!getSheetHold()) animateSheet(1)
   }, [closing])
 
@@ -592,7 +657,7 @@ export default function FullPlayer({
               style={{ width: coverSize, height: coverSize }}
               className="shrink-0 origin-top-left select-none overflow-hidden rounded-[1.75rem] shadow-2xl shadow-black/60 will-change-transform [-webkit-touch-callout:none]"
             >
-              <CoverArt cover={now.cover} src={now.coverSrc} />
+              <CoverArt cover={now.cover} src={now.coverSrc} crossfade />
             </div>
           )}
         </div>
@@ -601,7 +666,7 @@ export default function FullPlayer({
           {lyricsFullActive ? (
             <div key="fs-row" className="fp-item flex animate-fs-in items-center gap-3 motion-reduce:animate-none">
               <div {...press} className="h-12 w-12 shrink-0 select-none overflow-hidden rounded-lg shadow-lg shadow-black/50 [-webkit-touch-callout:none]">
-                <CoverArt cover={now.cover} src={now.coverSrc} />
+                <CoverArt cover={now.cover} src={now.coverSrc} crossfade />
               </div>
               <div {...press} className="min-w-0 flex-1 select-none [-webkit-touch-callout:none]">
                 <h2 title={now.title} className="line-clamp-1 font-display text-lg font-bold leading-tight text-ink">
@@ -678,12 +743,13 @@ export default function FullPlayer({
             )}
           </div>
 
-          {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. */}
+          {/* Baris 1: timer · sebelumnya · putar · berikutnya · acak. Grid 5 kolom dengan kolom tengah tetap selebar tombol putar:
+              tombol putar selalu tepat di tengah layar (sejajar tombol lirik di baris 2) dan tidak ada yang meluber ke kanan. */}
           <Collapse hidden={lyricsFullActive}>
           <div className="fp-item">
             <TransportControls
               size="xl"
-              className="!justify-between"
+              className="!grid !grid-cols-[repeat(2,minmax(0,1fr))_5rem_repeat(2,minmax(0,1fr))] !gap-0 [&>:nth-child(1)]:justify-self-start [&>:nth-child(2)]:justify-self-center [&>:nth-child(4)]:justify-self-center [&>:nth-child(5)]:justify-self-end"
               leading={
                 <span data-tour="sleep-timer" className="flex">
                   <SleepTimerButton variant="icon" onClick={() => setTimerOpen(true)} />

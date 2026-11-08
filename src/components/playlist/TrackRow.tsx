@@ -3,11 +3,14 @@ import { memo, useMemo } from 'react'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useLongPress } from '../../hooks/useLongPress'
+import { usePulse } from '../../hooks/usePulse'
 import { OFFLINE_BLOCK_TEXT } from '../../hooks/useOfflineBlock'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
+import { markCoverOrigin } from '../../services/coverOrigin'
 import { fallbackCover } from '../../utils/fallbackCover'
 import CoverArt from '../ui/CoverArt'
+import PlayingBars from '../ui/PlayingBars'
 
 /**
  * Kolom dipakai bersama baris dan kepala kolom agar sejajar.
@@ -54,6 +57,9 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
   const longPress = useLongPress(() => openTrackMenu(track, { fromSearch, place: fromSearch ? 'search' : 'playlist' }))
   const number = index + 1
   const isCurrent = activity !== 'none'
+  // Umpan balik kecil: tanda "sudah di playlist" membal saat muncul/hilang, tombol putar membal saat status lagu berganti.
+  const checkRef = usePulse<SVGSVGElement>(inPlaylists.length > 0, 1.3)
+  const playRef = usePulse<HTMLButtonElement>(activity, 1.12, 300)
   const highlighted = selected || isCurrent
   const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
   const by = track.artists ? ` oleh ${track.artists}` : ''
@@ -70,10 +76,11 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
 
   return (
     <li
+      data-row-id={track.id}
       data-tour="track-row"
       aria-current={selected ? 'true' : undefined}
       aria-disabled={locked || offlineBlocked || undefined}
-      onClick={() => {
+      onClick={(event) => {
         if (locked) return
         if (offlineBlocked) {
           showToast(OFFLINE_BLOCK_TEXT)
@@ -82,6 +89,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         onSelect(track.id)
         // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh.
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay(track, index)
+        markCoverOrigin(event.currentTarget, track)
         openFullPlayer()
       }}
       {...(locked ? {} : longPress)}
@@ -97,11 +105,12 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
         className={`text-center text-sm tabular-nums ${highlighted ? 'font-semibold text-accent' : 'text-ink-muted'}`}
       >
         <span className="sr-only">Nomor </span>
-        {number}
+        {/* Lagu aktif: nomor diganti batang equalizer (kotak 1,5rem yang sama, tata letak tidak bergeser). */}
+        {activity === 'playing' || activity === 'paused' ? <PlayingBars playing={activity === 'playing'} /> : number}
       </span>
 
       {/* Lagu yang sudah ada di playlist: sampul ikut sedikit redup (tetap jelas), judul abu-abu terang. */}
-      <div className={inPlaylists.length > 0 && !highlighted ? 'opacity-70' : undefined}>
+      <div data-cover-thumb="" className={inPlaylists.length > 0 && !highlighted ? 'opacity-70' : undefined}>
         <CoverArt cover={fallback} src={track.cover} />
       </div>
 
@@ -119,7 +128,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
           }`}
         >
           {inPlaylists.length > 0 && (
-            <CheckCircle2 className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" aria-label="Sudah ada di playlist" />
+            <CheckCircle2 ref={checkRef} className="mr-1.5 inline h-4 w-4 align-[-2px] text-accent" aria-label="Sudah ada di playlist" />
           )}
           {track.title}
         </p>
@@ -140,6 +149,7 @@ function TrackRow({ track, index, selected, activity = 'none', onSelect, onPlay,
       <p className="hidden text-right text-sm tabular-nums text-ink-muted sm:block">{track.duration}</p>
 
       <button
+        ref={playRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation()

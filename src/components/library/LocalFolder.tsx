@@ -2,9 +2,12 @@ import { ChevronDown, Loader2, Play, RotateCw, Smartphone } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import PauseLines from '../ui/PauseLines'
 import CoverArt from '../ui/CoverArt'
+import { CoverPlayingBadge } from '../ui/PlayingBars'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { markCoverOrigin } from '../../services/coverOrigin'
+import { usePulse } from '../../hooks/usePulse'
 import { useLongPress } from '../../hooks/useLongPress'
 import {
   getLocalState,
@@ -55,6 +58,7 @@ function LocalRow({ item, track, activity, onPlay, onToggle }: LocalRowProps) {
   // Tahan lama: menu lagu yang sama dengan di tempat lain (antrean, tambah ke playlist). Tanpa opsi unduh/hapus: berkasnya bukan milik MusicVerse.
   const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true, place: 'downloads' }))
   const isCurrent = activity !== 'none'
+  const playRef = usePulse<HTMLButtonElement>(activity, 1.12, 300)
   const Icon = activity === 'playing' ? PauseLines : activity === 'loading' ? Loader2 : Play
   const playLabel =
     activity === 'playing'
@@ -68,8 +72,9 @@ function LocalRow({ item, track, activity, onPlay, onToggle }: LocalRowProps) {
   return (
     <li
       aria-current={isCurrent ? 'true' : undefined}
-      onClick={() => {
+      onClick={(event) => {
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay()
+        markCoverOrigin(event.currentTarget, track)
         openFullPlayer()
       }}
       {...longPress}
@@ -77,8 +82,9 @@ function LocalRow({ item, track, activity, onPlay, onToggle }: LocalRowProps) {
         isCurrent ? 'bg-raised shadow-now' : 'hover:bg-card active:bg-raised'
       }`}
     >
-      <span className="w-12 shrink-0">
+      <span data-cover-thumb="" className="relative w-12 shrink-0">
         <CoverArt cover={fallback} src={cover} />
+        <CoverPlayingBadge activity={activity} />
       </span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-base font-medium ${isCurrent ? 'text-accent' : 'text-ink'}`}>{item.title}</span>
@@ -88,6 +94,7 @@ function LocalRow({ item, track, activity, onPlay, onToggle }: LocalRowProps) {
         </span>
       </span>
       <button
+        ref={playRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation()

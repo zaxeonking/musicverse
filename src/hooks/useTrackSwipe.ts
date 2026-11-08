@@ -44,9 +44,11 @@ export function useTrackSwipe(resolve: (index: number) => PlaylistTrack | undefi
     if (direction > 0) {
       // Offline dan belum diunduh: tidak bisa diputar, jadi tidak ditambahkan ke antrean.
       if (blocked(track)) return showToast(OFFLINE_BLOCK_TEXT)
-      return showToast(QUEUE_RESULT_TEXT[actions.addToQueue(track, { fromSearch })])
+      const added = actions.addToQueue(track, { fromSearch })
+      return showToast(QUEUE_RESULT_TEXT[added], undefined, added === 'added' || added === 'moved' ? 'added' : undefined)
     }
     const result = toggleLike(track)
-    showToast(result.ok ? (result.value.liked ? 'Ditambahkan ke Lagu Disukai' : 'Dihapus dari Lagu Disukai') : myPlaylistErrorText(result.reason))
+    if (!result.ok) return showToast(myPlaylistErrorText(result.reason))
+    showToast(result.value.liked ? 'Ditambahkan ke Lagu Disukai' : 'Dihapus dari Lagu Disukai', undefined, result.value.liked ? 'like' : 'unlike')
   }, hint)
 }

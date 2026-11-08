@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, ListChecks, ListMusic, Loader2, MoreHorizontal, Pause, Pencil, Pin, PinOff, Play, RefreshCw, Trash2, X } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
+import PlayingBars from '../components/ui/PlayingBars'
 import RefreshChoiceSheet from '../components/library/RefreshChoiceSheet'
 import TrackSelectionBar from '../components/library/TrackSelectionBar'
 import TrackTransferSheet from '../components/library/TrackTransferSheet'
@@ -12,7 +13,9 @@ import { myPlaylistErrorText, useMyPlaylists } from '../context/MyPlaylistsConte
 import { useTrackMenu } from '../context/TrackMenuContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback'
+import { useListFlip } from '../hooks/useListFlip'
 import { useLongPress } from '../hooks/useLongPress'
+import { usePulse } from '../hooks/usePulse'
 import { OFFLINE_BLOCK_TEXT, useOfflineBlock } from '../hooks/useOfflineBlock'
 import { useTrackSwipe } from '../hooks/useTrackSwipe'
 import { bulkDownloadText, downloadTracks } from '../native/downloads'
@@ -60,6 +63,25 @@ function TrackLine({
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
   const current = activity !== 'none'
+  // Status lagu berganti (putar/jeda/memuat): tombol sampul membal kecil.
+  const coverBtnRef = usePulse<HTMLButtonElement>(activity, 1.1, 300)
+  const removing = useRef(false)
+  // Hapus: baris memudar dan bergeser keluar dulu, baru dihapus dari data; baris di bawahnya lalu meluncur naik (useListFlip).
+  const removeAnimated = (event: { currentTarget: HTMLElement }) => {
+    const row = event.currentTarget.closest('li')
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (removing.current) return
+    if (!row || reduce || typeof row.animate !== 'function') return onRemove()
+    removing.current = true
+    row.style.pointerEvents = 'none'
+    row
+      .animate([{ opacity: 1, transform: 'translate3d(0, 0, 0)' }, { opacity: 0, transform: 'translate3d(28px, 0, 0)' }], {
+        duration: 180,
+        easing: 'cubic-bezier(0.4, 0, 1, 1)',
+        fill: 'forwards',
+      })
+      .finished.then(onRemove, onRemove)
+  }
   const play = () => {
     if (offlineBlocked) return showToast(OFFLINE_BLOCK_TEXT)
     onPlay()
@@ -67,7 +89,7 @@ function TrackLine({
 
   if (selecting) {
     return (
-      <li>
+      <li data-row-id={track.id}>
         <button
           type="button"
           role="checkbox"
@@ -101,10 +123,12 @@ function TrackLine({
   return (
     <li
       {...press}
+      data-row-id={track.id}
       aria-disabled={offlineBlocked || undefined}
       className={`flex items-center gap-2 rounded-md px-2 py-2 tap-row hover:bg-raised ${current ? 'bg-raised' : ''} ${offlineBlocked ? 'opacity-50' : ''}`}
     >
       <button
+        ref={coverBtnRef}
         type="button"
         onClick={play}
         aria-label={`${activity === 'playing' ? 'Jeda' : 'Putar'} ${track.title}`}
@@ -112,7 +136,11 @@ function TrackLine({
       >
         <CoverArt cover={fallback} src={track.cover} />
         <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/40 text-white">
-          <Icon className={`h-5 w-5 ${activity === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
+          {activity === 'playing' || activity === 'paused' ? (
+            <PlayingBars playing={activity === 'playing'} />
+          ) : (
+            <Icon className={`h-5 w-5 ${activity === 'loading' ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
+          )}
         </span>
       </button>
       <button type="button" onClick={play} className="min-w-0 flex-1 text-left focus-ring rounded-md">
@@ -129,7 +157,7 @@ function TrackLine({
         <button type="button" onClick={() => openTrackMenu(track, { fromPlaylistId: playlistId, place: 'my-playlist' })} aria-label={`Opsi untuk ${track.title}`} className="icon-btn h-9 w-9">
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" onClick={onRemove} aria-label={`Hapus ${track.title} dari playlist`} className="icon-btn h-9 w-9 hover:text-danger">
+        <button type="button" onClick={removeAnimated} aria-label={`Hapus ${track.title} dari playlist`} className="icon-btn h-9 w-9 hover:text-danger">
           <Trash2 className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
@@ -195,6 +223,10 @@ export default function MyPlaylistPage() {
       return next.size === prev.size ? prev : next
     })
   }, [selecting, trackIdsKey])
+
+  // Naik/turun atau hapus: baris lain meluncur ke tempat barunya, bukan melompat.
+  const listRef = useRef<HTMLUListElement>(null)
+  useListFlip(listRef, trackIdsKey)
 
   if (!playlist) {
     return (
@@ -450,7 +482,7 @@ export default function MyPlaylistPage() {
           title="Playlist ini masih kosong"
         />
       ) : (
-        <ul {...swipeHandlers} className="mv-list touch-pan-y">
+        <ul ref={listRef} {...swipeHandlers} className="mv-list touch-pan-y">
           {tracks.map((track, index) => (
             <TrackLine
               key={track.id}
@@ -467,7 +499,7 @@ export default function MyPlaylistPage() {
               onRemove={() => {
                 const result = removeTrack(playlist.id, track.id)
                 if (!result.ok) fail(result.reason)
-                else showToast('Dihapus dari playlist')
+                else showToast('Dihapus dari playlist', undefined, 'removed')
               }}
               onMove={(to) => {
                 const result = moveTrack(playlist.id, index, to)

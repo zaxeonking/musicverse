@@ -6,6 +6,7 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import { formatTime } from '../../utils/formatTime'
 import Action from './SheetAction'
 import { useExitGhost } from '../../hooks/useExitGhost'
+import { useSheetDrag } from '../../hooks/useSheetDrag'
 
 const OPTIONS_MINUTES = [15, 30, 45, 60] as const
 /** Batas menit untuk timer buatan sendiri (12 jam). */
@@ -73,6 +74,7 @@ export function SleepTimerButton({ onClick, variant = 'pill' }: { onClick: () =>
  */
 export default function SleepTimerSheet({ onClose }: { onClose: () => void }) {
   const exitRef = useExitGhost()
+  useSheetDrag(exitRef)
   const { endsAt, atTrackEnd, active, startMinutes, startAtTrackEnd, cancel } = useSleepTimer()
   const remaining = useRemainingSeconds(endsAt)
   const sheetRef = useRef<HTMLDivElement>(null)

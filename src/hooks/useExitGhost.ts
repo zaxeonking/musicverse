@@ -26,9 +26,12 @@ function playExit(source: HTMLElement): (() => void) | null {
     el.style.animation = 'none'
     // Latar (penutup layar): memudar. Panel: turun keluar layar sambil memudar sedikit.
     if (el.getAttribute('aria-hidden') === 'true') {
-      el.animate([{ opacity: 1 }, { opacity: 0 }], options)
+      // Mulai dari opacity saat ini (latar yang sedang meredup karena sheet diseret), bukan melompat ke penuh.
+      el.animate([{ opacity: el.style.opacity || 1 }, { opacity: 0 }], options)
     } else if (el.classList.contains('bottom-0')) {
-      el.animate([{ transform: 'translateY(0)', opacity: 1 }, { transform: 'translateY(100%)', opacity: 0.6 }], options)
+      // Sheet yang ditutup lewat seretan: lanjut dari posisi jari (transform inline), bukan kembali ke 0 lalu turun.
+      const from = el.style.transform || 'translate3d(0, 0, 0)'
+      el.animate([{ transform: from, opacity: 1 }, { transform: 'translate3d(0, 100%, 0)', opacity: 0.6 }], options)
     } else {
       el.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.96)' }], options)
     }

@@ -30,7 +30,10 @@ export default function HomePage() {
         />
       </section>
 
-      {mode === 'artist' ? <ArtistSearchPanel /> : <PlaylistView />}
+      {/* Ganti kategori (Lagu / Artis): isi baru memudar masuk, bukan muncul mendadak. */}
+      <div key={mode} className="mv-swap">
+        {mode === 'artist' ? <ArtistSearchPanel /> : <PlaylistView />}
+      </div>
     </div>
   )
 }

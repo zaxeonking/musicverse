@@ -182,6 +182,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           else if (e.key === 'ArrowRight') onSideChange('right')
           else if (e.key === 'ArrowUp') onExpand()
         }}
+        data-mini-disc=""
         aria-label={`Perbesar pemutar: ${now.title}${now.artists ? `, ${now.artists}` : ''}. Tahan untuk ${playing ? 'jeda' : 'putar'}`}
         style={{
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
@@ -195,7 +196,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           className="absolute inset-[5px] animate-disc overflow-hidden rounded-full motion-reduce:animate-none"
           style={{ animationPlayState: playing && !loading ? 'running' : 'paused', opacity: loading ? 0.55 : 1 }}
         >
-          <CoverArt cover={now.cover} src={now.coverSrc} round />
+          <CoverArt cover={now.cover} src={now.coverSrc} round instant />
           <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
         </span>
         <ProgressRing error={error} loading={loading} />

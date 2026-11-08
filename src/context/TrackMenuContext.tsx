@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Check, Heart, HeartOff, Trash2 } from 'lucide-react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import TrackMenuSheet from '../components/player/TrackMenuSheet'
 import type { PlaylistTrack } from '../types/spotify'
 import Presence from '../components/ui/Presence'
@@ -25,6 +26,11 @@ export interface TrackMenuOptions {
   historyAt?: number
 }
 
+/** Jenis umpan balik toast: ikon kecil yang membal di depan pesan (suka, batal suka, ditambahkan, dihapus). Tanpa `tone` = pesan biasa. */
+export type ToastTone = 'added' | 'removed' | 'like' | 'unlike'
+
+const TONE_ICON = { added: Check, removed: Trash2, like: Heart, unlike: HeartOff } as const
+
 /** Tombol di dalam toast (mis. Urungkan). Toast yang punya tombol tampil lebih lama. */
 export interface ToastAction {
   label: string
@@ -35,7 +41,7 @@ interface TrackMenuApi {
   /** Membuka menu opsi untuk satu lagu dari daftar mana pun. Identitasnya stabil. */
   openTrackMenu: (track: PlaylistTrack, options?: TrackMenuOptions) => void
   /** Menampilkan pesan singkat di bawah layar. */
-  showToast: (message: string, action?: ToastAction) => void
+  showToast: (message: string, action?: ToastAction, tone?: ToastTone) => void
 }
 
 const TrackMenuContext = createContext<TrackMenuApi | null>(null)
@@ -56,7 +62,7 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
     place?: TrackMenuPlace
     historyAt?: number
   } | null>(null)
-  const [toast, setToast] = useState<{ id: number; message: string; action?: ToastAction } | null>(null)
+  const [toast, setToast] = useState<{ id: number; message: string; action?: ToastAction; tone?: ToastTone } | null>(null)
   const toastTimer = useRef<number | null>(null)
 
   const openTrackMenu = useCallback(
@@ -72,9 +78,9 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
   )
   const closeMenu = useCallback(() => setMenu(null), [])
 
-  const showToast = useCallback((message: string, action?: ToastAction) => {
+  const showToast = useCallback((message: string, action?: ToastAction, tone?: ToastTone) => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
-    setToast({ id: Date.now(), message, action })
+    setToast({ id: Date.now(), message, action, tone })
     toastTimer.current = window.setTimeout(() => setToast(null), action ? TOAST_ACTION_MS : TOAST_MS)
   }, [])
   useEffect(
@@ -111,6 +117,17 @@ export function TrackMenuProvider({ children }: { children: ReactNode }) {
             key={toast.id}
             className="mv-pop flex max-w-sm items-center gap-2 rounded-full bg-raised py-2.5 pl-4 pr-4 text-center text-sm font-medium text-ink shadow-xl shadow-black/50"
           >
+            {toast.tone && (() => {
+              const ToneIcon = TONE_ICON[toast.tone]
+              return (
+                <ToneIcon
+                  aria-hidden="true"
+                  style={{ '--mv-delay': '90ms' } as CSSProperties}
+                  className={`mv-pop -ml-1 h-4 w-4 shrink-0 ${toast.tone === 'removed' || toast.tone === 'unlike' ? 'text-ink-muted' : 'text-accent'}`}
+                  fill={toast.tone === 'like' ? 'currentColor' : 'none'}
+                />
+              )
+            })()}
             <p className="min-w-0">{toast.message}</p>
             {toast.action && (
               <button

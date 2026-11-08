@@ -8,6 +8,7 @@ import CoverArt from '../ui/CoverArt'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import Action from './SheetAction'
 import { useExitGhost } from '../../hooks/useExitGhost'
+import { useSheetDrag } from '../../hooks/useSheetDrag'
 
 const FOCUS = 'focus-ring'
 
@@ -41,6 +42,7 @@ export default function TrackActionSheet({
   onClose,
 }: TrackActionSheetProps) {
   const exitRef = useExitGhost()
+  useSheetDrag(exitRef)
   useOverlayHistory(true, onClose)
   const sheetRef = useRef<HTMLDivElement>(null)
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])

@@ -13,6 +13,8 @@ import { describeMainButton } from './PlayerControls'
 import TrackActionSheet from './TrackActionSheet'
 import UpcomingList from './UpcomingList'
 import { useExitGhost } from '../../hooks/useExitGhost'
+import { useSheetDrag } from '../../hooks/useSheetDrag'
+import PlayingBars from '../ui/PlayingBars'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
 const FOCUS = 'focus-ring'
@@ -29,6 +31,7 @@ function TrackCover({ track }: { track: PlaylistTrack }) {
  */
 export default function QueuePanel({ onClose }: { onClose: () => void }) {
   const exitRef = useExitGhost()
+  useSheetDrag(exitRef)
   const {
     queue,
     currentIndex,
@@ -174,7 +177,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
               className={`flex w-full items-center gap-3 rounded-md bg-raised px-2 py-2 text-left shadow-now aria-disabled:cursor-default ${FOCUS}`}
             >
               <span className="w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-accent" aria-hidden="true">
-                {currentIndex + 1}
+                {status === 'playing' || status === 'paused' ? <PlayingBars playing={status === 'playing'} /> : currentIndex + 1}
               </span>
               <span className="w-11 shrink-0">
                 <TrackCover track={currentTrack} />

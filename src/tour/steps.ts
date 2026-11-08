@@ -1,4 +1,7 @@
-export type TourAnimation = 'swipe' | 'press' | 'tap'
+export type TourAnimation = 'swipe' | 'press' | 'tap' | 'roll' | 'down'
+
+/** Peragaan animasi kecil di dalam kartu (tidak butuh lagu yang sedang diputar). */
+export type DemoKind = 'mini-roll' | 'mini-close' | 'disc-side' | 'theme'
 
 /** Latihan langsung di dalam kartu (baris contoh yang asli bisa digeser / ditahan, tanpa mengubah data pengguna). */
 export type PracticeKind = 'swipe-track' | 'press-track' | 'swipe-playlist' | 'save-track' | 'like-track' | 'select-tracks' | 'quiz'
@@ -17,6 +20,8 @@ export interface TourStep {
   missing?: string
   /** Peragaan jari di atas sorotan. */
   animate?: TourAnimation
+  /** Peragaan animasi gerakan di dalam kartu (berulang), mis. kartu bergulir jadi disc. */
+  demo?: DemoKind
   /** Mengetuk elemen yang disorot langsung melanjutkan ke langkah berikutnya (ketukannya tetap diteruskan ke elemen). */
   advanceOnTargetClick?: boolean
   /** Latihan interaktif: kartu memuat baris contoh; selesai dilatih = lanjut otomatis (tombol Lanjut tetap ada). */
@@ -158,7 +163,15 @@ export const TOUR_STEPS: readonly TourStep[] = [
     target: 'settings-list',
     nativeOnly: true,
     title: 'Atur sesukamu',
-    body: 'Atur syarat unduhan, mode pemutaran, equalizer 10 band, cadangan dan pemulihan data, sampai cek pembaruan. Tombol Tutorial di bawahnya mengulang panduan ini.',
+    body: 'Atur syarat unduhan, mode pemutaran, equalizer 10 band, tema, cadangan dan pemulihan data, sampai cek pembaruan. Tombol Tutorial di bawahnya mengulang panduan ini.',
+  },
+  {
+    id: 'settings-theme',
+    route: '/settings/theme',
+    demo: 'theme',
+    nativeOnly: true,
+    title: 'Tema sesukamu',
+    body: 'Pilih dari 15 tema siap pakai atau racik sendiri. Ganti gaya permukaan (Solid, Kaca, Garis), ukuran teks, dan cahaya latar. Tombol Acak membuat tema serasi, dan tema favorit bisa disimpan atau dibagikan lewat kode.',
   },
   {
     id: 'player',
@@ -168,6 +181,33 @@ export const TOUR_STEPS: readonly TourStep[] = [
     title: 'Pemutar',
     body: 'Ketuk pemutar mini untuk membuka pemutar penuh: lirik, antrean, dan sleep timer.',
     missing: 'Saat lagu diputar, pemutar mini muncul di bawah. Ketuk untuk membuka pemutar penuh: lirik, antrean, dan sleep timer.',
+  },
+  {
+    id: 'mini-roll',
+    route: '/',
+    target: 'mini-player',
+    animate: 'roll',
+    demo: 'mini-roll',
+    title: 'Geser jadi disc',
+    body: 'Geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu, dan disc terus berputar saat lagu diputar. Ketuk disc untuk membesar lagi.',
+    missing: 'Saat lagu diputar, geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu. Ketuk disc untuk membesar lagi.',
+  },
+  {
+    id: 'mini-disc',
+    route: '/',
+    demo: 'disc-side',
+    title: 'Main-main dengan disc',
+    body: 'Seret disc ke sisi layar lain, dan ia menempel dengan getar kecil. Tahan disc untuk putar atau jeda, geser ke atas untuk membuka pemutar penuh. Cincin di tepinya menunjukkan progres lagu.',
+  },
+  {
+    id: 'mini-close',
+    route: '/',
+    target: 'mini-player',
+    animate: 'down',
+    demo: 'mini-close',
+    title: 'Tutup musik',
+    body: 'Geser pemutar mini ke bawah: kartu tenggelam ke belakang menu bawah dan musik berhenti. Lewat batas getar kecil, lepas jari untuk menutup. Belum sampai? Lepas saja, kartu kembali.',
+    missing: 'Geser pemutar mini ke bawah untuk menutup musik: kartu tenggelam ke belakang menu bawah dan pemutar dikosongkan. Putar lagu dulu untuk mencobanya.',
   },
   {
     id: 'player-timer',
@@ -201,8 +241,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/',
     practice: 'quiz',
     title: 'Kuis kilat',
-    body: 'Tiga pertanyaan untuk mengecek apa yang barusan kamu pelajari. Lulus, dan kamu dapat lencana di Pengaturan.',
-    task: 'Jawab 3 pertanyaan',
+    body: 'Empat pertanyaan untuk mengecek apa yang barusan kamu pelajari. Lulus, dan kamu dapat lencana di Pengaturan.',
+    task: 'Jawab 4 pertanyaan',
   },
   {
     id: 'finish',
@@ -288,6 +328,50 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         nativeOnly: true,
         title: 'Baru: kuis tutorial',
         body: 'Ulangi Tutorial dari sini dan selesaikan kuis kilat di akhirnya untuk mendapat lencana Lulus tutorial.',
+      },
+    ],
+  },
+  {
+    id: '0.5.50.4',
+    steps: [
+      {
+        id: 'wn-mini-roll',
+        route: '/',
+        target: 'mini-player',
+        animate: 'roll',
+        demo: 'mini-roll',
+        title: 'Baru: geser jadi disc',
+        body: 'Geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu. Ketuk disc untuk membesar lagi, seret untuk pindah sisi, tahan untuk putar atau jeda.',
+        missing: 'Saat lagu diputar, geser pemutar mini ke kiri atau kanan: kartu bergulir mengerut jadi disc di sisi itu. Ketuk disc untuk membesar lagi.',
+      },
+      {
+        id: 'wn-mini-close',
+        route: '/',
+        target: 'mini-player',
+        animate: 'down',
+        demo: 'mini-close',
+        title: 'Baru: geser bawah = tutup musik',
+        body: 'Geser pemutar mini ke bawah untuk menutup musik: kartu tenggelam ke belakang menu bawah. Dulu geser bawah menjadikannya disc, sekarang itu tugas geser samping.',
+        missing: 'Geser pemutar mini ke bawah untuk menutup musik (dulu geser bawah menjadikannya disc, sekarang itu tugas geser samping). Putar lagu dulu untuk mencobanya.',
+      },
+      {
+        id: 'wn-theme',
+        route: '/settings/theme',
+        demo: 'theme',
+        nativeOnly: true,
+        title: 'Baru: gaya tema lebih lengkap',
+        body: 'Di Pengaturan > Tema: gaya permukaan Solid, Kaca, atau Garis, ukuran teks, kekuatan cahaya latar, dan 7 tema siap pakai baru. Tombol Acak dan tema tersimpan juga ikut.',
+      },
+    ],
+  },
+  {
+    id: '0.5.50.7',
+    steps: [
+      {
+        id: 'wn-anim',
+        route: '/',
+        title: 'Baru: animasi lebih halus',
+        body: 'Sampul terbang dari daftar ke pemutar (dan ke disc), menu bawah masuk dengan pegas dan bisa diseret, penanda equalizer di lagu yang sedang diputar, serta umpan balik kecil saat suka, antrean, playlist, dan unduhan. Mengikuti pengaturan Kurangi gerakan.',
       },
     ],
   },

@@ -3,6 +3,8 @@ import { Loader2, Pause, Play } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
+import { markCoverOrigin } from '../../services/coverOrigin'
+import { usePulse } from '../../hooks/usePulse'
 import { useLongPress } from '../../hooks/useLongPress'
 import type { RecentPlay } from '../../types/library'
 import type { RowActivity } from '../../types/player'
@@ -10,6 +12,7 @@ import { fallbackCover } from '../../utils/fallbackCover'
 import { formatRelativeTime } from '../../utils/formatRelativeTime'
 import { recentKey } from '../../utils/libraryStorage'
 import CoverArt from '../ui/CoverArt'
+import { CoverPlayingBadge } from '../ui/PlayingBars'
 
 /** Kolom bersama baris; pola yang sama dengan daftar lagu di playlist. */
 const RECENT_GRID =
@@ -32,6 +35,7 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   const time = formatRelativeTime(entry.playedAt)
   const highlighted = activity !== 'none'
+  const playRef = usePulse<HTMLButtonElement>(activity, 1.12, 300)
   const Icon = activity === 'playing' ? Pause : activity === 'loading' ? Loader2 : Play
   const by = track.artists ? ` oleh ${track.artists}` : ''
   const label =
@@ -47,15 +51,19 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
 
   return (
     <li
-      onClick={() => {
+      onClick={(event) => {
         // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh.
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay(entry)
+        markCoverOrigin(event.currentTarget, track)
         openFullPlayer()
       }}
       {...longPress}
       className={`grid ${RECENT_GRID} cursor-pointer select-none rounded-md px-2 py-2 transition-colors [-webkit-touch-callout:none] hover:bg-card focus-within:bg-card active:bg-raised`}
     >
-      <CoverArt cover={fallback} src={track.cover} />
+      <div data-cover-thumb="" className="relative">
+        <CoverArt cover={fallback} src={track.cover} />
+        <CoverPlayingBadge activity={activity} />
+      </div>
 
       <button
         type="button"
@@ -79,6 +87,7 @@ const RecentRow = memo(function RecentRow({ entry, activity, onPlay }: RecentRow
       <p className="hidden text-right text-sm text-ink-muted sm:block">{time}</p>
 
       <button
+        ref={playRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation()

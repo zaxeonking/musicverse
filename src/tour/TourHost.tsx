@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { usePlayerUi } from '../context/PlayerUiContext'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { isNativeApp } from '../native/platform'
+import DemoStage from './DemoStage'
 import PracticeStage from './PracticeStage'
 import { PAGE_TOURS, TOUR_STEPS, type PageTour, type PageTourId, type TourStep } from './steps'
 import {
@@ -237,6 +238,7 @@ export default function TourHost() {
     const dot = dotRef.current
     if (!dot || !rect || !step?.animate || reducedMotion()) return
     const reach = Math.max(24, Math.min(rect.w * 0.32, 120))
+    const drop = Math.max(24, Math.min(rect.h * 0.9, 90))
     const frames: Keyframe[] =
       step.animate === 'swipe'
         ? [
@@ -247,19 +249,42 @@ export default function TourHost() {
             { transform: `translateX(${-reach}px) scale(1.1)`, opacity: 1, offset: 0.8 },
             { transform: 'translateX(0) scale(1)', opacity: 0 },
           ]
-        : step.animate === 'press'
+        : step.animate === 'roll'
           ? [
-              { transform: 'scale(0.6)', opacity: 0 },
-              { transform: 'scale(1)', opacity: 1, offset: 0.2 },
-              { transform: 'scale(1.35)', opacity: 1, offset: 0.7 },
-              { transform: 'scale(1.5)', opacity: 0 },
+              // Geser samping jadi disc: ke kanan, lalu ke kiri (kartu menjadi disc di sisi arah geser).
+              { transform: 'translateX(0) scale(1)', opacity: 0 },
+              { transform: 'translateX(0) scale(1)', opacity: 1, offset: 0.08 },
+              { transform: `translateX(${reach * 1.4}px) scale(1.1)`, opacity: 1, offset: 0.3, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
+              { transform: `translateX(${reach * 1.4}px) scale(1)`, opacity: 0, offset: 0.38 },
+              { transform: 'translateX(0) scale(1)', opacity: 0, offset: 0.5 },
+              { transform: 'translateX(0) scale(1)', opacity: 1, offset: 0.58 },
+              { transform: `translateX(${-reach * 1.4}px) scale(1.1)`, opacity: 1, offset: 0.8, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
+              { transform: `translateX(${-reach * 1.4}px) scale(1)`, opacity: 0, offset: 0.88 },
+              { transform: 'translateX(0) scale(1)', opacity: 0 },
             ]
-          : [
-              { transform: 'scale(0.6)', opacity: 0 },
-              { transform: 'scale(1)', opacity: 1, offset: 0.3 },
-              { transform: 'scale(1.6)', opacity: 0 },
-            ]
-    const animation = dot.animate(frames, { duration: step.animate === 'swipe' ? 3200 : step.animate === 'press' ? 1800 : 1300, iterations: Infinity, easing: 'ease-in-out' })
+          : step.animate === 'down'
+            ? [
+                // Geser bawah: kartu tenggelam, musik ditutup.
+                { transform: 'translateY(0) scale(1)', opacity: 0 },
+                { transform: 'translateY(0) scale(1)', opacity: 1, offset: 0.12 },
+                { transform: `translateY(${drop}px) scale(1.1)`, opacity: 1, offset: 0.6, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
+                { transform: `translateY(${drop}px) scale(1)`, opacity: 0, offset: 0.72 },
+                { transform: 'translateY(0) scale(1)', opacity: 0 },
+              ]
+            : step.animate === 'press'
+              ? [
+                  { transform: 'scale(0.6)', opacity: 0 },
+                  { transform: 'scale(1)', opacity: 1, offset: 0.2 },
+                  { transform: 'scale(1.35)', opacity: 1, offset: 0.7 },
+                  { transform: 'scale(1.5)', opacity: 0 },
+                ]
+              : [
+                  { transform: 'scale(0.6)', opacity: 0 },
+                  { transform: 'scale(1)', opacity: 1, offset: 0.3 },
+                  { transform: 'scale(1.6)', opacity: 0 },
+                ]
+    const duration = step.animate === 'swipe' ? 3200 : step.animate === 'roll' ? 4200 : step.animate === 'down' ? 2800 : step.animate === 'press' ? 1800 : 1300
+    const animation = dot.animate(frames, { duration, iterations: Infinity, easing: 'ease-in-out' })
     return () => animation.cancel()
   }, [rect, step])
 
@@ -405,6 +430,7 @@ export default function TourHost() {
             Coba: {step.task}
           </p>
         )}
+        {step.demo && <DemoStage key={step.id} kind={step.demo} />}
         {step.practice && <PracticeStage key={step.id} kind={step.practice} onComplete={() => setDone(true)} />}
         {done && (
           <p role="status" className="mt-2 flex animate-pop items-center gap-1.5 text-sm font-semibold text-accent">

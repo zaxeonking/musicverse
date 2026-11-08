@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { useCoverGlow } from '../../hooks/useCoverGlow'
@@ -387,11 +388,17 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     navigator.vibrate?.(10)
     const finish = () => {
       const disc = rollDiscRef.current
-      setSide(dir > 0 ? 'right' : 'left')
-      // Kartu tetap terpasang sebagai "hantu" (sudah tak terlihat) selagi disc asli dipasang tepat di bawah disc pratinjau.
-      setHandoff(true)
-      setLeaving(true)
-      setCollapsed(true)
+      // Semua perubahan harus masuk SATU commit React. `setSide`/`setCollapsed` lewat store eksternal (render sinkron),
+      // sedangkan `setHandoff`/`setLeaving` state biasa (render menyusul). Tanpa flushSync, commit pertama membuang kartu hantu
+      // (leaving masih false) dan memasang disc dengan animasi masuk, lalu commit kedua memasang kartu BARU yang terlihat
+      // utuh -> kartu "kedip" muncul lagi sebelum disc final.
+      flushSync(() => {
+        setSide(dir > 0 ? 'right' : 'left')
+        // Kartu tetap terpasang sebagai "hantu" (sudah tak terlihat) selagi disc asli dipasang tepat di bawah disc pratinjau.
+        setHandoff(true)
+        setLeaving(true)
+        setCollapsed(true)
+      })
       if (regionRef.current) {
         regionRef.current.style.pointerEvents = 'none'
         regionRef.current.style.visibility = 'hidden'
@@ -450,7 +457,12 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
     window.clearTimeout(leaveTimer.current)
     // Disc sudah tampil = kartu hantu sebentar lagi dilepas React. Sembunyikan DULU sebelum animasi dibatalkan / gaya dibersihkan;
     // kalau tidak, kartu sempat tampil utuh satu frame (kedip) sebelum benar-benar hilang.
-    if (unmounting && regionRef.current) regionRef.current.style.visibility = 'hidden'
+    // Sembunyikan seluruh grup kartu (cardRef), bukan hanya region: glow ada di luar region dan animasinya (fill: forwards,
+    // opacity 0) ikut hilang saat dibatalkan, jadi glow sempat menyala lagi sampai React melepas kartu.
+    if (unmounting) {
+      if (cardRef.current) cardRef.current.style.visibility = 'hidden'
+      if (regionRef.current) regionRef.current.style.visibility = 'hidden'
+    }
     leaveAnims.current.forEach((animation) => animation.cancel())
     leaveAnims.current = []
     const card = cardRef.current
@@ -855,7 +867,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           className="flex min-w-0 items-center gap-3 rounded-md text-left transition-opacity active:opacity-80 focus-ring lg:row-span-2"
         >
           <div data-mini-cover className="w-11 shrink-0 lg:w-14">
-            <CoverArt cover={now.cover} src={now.coverSrc} />
+            <CoverArt cover={now.cover} src={now.coverSrc} crossfade />
           </div>
           <span className="min-w-0">
             <MarqueeText text={now.title} className="text-sm font-semibold text-ink" />
@@ -900,7 +912,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         className="pointer-events-none absolute bottom-0 left-0 z-10 h-14 w-14 rounded-full bg-raised/90 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] will-change-transform"
       >
         <span className="absolute inset-[5px] overflow-hidden rounded-full">
-          <CoverArt cover={now.cover} src={now.coverSrc} round />
+          <CoverArt cover={now.cover} src={now.coverSrc} round instant />
           <span className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg,rgb(var(--mv-veil,255_255_255)/0.14),transparent_25%,rgb(var(--mv-veil,255_255_255)/0.1)_50%,transparent_75%,rgb(var(--mv-veil,255_255_255)/0.14))]" />
         </span>
         <span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-veil/25 bg-bg" />

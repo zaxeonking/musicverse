@@ -1,5 +1,5 @@
 import { ListMusic, Search, SearchX, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack, PlayTrackHandler } from '../../types/spotify'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
@@ -78,6 +78,47 @@ export default function TrackList({
   const offlineBlocked = useOfflineBlock()
   // Geser kanan = tambah ke antrean, kiri = suka. Indeks = urutan baris di <ul> (setelah filter).
   const swipeHandlers = useTrackSwipe((i) => visible[i]?.track, { fromSearch: searchable })
+
+  // Animasi daftar: masuk bertingkat hanya saat daftar baru tampil; sesudahnya (mengetik / ganti filter) hanya baris baru yang
+  // masuk cepat, dan baris yang tetap tapi berpindah meluncur ke tempat barunya (FLIP) alih-alih melompat. Posisi gulir tidak disentuh.
+  const listRef = useRef<HTMLUListElement>(null)
+  const prevTops = useRef<Map<string, number>>(new Map())
+  const hasRows = visible.length > 0
+  const [settled, setSettled] = useState(false)
+  useEffect(() => {
+    if (!hasRows) {
+      setSettled(false)
+      return
+    }
+    // Setelah stagger awal selesai (maks. ~780 ms), ganti ke mode "live". Animasi lama sudah berakhir, jadi tidak ada yang terulang.
+    const timer = window.setTimeout(() => setSettled(true), 900)
+    return () => window.clearTimeout(timer)
+  }, [hasRows])
+  useLayoutEffect(() => {
+    const list = listRef.current
+    if (!list) {
+      prevTops.current = new Map()
+      return
+    }
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const next = new Map<string, number>()
+    const count = Math.min(list.children.length, 60)
+    for (let i = 0; i < count; i++) {
+      const row = list.children[i] as HTMLElement
+      const id = row.dataset.rowId
+      if (!id) continue
+      const top = row.offsetTop
+      next.set(id, top)
+      const before = prevTops.current.get(id)
+      if (settled && !reduce && before !== undefined && Math.abs(before - top) > 1 && typeof row.animate === 'function') {
+        row.animate([{ transform: `translate3d(0, ${before - top}px, 0)` }, { transform: 'translate3d(0, 0, 0)' }], {
+          duration: 280,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        })
+      }
+    }
+    prevTops.current = next
+  }, [visible, settled])
 
   const handlePlay = useCallback<PlayTrackHandler>((track, index) => {
     setSelectedId(track.id)
@@ -162,7 +203,7 @@ export default function TrackList({
             <span className="text-right">Durasi</span>
             <span />
           </div>
-          <ul {...swipeHandlers} className="mv-list -mx-2 touch-pan-y">
+          <ul ref={listRef} {...swipeHandlers} className={`${settled ? 'mv-list-live' : 'mv-list'} -mx-2 touch-pan-y`}>
             {visible.map(({ track, index }) => (
               <TrackRow
                 key={track.id}

@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,12 @@ function TrackCover({ track }: { track: PlaylistTrack }) {
   const fallback = useMemo(() => fallbackCover(`${track.title}${track.album}`), [track.title, track.album])
   return <CoverArt cover={fallback} src={track.cover} />
 }
+
+/** Pegas lembut untuk baris yang bergeser memberi tempat: sedikit melampaui lalu mengendap, tanpa memantul berlebihan. */
+const SHIFT_EASING = 'cubic-bezier(0.22, 1.25, 0.36, 1)'
+const SHIFT_MS = 300
+const PICKUP_SCALE = 1.03
+const reducedMotion = () => typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
 
 interface DragState {
   from: number
@@ -96,7 +103,7 @@ const UpcomingRow = memo(function UpcomingRow({
   }
 
   return (
-    <li style={style} className={`relative select-none ${dragging ? 'z-10 rounded-md bg-card shadow-xl shadow-black/50' : ''}`}>
+    <li data-up-id={track.id} style={style} className={`relative select-none ${dragging ? 'z-10 rounded-md bg-card shadow-xl shadow-black/50' : ''}`}>
       <div className="flex items-center">
         <button
           type="button"
@@ -183,6 +190,39 @@ export default function UpcomingList({ items, scrollRef, onPlay, onOpenMenu, onM
   const metaRef = useRef<{ startY: number; startScroll: number; from: number; height: number; pointerY: number } | null>(null)
   const countRef = useRef(items.length)
   countRef.current = items.length
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const listRef = useRef<HTMLUListElement>(null)
+  const settleRef = useRef<{ id: string; offset: number; index: number; at: number } | null>(null)
+
+  // Setelah urutan baru tergambar: baris yang dilepas meluncur dari posisi jari ke slotnya dengan pegas (FLIP), tetap di atas tetangganya.
+  useLayoutEffect(() => {
+    const pending = settleRef.current
+    const list = listRef.current
+    if (!pending || !list) return
+    if (performance.now() - pending.at > 600) {
+      settleRef.current = null
+      return
+    }
+    // Urutan baru belum sampai (state pemutar menyusul): tunggu render berikutnya.
+    if (items[pending.index]?.track.id !== pending.id) return
+    settleRef.current = null
+    const row = Array.from(list.children).find((el) => (el as HTMLElement).dataset.upId === pending.id) as HTMLElement | undefined
+    if (!row || typeof row.animate !== 'function') return
+    row.style.zIndex = '10'
+    const animation = row.animate(
+      [
+        { transform: `translateY(${pending.offset}px)`, scale: String(PICKUP_SCALE) },
+        { transform: 'translateY(0)', scale: '1' },
+      ],
+      { duration: 360, easing: SHIFT_EASING },
+    )
+    const done = () => {
+      row.style.zIndex = ''
+    }
+    animation.onfinish = done
+    animation.oncancel = done
+  })
 
   /** Hitung ulang pergeseran dan posisi tujuan dari posisi jari + gulir saat ini. */
   const update = useCallback(() => {
@@ -258,7 +298,13 @@ export default function UpcomingList({ items, scrollRef, onPlay, onOpenMenu, onM
       const dy = event.clientY - meta.startY + scrolled
       const to = Math.min(countRef.current - 1, Math.max(0, meta.from + Math.round(dy / meta.height)))
       setDrag(null)
-      if (commit && to !== meta.from) onMove(meta.from, to)
+      // Baris yang dilepas jarang tepat di tengah slot: simpan selisihnya supaya ia meluncur ke slot barunya (bukan melompat).
+      const moved = commit && to !== meta.from
+      const id = itemsRef.current[meta.from]?.track.id
+      if (id !== undefined && !reducedMotion()) {
+        settleRef.current = { id, offset: dy - (moved ? to - meta.from : 0) * meta.height, index: moved ? to : meta.from, at: performance.now() }
+      }
+      if (moved) onMove(meta.from, to)
     },
     [onMove, scrollRef],
   )
@@ -269,12 +315,17 @@ export default function UpcomingList({ items, scrollRef, onPlay, onOpenMenu, onM
   )
 
   return (
-    <ul data-queue-upcoming="">
+    <ul ref={listRef} data-queue-upcoming="">
       {items.map(({ track, index }, position) => {
         let style: CSSProperties = {}
         if (drag) {
           if (position === drag.from) {
-            style = { transform: `translateY(${drag.dy}px)`, transition: 'none' }
+            // Baris yang dipegang: mengikuti jari 1:1, sedikit membesar (properti `scale` terpisah dari transform, jadi tidak ikut tertunda).
+            style = {
+              transform: `translateY(${drag.dy}px)`,
+              scale: String(PICKUP_SCALE),
+              transition: reducedMotion() ? 'none' : 'scale 200ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }
           } else {
             const shift =
               drag.from < drag.to && position > drag.from && position <= drag.to
@@ -282,7 +333,7 @@ export default function UpcomingList({ items, scrollRef, onPlay, onOpenMenu, onM
                 : drag.from > drag.to && position < drag.from && position >= drag.to
                   ? drag.height
                   : 0
-            style = { transform: `translateY(${shift}px)`, transition: 'transform 150ms ease-out' }
+            style = { transform: `translateY(${shift}px)`, transition: reducedMotion() ? 'none' : `transform ${SHIFT_MS}ms ${SHIFT_EASING}` }
           }
         }
         return (

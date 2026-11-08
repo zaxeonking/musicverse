@@ -9,6 +9,7 @@ import type { ManualCandidate } from '../../plugins/types'
 import { formatTime } from '../../utils/formatTime'
 import Action from '../player/SheetAction'
 import { useExitGhost } from '../../hooks/useExitGhost'
+import { useSheetDrag } from '../../hooks/useSheetDrag'
 
 interface ManualSearchSheetProps {
   /** Kunci unduhan yang gagal (mode Unduhan). Kosongkan dan isi `track` untuk memilih sumber lagu di playlist. */
@@ -58,6 +59,7 @@ type SearchState = { status: 'loading' } | { status: 'error'; message: string } 
  */
 export default function ManualSearchSheet({ transferKey, track, onPicked, title, onClose, onToast }: ManualSearchSheetProps) {
   const exitRef = useExitGhost()
+  useSheetDrag(exitRef)
   useOverlayHistory(true, onClose)
   const [state, setState] = useState<SearchState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)

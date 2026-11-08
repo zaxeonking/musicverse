@@ -14,6 +14,7 @@ import {
   SkipForward,
 } from 'lucide-react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
+import { usePulse } from '../../hooks/usePulse'
 import type { PlaybackStatus, RepeatMode } from '../../types/player'
 
 type ButtonKind = 'play' | 'pause' | 'busy' | 'retry'
@@ -251,6 +252,9 @@ interface QueueButtonProps {
 
 /** Tombol pembuka tampilan Queue (mini player dan full player). */
 export function QueueButton({ onClick, size = 'sm', className = '' }: QueueButtonProps) {
+  // Lagu ditambah/dihapus dari antrean: ikon membal sebentar (tidak saat pertama dipasang).
+  const { queue } = useAudioPlayer()
+  const pulseRef = usePulse<SVGSVGElement>(queue.length, 1.22)
   return (
     <button
       type="button"
@@ -261,7 +265,7 @@ export function QueueButton({ onClick, size = 'sm', className = '' }: QueueButto
         size === 'lg' ? 'h-11 w-11 hover:bg-veil/10 hover:text-ink active:bg-veil/15' : 'h-11 w-11 hover:text-accent active:bg-veil/10 lg:h-9 lg:w-9'
       } press items-center justify-center rounded-full text-ink-muted ${FOCUS} ${className}`}
     >
-      <ListMusic className={size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'} aria-hidden="true" />
+      <ListMusic ref={pulseRef} className={size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'} aria-hidden="true" />
     </button>
   )
 }

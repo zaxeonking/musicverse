@@ -6,6 +6,7 @@ import { useAudioPlayer, usePlayerActions } from '../../hooks/useAudioPlayer'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
 import Action from './SheetAction'
 import { useExitGhost } from '../../hooks/useExitGhost'
+import { useSheetDrag } from '../../hooks/useSheetDrag'
 
 const optionLabel = (seconds: number) => (seconds === 0 ? 'Mati' : `${seconds} detik`)
 
@@ -54,6 +55,7 @@ export function CrossfadeButton({ onClick, variant = 'pill' }: { onClick: () => 
 /** Menu bawah untuk memilih lama crossfade antar lagu. Portal ke <body>, pola sama dengan SleepTimerSheet. */
 export default function CrossfadeSheet({ onClose }: { onClose: () => void }) {
   const exitRef = useExitGhost()
+  useSheetDrag(exitRef)
   const { crossfadeSeconds } = useAudioPlayer()
   const { setCrossfade } = usePlayerActions()
   const sheetRef = useRef<HTMLDivElement>(null)

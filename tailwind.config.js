@@ -138,7 +138,7 @@ export default {
         pop: 'pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         disc: 'disc 18s linear infinite',
         eq: 'eq 1.1s ease-in-out infinite',
-        'sheet-up': 'sheet-up 340ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'sheet-up': 'sheet-up var(--sheet-ms, 340ms) var(--sheet-ease, cubic-bezier(0.32, 0.72, 0, 1)) both',
         'lyrics-up': 'lyrics-up 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'panel-in': 'panel-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'fs-in': 'fs-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both',

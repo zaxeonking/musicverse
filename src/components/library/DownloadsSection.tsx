@@ -1,11 +1,13 @@
 import { AlertCircle, Battery, ChevronDown, Download, FolderInput, ListMusic, Loader2, Music2, Play, RotateCw, Search, Settings, Trash2, WifiOff, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PauseLines from '../ui/PauseLines'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useMyPlaylists } from '../../context/MyPlaylistsContext'
 import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
+import { markCoverOrigin } from '../../services/coverOrigin'
+import { usePulse } from '../../hooks/usePulse'
 import { useLongPress } from '../../hooks/useLongPress'
 import { cancelQueued, dismissTransferError, pauseDownloads, resumeDownloads, retryAllFailed, retryDownload, holdDownload, resumeHeld } from '../../native/downloads'
 import {
@@ -26,6 +28,7 @@ import { isSameSong } from '../../utils/sameSong'
 import type { RowActivity } from '../../types/player'
 import type { PlaylistTrack } from '../../types/spotify'
 import CoverArt from '../ui/CoverArt'
+import { CoverPlayingBadge } from '../ui/PlayingBars'
 import EmptyState from '../ui/EmptyState'
 import LocalFolder from './LocalFolder'
 import ManualSearchSheet from './ManualSearchSheet'
@@ -51,6 +54,8 @@ function transferLabel(transfer: Transfer, paused: boolean, heldText: string | n
 }
 
 interface DownloadedRowProps {
+  /** Baru saja selesai diunduh (muncul setelah daftar tampil): sampulnya membal sekali sebagai tanda berhasil. */
+  fresh?: boolean
   item: DownloadedTrack
   track: PlaylistTrack
   selected: boolean
@@ -65,7 +70,7 @@ interface DownloadedRowProps {
   onMove: () => void
 }
 
-function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onToggle, onMove }: DownloadedRowProps) {
+function DownloadedRow({ item, track, selected, activity, fresh = false, onSelect, onPlay, onToggle, onMove }: DownloadedRowProps) {
   const [cover, setCover] = useState<string | undefined>(item.cover || undefined)
   useEffect(() => {
     let cancelled = false
@@ -83,6 +88,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
   // Lagu unduhan berdiri sendiri, jadi boleh dimasukkan ke antrean mana pun (seperti hasil Cari).
   const longPress = useLongPress(() => openTrackMenu(track, { fromSearch: true, place: 'downloads' }))
   const isCurrent = activity !== 'none'
+  const playRef = usePulse<HTMLButtonElement>(activity, 1.12, 300)
   const highlighted = selected || isCurrent
   const Icon = activity === 'playing' ? PauseLines : activity === 'loading' ? Loader2 : Play
   const playLabel =
@@ -97,10 +103,11 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
   return (
     <li
       aria-current={isCurrent ? 'true' : undefined}
-      onClick={() => {
+      onClick={(event) => {
         onSelect()
         // Ketuk biasa: putar lagu (kecuali sudah aktif) lalu buka pemutar penuh, sama seperti baris playlist.
         if (activity === 'none' || activity === 'error' || activity === 'ended') onPlay()
+        markCoverOrigin(event.currentTarget, track)
         openFullPlayer()
       }}
       {...longPress}
@@ -108,8 +115,9 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
         highlighted ? 'bg-raised shadow-now' : 'hover:bg-card active:bg-raised'
       }`}
     >
-      <span className="w-12 shrink-0">
+      <span data-cover-thumb="" className={`relative w-12 shrink-0 ${fresh ? 'mv-pop' : ''}`}>
         <CoverArt cover={fallback} src={cover} />
+        <CoverPlayingBadge activity={activity} />
       </span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-base font-medium ${highlighted ? 'text-accent' : 'text-ink'}`}>{item.title}</span>
@@ -119,6 +127,7 @@ function DownloadedRow({ item, track, selected, activity, onSelect, onPlay, onTo
         </span>
       </span>
       <button
+        ref={playRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation()
@@ -178,6 +187,20 @@ export default function DownloadsSection() {
   const waiting = pending.filter((t) => t.status === 'queued' && !t.held).length
   const working = pending.some((t) => t.status === 'resolving' || t.status === 'downloading')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  // Lagu yang baru selesai diunduh (bukan yang sudah ada saat halaman dibuka): ditandai ~1 dtk supaya animasinya tidak terpotong render ulang.
+  const knownKeys = useRef<Set<string> | null>(null)
+  const [freshKeys, setFreshKeys] = useState<ReadonlySet<string>>(() => new Set())
+  useEffect(() => {
+    const now = new Set(items.map((item) => item.key))
+    const known = knownKeys.current
+    knownKeys.current = now
+    if (known === null) return
+    const added = [...now].filter((key) => !known.has(key))
+    if (added.length === 0) return
+    setFreshKeys(new Set(added))
+    const timer = window.setTimeout(() => setFreshKeys(new Set()), 1000)
+    return () => window.clearTimeout(timer)
+  }, [items])
   // Lagu yang sedang diputar dikenali lewat kunci yang sama dengan unduhan (juga bila diputar dari playlist lain).
   const currentKey = player.currentTrack ? trackKey(player.currentTrack) : null
   const currentActivity = getRowActivity(player.status)
@@ -227,6 +250,7 @@ export default function DownloadsSection() {
             item={item}
             track={list[index]}
             selected={selectedKey === item.key}
+            fresh={freshKeys.has(item.key)}
             activity={currentKey === item.key || (player.currentTrack !== null && isSameSong(list[index], player.currentTrack)) ? currentActivity : 'none'}
             onSelect={() => setSelectedKey(item.key)}
             onPlay={() => {

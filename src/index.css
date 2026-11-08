@@ -8,6 +8,9 @@
     --ease: cubic-bezier(0.4, 0, 0.2, 1);
     --ease-hero: cubic-bezier(0.45, 0, 0.15, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Masuknya semua bottom sheet: cadangan cubic-bezier; pegas teredam (utils/spring.ts) bila `linear()` didukung. */
+    --sheet-ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --sheet-ms: 340ms;
     /* Bottom nav kaca: mode gelap menggelapkan latar di belakangnya; mode terang tidak (kalau tidak, jadi abu-abu kusam). */
     --mv-nav-dim: 0.55;
     --mv-nav-shadow: 0.45;
@@ -64,7 +67,10 @@
     ::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
+      /* Jeda stagger juga dinolkan: animasi masuk memakai fill `backwards`, jadi tanpa ini item daftar tetap tersembunyi sampai jedanya habis. */
+      animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
       scroll-behavior: auto !important;
     }
   }
@@ -258,6 +264,12 @@ html.theme-anim *::after {
     transform: translate3d(calc(var(--page-dx, 1) * -20px), 0, 0);
   }
 }
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --sheet-ease: linear(0, 0.0389, 0.1298, 0.2443, 0.3642, 0.4787, 0.5819, 0.6712, 0.7462, 0.8075, 0.8566, 0.8952, 0.9249, 0.9474, 0.9641, 0.9763, 0.985, 0.9912, 0.9953, 0.998, 0.9997, 1.0008, 1.0013, 1.0015, 1.0015, 1.0014, 1.0013, 1.0011, 1.0009, 1.0007, 1.0006, 1.0005, 1.0003, 1.0003, 1.0002, 1.0001, 1);
+    --sheet-ms: 480ms;
+  }
+}
 @keyframes heart-pop {
   0% {
     transform: scale(0.6);
@@ -277,6 +289,10 @@ html.theme-anim *::after {
   /* Muncul: memudar masuk + naik sedikit. */
   .mv-in {
     animation: mv-in 340ms var(--ease) var(--mv-delay, 0ms) backwards;
+  }
+  /* Ganti isi (kategori pencarian, tab artis/album): hanya memudar, tanpa bergerak, supaya tidak ada kilatan atau lompatan tata letak. */
+  .mv-swap {
+    animation: mv-swap 220ms var(--ease) backwards;
   }
   /* Muncul dengan membal kecil (kartu, ikon, penanda). */
   .mv-pop {
@@ -322,6 +338,11 @@ html.theme-anim *::after {
   .mv-list > :nth-child(11) { animation-delay: 350ms; }
   .mv-list > :nth-child(12) { animation-delay: 385ms; }
   .mv-list > :nth-child(n + 13) { animation-delay: 420ms; }
+  /* Daftar yang sudah tampil lalu berubah (mis. hasil pencarian saat mengetik): hanya baris BARU yang masuk, cepat dan tanpa jeda
+     bertingkat (baris di urutan ke-40 tidak boleh menunggu 420 ms tak terlihat). Baris lama yang berpindah digeser lewat FLIP di TrackList. */
+  .mv-list-live > * {
+    animation: mv-in 240ms var(--ease) backwards;
+  }
 
   /* Kartu / baris yang bisa diketuk: mengecil sedikit saat ditekan, kembali membal saat dilepas. */
   .tap-card {
@@ -347,6 +368,11 @@ html.theme-anim *::after {
 
 }
 
+@keyframes mv-swap {
+  from {
+    opacity: 0;
+  }
+}
 @keyframes mv-in {
   from {
     opacity: 0;
