@@ -13,7 +13,7 @@ import {
   SkipBack,
   SkipForward,
 } from 'lucide-react'
-import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
+import { useAudioPlayer, useSeekable } from '../../hooks/useAudioPlayer'
 import { usePulse } from '../../hooks/usePulse'
 import type { PlaybackStatus, RepeatMode } from '../../types/player'
 
@@ -154,7 +154,7 @@ export function RepeatButton({ size = 'md', className = '' }: { size?: 'md' | 'l
 /** Previous · Play/Pause · Next, semuanya memanggil aksi dari audio engine yang sama. */
 export function TransportControls({ size = 'md', className = '', leading, trailing }: TransportControlsProps) {
   const { status, hasPrevious, hasNext, togglePlayPause, playNext, playPrevious } = useAudioPlayer()
-  const { seekable } = usePlaybackTime()
+  const seekable = useSeekable()
   const main = describeMainButton(status)
   const big = size !== 'md'
   const xl = size === 'xl'

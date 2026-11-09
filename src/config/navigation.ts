@@ -1,4 +1,4 @@
-import { Download, Home, Library, Search, type LucideIcon } from 'lucide-react'
+import { Compass, HardDriveDownload, Home, Library, type LucideIcon } from 'lucide-react'
 import { isNativeApp } from '../native/platform'
 
 export interface NavItem {
@@ -11,9 +11,10 @@ export interface NavItem {
 
 const allNavItems: NavItem[] = [
   { to: '/', label: 'Beranda', icon: Home },
-  { to: '/search', label: 'Cari', icon: Search },
-  { to: '/library', label: 'Playlist', icon: Library },
-  { to: '/downloads', label: 'Unduhan', icon: Download, nativeOnly: true },
+  { to: '/search', label: 'Jelajah', icon: Compass },
+  { to: '/library', label: 'Pustaka', icon: Library },
+  // Unduhan juga menampung folder musik lokal perangkat (LocalFolder), jadi "Local" dan "Offline" satu pintu.
+  { to: '/downloads', label: 'Unduhan', icon: HardDriveDownload, nativeOnly: true },
 ]
 
 /** Menu navigasi yang berlaku untuk platform ini (Unduhan hanya di APK). */

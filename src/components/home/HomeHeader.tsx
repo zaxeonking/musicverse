@@ -1,4 +1,4 @@
-import { Bell, Compass, ListMusic, Menu, Mic2, Music2, Search, SlidersHorizontal, Timer } from 'lucide-react'
+import { Bell, Compass, ListMusic, Mic2, Music2, Search, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { SITE_NAME } from '../../config/site'
@@ -8,14 +8,9 @@ import { useAppUpdate } from '../../hooks/useAppUpdate'
 import { useMountTransition } from '../../hooks/useMountTransition'
 import { artistSearch } from '../../utils/artistSearchStore'
 import SleepTimerSheet from '../player/SleepTimerSheet'
+import { LogoMark } from '../ui/Logo'
+import Waveform from '../ui/Waveform'
 import HomeMenuDrawer from './HomeMenuDrawer'
-
-/** Emoji sapaan ikut waktu: matahari (pagi-sore), senja, bulan. */
-function greetingEmoji(greeting: string): string {
-  if (greeting.endsWith('malam')) return '🌙'
-  if (greeting.endsWith('sore')) return '🌇'
-  return '☀️'
-}
 
 /** Kartu kecil yang muncul di bawah tombol (filter, notifikasi): membesar dari pojok kanan atas, tutup lewat ketuk di luar atau Escape. */
 function Popover({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
@@ -68,8 +63,9 @@ function MenuRow({ icon: Icon, title, hint, onClick }: { icon: typeof Search; ti
 }
 
 /**
- * Kepala Beranda ala StreamBeats: menu (laci), sapaan + nama aplikasi, sleep timer, notifikasi; di bawahnya kolom cari dan tombol
- * filter. Kolom cari tetap hanya pintu ke tab Cari. Timer membuka lembar sleep timer yang sama dengan pemutar penuh.
+ * Kepala Beranda MusicVerse: avatar berlingkar aksen (membuka laci menu), sapaan kecil di atas nama aplikasi, sleep timer dan
+ * notifikasi. Di bawahnya kolom cari berbentuk "gelombang" (sudut tidak sama, batang audio di ujung kanan) dan tombol filter.
+ * Kolom cari tetap hanya pintu ke tab Jelajah. Timer membuka lembar sleep timer yang sama dengan pemutar penuh.
  */
 export default function HomeHeader() {
   const greeting = useGreeting()
@@ -88,25 +84,28 @@ export default function HomeHeader() {
   }
 
   return (
-    <header className="space-y-5">
+    <header className="space-y-4">
       <div className="flex items-center gap-3">
-        {/* Menu membawa penanda tutorial Pengaturan: pengaturan kini ada di laci ini. */}
+        {/* Avatar membawa penanda tutorial Pengaturan: pengaturan ada di laci menu yang dibuka tombol ini. */}
         <button
           type="button"
           data-tour="settings-btn tour-restart"
           onClick={() => setDrawer(true)}
           aria-label="Buka menu"
           aria-haspopup="dialog"
-          className="icon-btn -ml-2 shrink-0 text-ink"
+          className="focus-ring tap-card shrink-0 rounded-full p-[2.5px] [background:conic-gradient(from_210deg,rgb(var(--mv-accent)),rgb(var(--mv-coral)),rgb(var(--mv-accent)))]"
         >
-          <Menu className="h-7 w-7" aria-hidden="true" />
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-ink">
+            <UserRound className="h-5 w-5" aria-hidden="true" />
+          </span>
         </button>
         <div className="mv-in min-w-0 flex-1">
-          <p className="truncate text-sm text-ink-muted">
-            {greeting} <span aria-hidden="true">{greetingEmoji(greeting)}</span>
-          </p>
-          <h1 id="home-title" className="truncate font-display text-[1.7rem] font-extrabold leading-tight tracking-tight text-ink">
-            {SITE_NAME}
+          <p className="truncate text-[0.78rem] leading-none text-ink-muted">{greeting}</p>
+          <h1 id="home-title" className="mt-1 flex items-center gap-1.5 font-display text-[1.45rem] font-extrabold leading-none tracking-[-0.03em] text-ink">
+            <LogoMark className="h-6 w-6" />
+            <span className="truncate">
+              Music<span className="font-medium text-ink-muted">{SITE_NAME.replace(/^Music/, '')}</span>
+            </span>
           </h1>
         </div>
         <button
@@ -116,8 +115,8 @@ export default function HomeHeader() {
           aria-haspopup="dialog"
           className="icon-btn relative shrink-0 text-ink"
         >
-          <Timer className="h-7 w-7" aria-hidden="true" />
-          {timer.active && <span aria-hidden="true" className="mv-pop absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-bg" />}
+          <Timer className="h-6 w-6" aria-hidden="true" />
+          {timer.active && <span aria-hidden="true" className="mv-pop absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-coral ring-2 ring-bg" />}
         </button>
         <div className="relative shrink-0">
           <button
@@ -130,8 +129,8 @@ export default function HomeHeader() {
             aria-expanded={bell}
             className="icon-btn relative text-ink"
           >
-            <Bell className={`h-7 w-7 ${update ? 'mv-ring' : ''}`} aria-hidden="true" />
-            {update && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-bg" />}
+            <Bell className={`h-6 w-6 ${update ? 'mv-ring' : ''}`} aria-hidden="true" />
+            {update && <span aria-hidden="true" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-coral ring-2 ring-bg" />}
           </button>
           <Popover open={bell} onClose={() => setBell(false)} label="Notifikasi">
             {update ? (
@@ -151,16 +150,20 @@ export default function HomeHeader() {
         </div>
       </div>
 
-      <div className="relative flex items-center gap-3">
+      <div className="relative flex items-stretch gap-2.5">
         <Link
           to="/search"
           state={{ focus: true }}
           data-tour="home-search"
           aria-label="Buka pencarian"
-          className="focus-ring tap-row flex h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl bg-raised px-4 text-ink-faint hover:bg-raised-hover"
+          className="focus-ring tap-row group flex h-12 min-w-0 flex-1 items-center gap-3 rounded-[1.5rem_0.6rem_1.5rem_0.6rem] bg-raised pl-1.5 pr-4 text-ink-faint ring-1 ring-veil/[0.06] hover:bg-raised-hover"
         >
-          <Search className="h-6 w-6 shrink-0 text-ink" aria-hidden="true" />
-          <span className="truncate text-[1.02rem]">Mau dengar apa hari ini?</span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[1.1rem_0.45rem_1.1rem_0.45rem] bg-accent text-accent-on">
+            <Search className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
+          </span>
+          <span className="truncate text-[0.98rem]">Lagu, artis, atau tautan</span>
+          {/* Gelombang diam sebagai penanda "audio" (tanpa animasi: kolom ini hanya pintu ke pencarian). */}
+          <Waveform playing={false} bars={6} className="ml-auto shrink-0 text-coral/80 transition-opacity group-active:opacity-60" />
         </Link>
         <div className="relative shrink-0">
           <button
@@ -171,9 +174,9 @@ export default function HomeHeader() {
             }}
             aria-label="Filter pencarian"
             aria-expanded={filter}
-            className="focus-ring tap-card flex h-14 w-14 items-center justify-center rounded-2xl bg-raised text-ink hover:bg-raised-hover"
+            className="focus-ring tap-card flex h-12 w-12 items-center justify-center rounded-[0.6rem_1.5rem_0.6rem_1.5rem] bg-raised text-ink ring-1 ring-veil/[0.06] hover:bg-raised-hover"
           >
-            <SlidersHorizontal className={`h-6 w-6 transition-transform duration-300 motion-reduce:transition-none ${filter ? 'rotate-90' : ''}`} aria-hidden="true" />
+            <SlidersHorizontal className={`h-5 w-5 transition-transform duration-300 motion-reduce:transition-none ${filter ? 'rotate-90' : ''}`} aria-hidden="true" />
           </button>
           <Popover open={filter} onClose={() => setFilter(false)} label="Filter pencarian">
             <MenuRow icon={Music2} title="Cari lagu" hint="Judul lagu atau tautan Spotify" onClick={() => goSearch('track')} />

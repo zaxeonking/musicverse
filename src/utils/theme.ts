@@ -36,6 +36,8 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: readonly ThemePreset[] = [
+  // Identitas MusicVerse: Electric Violet di atas #0B0B10 (permukaan turunan: #15151D / #20202B).
+  { id: 'verse', label: 'Verse', accent: '#8B5CF6', accentLight: '#6D3FE0', bgDark: '#0B0B10', bgLight: '#EEEDF5' },
   { id: 'hijau', label: 'Hijau', accent: '#1DB954', accentLight: '#148A3F', bgDark: '#121212', bgLight: '#ECEFEA' },
   { id: 'biru', label: 'Biru', accent: '#4F8CFF', accentLight: '#2F6FED', bgDark: '#0E1420', bgLight: '#EAEEF6' },
   { id: 'ungu', label: 'Ungu', accent: '#A78BFA', accentLight: '#7048E8', bgDark: '#15111F', bgLight: '#EFEDF7' },
@@ -76,9 +78,9 @@ export interface ThemeState {
 
 const DEFAULT_STATE: ThemeState = {
   mode: 'dark',
-  preset: 'hijau',
-  customAccent: '#1DB954',
-  customBgDark: '#121212',
+  preset: 'verse',
+  customAccent: '#8B5CF6',
+  customBgDark: '#0B0B10',
   customBgLight: '#ECEFEA',
   radius: 'normal',
   dynamicAccent: false,

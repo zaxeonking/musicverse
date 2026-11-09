@@ -1,25 +1,24 @@
-import { EllipsisVertical } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useLibrary } from '../../context/LibraryContext'
-import { useTrackMenu } from '../../context/TrackMenuContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { fallbackCover } from '../../utils/fallbackCover'
 import { recentKey } from '../../utils/libraryStorage'
 import { getRowActivity } from '../../utils/playerStatus'
-import CoverArt from '../ui/CoverArt'
-import { CoverPlayingBadge } from '../ui/PlayingBars'
+import { CompactTrackList, SectionTitle } from './HomeCards'
 
 const MAX = 15
+/** Berapa baris tampil di Beranda; sisanya ada di halaman Riwayat. */
+const SHOWN = 5
 
 /**
- * "Recently": lagu yang baru diputar, tersusun tiga baris menyamping (geser ke kanan untuk lebih banyak) dengan judul tegak
- * di kirinya. Lagu yang sedang diputar disorot dan bertanda equalizer. Ketuk baris = putar dari lagu itu; ikon titik tiga =
- * menu lagu. Dari penyimpanan lokal, jadi tampil juga saat offline.
+ * "Terakhir diputar": daftar ringkas lima lagu terbaru dalam satu panel (bukan carousel). Lagu yang sedang diputar disorot
+ * dan bertanda equalizer. Ketuk baris = putar dari lagu itu (lima belas lagu terbaru jadi antrean); titik tiga = menu lagu.
+ * Dari penyimpanan lokal, jadi tampil juga saat offline.
  */
 export default function HomeRecently() {
   const { recent } = useLibrary()
   const player = useAudioPlayer()
-  const { openTrackMenu } = useTrackMenu()
   const activity = getRowActivity(player.status)
 
   const tracks = useMemo(() => {
@@ -37,51 +36,21 @@ export default function HomeRecently() {
 
   if (tracks.length === 0) return null
 
+  const currentKey = player.currentTrack !== null && player.status !== 'idle' ? recentKey(player.currentTrack) : null
+
   return (
-    <section aria-label="Recently" className="flex items-stretch gap-1">
-      <h2 className="shrink-0 pr-1 font-display text-[1.65rem] font-extrabold leading-none tracking-tight text-ink [text-orientation:mixed] [writing-mode:vertical-rl] rotate-180">
-        Recently
-      </h2>
-      <div className="no-scrollbar -mr-4 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto pr-4 lg:-mr-8 lg:pr-8">
-        <ul className="grid auto-cols-[88%] grid-flow-col grid-rows-3 gap-x-3 gap-y-2.5 sm:auto-cols-[45%]">
-          {tracks.map((track, i) => {
-            const current = player.currentTrack !== null && recentKey(player.currentTrack) === recentKey(track) && player.status !== 'idle'
-            return (
-              <li
-                key={recentKey(track)}
-                style={{ ['--mv-delay' as string]: `${Math.min(Math.floor(i / 3), 5) * 70 + (i % 3) * 40}ms` }}
-                className={`mv-in snap-start rounded-3xl transition-colors duration-300 motion-reduce:transition-none ${current ? 'bg-raised' : ''}`}
-              >
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => player.playList(tracks, i)}
-                    aria-label={`Putar ${track.title}${track.artists ? ` oleh ${track.artists}` : ''}`}
-                    className="focus-ring tap-row flex min-w-0 flex-1 items-center gap-3.5 rounded-3xl p-1.5 text-left"
-                  >
-                    <div className="relative w-14 shrink-0">
-                      <CoverArt cover={fallbackCover(`${track.title}${track.album}`)} src={track.cover} className="!rounded-2xl shadow-md shadow-black/40" />
-                      {current && <CoverPlayingBadge activity={activity} className="rounded-2xl" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`truncate font-display text-[1.05rem] font-semibold ${current ? 'text-accent' : 'text-ink'}`}>{track.title}</p>
-                      <p className="truncate text-sm text-ink-muted">{track.artists}</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openTrackMenu(track, { place: 'browse' })}
-                    aria-label={`Opsi untuk ${track.title}`}
-                    aria-haspopup="dialog"
-                    className="icon-btn shrink-0 text-ink"
-                  >
-                    <EllipsisVertical className="h-6 w-6" aria-hidden="true" />
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+    <section aria-label="Terakhir diputar">
+      <SectionTitle
+        title="Terakhir diputar"
+        action={
+          <Link to="/history" className="focus-ring tap-row mb-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-1 text-sm font-semibold text-accent">
+            Riwayat
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        }
+      />
+      <div className="rounded-[1.75rem_0.75rem_1.75rem_0.75rem] bg-card p-1.5 ring-1 ring-veil/[0.06]">
+        <CompactTrackList tracks={tracks} limit={SHOWN} currentKey={currentKey} activity={activity} onPlay={(i) => player.playList(tracks, i)} />
       </div>
     </section>
   )

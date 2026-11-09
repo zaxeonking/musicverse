@@ -8,6 +8,8 @@ import { usePlaylist } from './PlaylistContext'
 export const PlayerStateContext = createContext<PlayerSnapshot | null>(null)
 export const PlaybackTimeContext = createContext<PlaybackTime | null>(null)
 export const PlayerActionsContext = createContext<AudioPlayerActions | null>(null)
+/** Hanya `seekable` (boolean): konsumen yang cuma butuh ini tidak render ulang tiap `timeupdate`. */
+export const PlaybackSeekableContext = createContext<boolean | null>(null)
 
 /**
  * Satu-satunya pemilik audio engine dan state playback. Harus berada di dalam
@@ -28,7 +30,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   return (
     <PlayerActionsContext.Provider value={actions}>
       <PlayerStateContext.Provider value={snapshot}>
-        <PlaybackTimeContext.Provider value={time}>{children}</PlaybackTimeContext.Provider>
+        <PlaybackSeekableContext.Provider value={time.seekable}>
+          <PlaybackTimeContext.Provider value={time}>{children}</PlaybackTimeContext.Provider>
+        </PlaybackSeekableContext.Provider>
       </PlayerStateContext.Provider>
     </PlayerActionsContext.Provider>
   )

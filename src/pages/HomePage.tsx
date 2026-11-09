@@ -5,15 +5,15 @@ import HomeSections from '../components/home/HomeSections'
 import { useHomeFeed } from '../hooks/useHomeFeed'
 
 /**
- * Beranda ala StreamBeats: kepala (menu, sapaan, timer, notifikasi, kolom cari + filter), banner besar bergulir otomatis,
- * Recently, lalu deretan kurasi dan rekomendasi dari riwayat dengar dan cari.
+ * Beranda MusicVerse: kepala (avatar/menu, sapaan, timer, notifikasi, kolom cari + filter), sorotan utama bergulir otomatis, lalu
+ * suasana, terakhir diputar, dan deretan kurasi serta rekomendasi dengan komposisi yang berganti-ganti.
  * Semua pencarian dan hasilnya ada di tab Cari; kolom di sini hanya mengantar ke sana.
  */
 export default function HomePage() {
   const feed = useHomeFeed(true)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <HomeHeader />
       <ErrorBoundary>
         <HomeBanner items={feed.banner.items} loading={feed.banner.loading} />

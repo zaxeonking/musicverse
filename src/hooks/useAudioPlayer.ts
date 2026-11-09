@@ -1,5 +1,5 @@
 import { useContext, useMemo } from 'react'
-import { PlaybackTimeContext, PlayerActionsContext, PlayerStateContext } from '../context/AudioPlayerContext'
+import { PlaybackSeekableContext, PlaybackTimeContext, PlayerActionsContext, PlayerStateContext } from '../context/AudioPlayerContext'
 import type { AudioPlayerActions, PlaybackTime, PlayerSnapshot } from '../types/player'
 
 function missingProvider(): never {
@@ -30,4 +30,11 @@ export function usePlaybackTime(): PlaybackTime {
   const time = useContext(PlaybackTimeContext)
   if (!time) missingProvider()
   return time
+}
+
+/** Hanya status `seekable`; tidak render ulang saat waktu berjalan (beda dengan `usePlaybackTime`). */
+export function useSeekable(): boolean {
+  const seekable = useContext(PlaybackSeekableContext)
+  if (seekable === null) missingProvider()
+  return seekable
 }

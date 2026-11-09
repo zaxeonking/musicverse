@@ -26,6 +26,10 @@ export default {
           // Dinaikkan dari #6a6a6a (±3.3:1) agar teks sekunder lolos kontras AA (≥4.5:1) di atas bg/card.
           faint: 'rgb(var(--mv-ink-faint, 138 138 138) / <alpha-value>)',
         },
+        // Aksen kedua MusicVerse (Coral Orange): titik hidup, penanda aktif, tombol putar.
+        coral: {
+          DEFAULT: 'rgb(var(--mv-coral, 255 118 87) / <alpha-value>)',
+        },
         danger: {
           DEFAULT: 'rgb(var(--mv-danger, 255 107 107) / <alpha-value>)',
           on: 'rgb(var(--mv-on-danger, 0 0 0) / <alpha-value>)',
@@ -122,6 +126,8 @@ export default {
         // Ikon centang/daftar yang baru berganti di picker playlist: membal kecil supaya perubahannya terasa.
         pop: { '0%': { transform: 'scale(0.4)', opacity: '0.4' }, '60%': { transform: 'scale(1.25)', opacity: '1' }, '100%': { transform: 'none', opacity: '1' } },
         eq: { '0%, 100%': { transform: 'scaleY(0.4)' }, '50%': { transform: 'scaleY(1)' } },
+        // Cincin yang melebar dari tombol putar utama (transform + opacity saja).
+        'play-ring': { from: { opacity: '0.55', transform: 'scale(1)' }, to: { opacity: '0', transform: 'scale(1.55)' } },
         disc: { to: { transform: 'rotate(360deg)' } },
         'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'none' } },
         'lyrics-up': { from: { opacity: '0', transform: 'translateY(100%)' }, to: { opacity: '1', transform: 'none' } },
@@ -144,6 +150,7 @@ export default {
         pop: 'pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
         disc: 'disc 18s linear infinite',
         eq: 'eq 1.1s ease-in-out infinite',
+        'play-ring': 'play-ring 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite',
         'sheet-up': 'sheet-up var(--sheet-ms, 340ms) var(--sheet-ease, cubic-bezier(0.32, 0.72, 0, 1)) both',
         'lyrics-up': 'lyrics-up 380ms cubic-bezier(0.22, 1, 0.36, 1) both',
         'panel-in': 'panel-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both',

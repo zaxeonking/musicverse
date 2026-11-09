@@ -23,6 +23,7 @@ import { STATUS_TEXT } from '../../utils/playerStatus'
 import { swallowNextClick } from '../../utils/swallowNextClick'
 import { waitForViewportSettled } from '../../utils/viewportSettle'
 import CoverArt from '../ui/CoverArt'
+import Waveform from '../ui/Waveform'
 import MarqueeText from '../ui/MarqueeText'
 import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './PlayerControls'
 import LyricLine from './LyricLine'
@@ -1120,7 +1121,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-3xl border border-veil/10 bg-raised/95 shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]`}
+      className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-[1.9rem_0.9rem_1.9rem_0.9rem] border border-accent/25 bg-raised/80 shadow-[0_10px_36px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]`}
     >
       {/* Pegangan. Geser kiri/kanan = kartu bergulir jadi disc, geser ke bawah = tutup musik. Ketuk = cadangan (keyboard/pembaca layar) untuk jadi disc. */}
       <button
@@ -1147,15 +1148,21 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
         >
           <div data-mini-cover className="relative isolate w-11 shrink-0 lg:w-14">
             {/* Kotak kosong tempat sampul: tampil (tanpa sampul) selama sampul sedang di luar kotak, lihat applyRoll / runDiscFly / index.css. */}
-            <span data-mini-slot aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-veil/10 ring-1 ring-inset ring-veil/10" style={{ opacity: 0 }} />
-            <CoverArt cover={now.cover} src={now.coverSrc} crossfade />
+            <span data-mini-slot aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 rounded-xl bg-veil/10 ring-1 ring-inset ring-veil/10" style={{ opacity: 0 }} />
+            <CoverArt cover={now.cover} src={now.coverSrc} crossfade className="!rounded-xl shadow-md shadow-black/40" />
           </div>
-          <span className="min-w-0">
-            <MarqueeText text={now.title} className="text-sm font-semibold text-ink" />
-            <MarqueeText
-              text={isError ? STATUS_TEXT.error : subtitle}
-              className={`text-xs ${status === 'error' ? 'text-danger' : 'text-ink-muted'}`}
-            />
+          <span className="min-w-0 flex-1">
+            <MarqueeText text={now.title} className="font-display text-[0.95rem] font-bold tracking-tight text-ink" />
+            <span className="flex items-center gap-2">
+              {/* Gelombang hidup saat lagu benar-benar diputar; diam (batang tetap) saat jeda/memuat. */}
+              {!isError && <Waveform playing={status === 'playing'} bars={4} className="h-3 shrink-0 text-coral" />}
+              <span className="min-w-0 flex-1">
+                <MarqueeText
+                  text={isError ? STATUS_TEXT.error : subtitle}
+                  className={`text-xs ${status === 'error' ? 'text-danger' : 'text-ink-muted'}`}
+                />
+              </span>
+            </span>
           </span>
         </button>
 

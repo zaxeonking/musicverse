@@ -7,9 +7,9 @@ import { swallowNextClick } from '../../utils/swallowNextClick'
 import { navTourName } from '../../tour/steps'
 
 /**
- * Bottom nav "kaca cair" (liquid glass): pil melayang dengan latar kaca tembus pandang (blur + saturasi, jadi warnanya
- * mengikuti konten yang lewat di belakangnya), tepi berkilau, dan satu "lensa" kaca beraksen di belakang tab aktif yang
- * meluncur antar tab. Warna aksen dan permukaan memakai token tema (accent, raised), bukan warna tetap.
+ * Bottom nav MusicVerse: dok kaca melayang (blur + saturasi, jadi warnanya mengikuti konten yang lewat di belakangnya) dengan
+ * sudut besar tapi bukan pil penuh, tepi bergaris aksen, dan satu "lensa" beraksen di belakang tab aktif yang meluncur antar
+ * tab. Lensa membawa garis coral tipis di tepi atasnya sebagai penanda identitas. Warna aksen dan permukaan memakai token tema (accent, raised), bukan warna tetap.
  *
  * Tata letak: pembungkus setinggi 0 (seperti dock mini player) dan bar diposisikan absolut di dasar, jadi `<main>` meluas sampai
  * ke tepi bawah dan konten tampak lewat di bawah kaca. Ruang yang dipesan bar dibagikan lewat variabel CSS `--dock-offset`
@@ -256,14 +256,14 @@ export default function BottomNav() {
             WebkitBackdropFilter: 'blur(16px) saturate(120%) brightness(var(--mv-nav-dim, 0.55))',
             backdropFilter: 'blur(16px) saturate(120%) brightness(var(--mv-nav-dim, 0.55))',
           }}
-          className={`relative w-full max-w-md rounded-full border border-veil/[0.12] bg-card/85 p-1 shadow-[0_14px_36px_rgb(0_0_0/var(--mv-nav-shadow,0.45)),0_2px_8px_rgb(0_0_0/var(--mv-nav-shadow-sm,0.3)),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.28),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06),inset_0_0_18px_rgb(var(--mv-veil,255_255_255)/0.05)] supports-[backdrop-filter]:bg-card/60 ${
+          className={`relative w-full max-w-md rounded-[1.9rem] border border-accent/20 bg-card/85 p-1 shadow-[0_14px_36px_rgb(0_0_0/var(--mv-nav-shadow,0.45)),0_2px_8px_rgb(0_0_0/var(--mv-nav-shadow-sm,0.3)),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.28),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06),inset_0_0_18px_rgb(var(--mv-veil,255_255_255)/0.05)] supports-[backdrop-filter]:bg-card/60 ${
             keyboardOpen ? 'pointer-events-none' : 'pointer-events-auto'
           }`}
         >
           {/* Kilau lengkung di tepi atas bar. */}
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-veil/[0.08] via-transparent to-transparent"
+            className="pointer-events-none absolute inset-0 rounded-[1.9rem] bg-gradient-to-b from-veil/[0.08] via-transparent to-transparent"
           />
           {/* Penanda tab aktif: kotak kaca melengkung yang ringkas, hanya selebar ikon + label dan tetap di dalam bar,
               diwarnai aksen tema. Hilang bila tak ada tab aktif (mis. Pengaturan). */}
@@ -280,14 +280,16 @@ export default function BottomNav() {
                   width: '4.5rem',
                   opacity: active >= 0 || pressed ? 1 : 0,
                   backgroundImage:
-                    'radial-gradient(circle at 50% 38%, rgb(var(--mv-accent, 29 185 84) / 0.38) 0%, rgb(var(--mv-accent, 29 185 84) / 0.12) 38%, transparent 62%), linear-gradient(180deg, rgb(var(--mv-veil, 255 255 255)/0.12) 0%, rgb(var(--mv-veil, 255 255 255)/0.03) 50%, rgb(var(--mv-veil, 255 255 255)/0.06) 100%)',
+                    'linear-gradient(180deg, rgb(var(--mv-accent, 139 92 246) / 0.34) 0%, rgb(var(--mv-accent, 139 92 246) / 0.12) 100%)',
                 }}
-                className={`h-full rounded-2xl border bg-accent/[0.12] transition-[opacity,box-shadow,border-color] duration-300 will-change-transform motion-reduce:transition-none ${
+                className={`relative h-full rounded-[1.4rem] border bg-accent/[0.12] transition-[opacity,box-shadow,border-color] duration-300 will-change-transform motion-reduce:transition-none ${
                   pressed
                     ? 'border-veil/35 shadow-[0_6px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.35),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.1)]'
                     : 'border-veil/20 shadow-[inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.22),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06)]'
                 }`}
-              />
+              >
+                <span aria-hidden="true" className="absolute left-1/2 top-[3px] h-[3px] w-5 -translate-x-1/2 rounded-full bg-coral" />
+              </span>
             </span>
           </span>
           <ul
@@ -315,12 +317,12 @@ export default function BottomNav() {
                   draggable={false}
                   aria-label={label}
                   data-lit={i === active ? 'true' : 'false'}
-                  className="group flex h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-semibold leading-none text-ink/85 transition-colors duration-200 [-webkit-tap-highlight-color:transparent] data-[lit=true]:text-accent-soft data-[lit=false]:hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent motion-reduce:transition-none"
+                  className="group flex h-14 flex-col items-center justify-center rounded-[1.4rem] text-[11px] font-semibold leading-none text-ink/85 transition-colors duration-200 [-webkit-tap-highlight-color:transparent] data-[lit=true]:text-accent-soft data-[lit=false]:hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent motion-reduce:transition-none"
                 >
                   {/* `--p` (0..1) diisi loop pegas = kedekatan lensa dengan tab ini; ikon membesar & nama tab memudar mengikutinya. */}
                   <Icon
                     className="h-6 w-6 shrink-0"
-                    style={{ transform: 'scale(calc(1 + var(--p, 0) * 0.1))' }}
+                    style={{ transform: 'translateY(calc(var(--p, 0) * 1px)) scale(calc(1 + var(--p, 0) * 0.1))' }}
                     aria-hidden="true"
                   />
                   <span

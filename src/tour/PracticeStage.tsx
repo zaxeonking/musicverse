@@ -421,9 +421,9 @@ const QUIZ: readonly QuizQuestion[] = [
   },
   {
     question: 'Lagu yang kamu sukai tersimpan di mana?',
-    options: ['Tab Unduhan', 'Riwayat putar', 'Lagu Disukai, di tab Playlist'],
+    options: ['Tab Unduhan', 'Riwayat putar', 'Lagu Disukai, di tab Pustaka'],
     answer: 2,
-    explain: 'Lagu Disukai selalu jadi kartu pertama di tab Playlist.',
+    explain: 'Lagu Disukai selalu jadi kartu pertama di tab Pustaka.',
   },
   {
     question: 'Bagaimana mengecilkan pemutar mini jadi disc?',

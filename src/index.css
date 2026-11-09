@@ -8,6 +8,8 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+  /* Aksen kedua MusicVerse (Coral Orange #FF7657) sebagai "r g b". */
+  --mv-coral: 255 118 87;
 }
 @layer base {
   /* Satu easing untuk seluruh gerakan UI (ease-in-out halus); --ease-hero untuk gerakan besar (cover mini <-> penuh). */
@@ -305,6 +307,20 @@ html.theme-anim *::after {
   /* Ganti isi (kategori pencarian, tab artis/album): hanya memudar, tanpa bergerak, supaya tidak ada kilatan atau lompatan tata letak. */
   .mv-swap {
     animation: mv-swap 220ms var(--ease) backwards;
+  }
+  /* Artwork: membesar pelan saat ditekan/disorot (hanya transform, aman untuk Android). */
+  .mv-art {
+    transition: transform 420ms var(--ease-spring);
+    will-change: transform;
+  }
+  .group:active .mv-art {
+    transform: scale(1.04);
+    transition-duration: 120ms;
+  }
+  @media (hover: hover) {
+    .group:hover .mv-art {
+      transform: scale(1.03);
+    }
   }
   /* Muncul dengan membal kecil (kartu, ikon, penanda). */
   .mv-pop {
