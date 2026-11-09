@@ -69,7 +69,7 @@ export function parseResult(value: unknown): LyricsResult | null {
   const duration = typeof v.duration === 'number' && Number.isFinite(v.duration) ? v.duration : null
   if (v.kind === 'plain') {
     if (!Array.isArray(v.lines) || v.lines.length === 0 || !v.lines.every((l) => typeof l === 'string')) return null
-    return { kind: 'plain', lines: v.lines as string[], duration }
+    return { kind: 'plain', lines: v.lines as string[], duration, ...(typeof v.source === 'string' ? { source: v.source } : {}) }
   }
   if (v.kind === 'synced') {
     const lines = cleanLines(v.lines)

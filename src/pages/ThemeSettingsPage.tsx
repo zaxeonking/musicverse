@@ -1,4 +1,4 @@
-import { ArrowLeft, BookmarkPlus, Check, ClipboardPaste, Copy, Dices, Download, Home, Library, Moon, Play, RotateCcw, Search, Smartphone, Sparkles, Sun, Sunrise, X, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, Check, ClipboardPaste, Copy, Dices, Download, Home, Library, Moon, Play, RotateCcw, Search, Smartphone, Sparkles, Sun, Sunrise, Wind, X, type LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import ColorField from '../components/settings/ColorField'
@@ -7,6 +7,7 @@ import { useTheme } from '../hooks/useTheme'
 import { useIconFollowsTheme } from '../native/appearance'
 import { readClipboardText, writeClipboardText } from '../native/clipboard'
 import { isNativeApp } from '../native/platform'
+import { setReduceMotion, useReduceMotion } from '../utils/motion'
 import {
   BG_LIMITS,
   CUSTOM_ID,
@@ -68,6 +69,7 @@ const QUICK_ACCENTS = ['#1DB954', '#22D3EE', '#4F8CFF', '#6366F1', '#A78BFA', '#
 export default function ThemeSettingsPage() {
   const [theme, setTheme] = useTheme()
   const [iconFollows, setIconFollows] = useIconFollowsTheme()
+  const motion = useReduceMotion()
   const [codeInput, setCodeInput] = useState('')
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [saved, setSaved] = useState<ThemeState[]>(() => getSavedThemes())
@@ -228,6 +230,23 @@ export default function ThemeSettingsPage() {
             <Segmented value={theme.glowLevel} options={GLOW_LEVELS} onChange={(id) => setTheme({ glowLevel: id })} label="Kekuatan cahaya latar" />
           </div>
         )}
+      </div>
+
+      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Gerakan</h2>
+      <div className="space-y-2">
+        <SettingSwitch
+          checked={motion.on}
+          onChange={() => {
+            if (!motion.locked) setReduceMotion(!motion.on)
+          }}
+          icon={Wind}
+          label="Kurangi gerakan"
+          hint={
+            motion.locked
+              ? 'Menyala karena pengaturan sistem (Hapus animasi / Kurangi gerakan) aktif. Matikan di pengaturan sistem untuk memakai animasi lagi.'
+              : 'Menghilangkan animasi besar: transisi halaman, sheet dan pemutar yang meluncur, gelembung, banner geser, efek pegas, dan putaran piringan. Penanda kecil seperti pemuatan tetap berjalan seperlunya.'
+          }
+        />
       </div>
 
       <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-muted">Layar pembuka &amp; ikon</h2>

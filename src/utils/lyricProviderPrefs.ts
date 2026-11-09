@@ -8,17 +8,34 @@ export const WORD_PROVIDERS: ReadonlyArray<{ id: WordProviderId; label: string }
   { id: 'betterlyrics', label: 'BetterLyrics' },
 ]
 
+/**
+ * Sumber lirik yang diutamakan untuk lagu tanpa pilihan manual:
+ *  - ytmusic : lirik YouTube Music (bawaan); tidak ditimpa provider kata,
+ *  - word    : lirik per kata (LyricsPlus / BetterLyrics) bila lebih lengkap, selain itu YT Music dst.,
+ *  - lrclib  : LRCLIB / NetEase dulu, YouTube Music hanya cadangan.
+ */
+export type LyricPriority = 'ytmusic' | 'word' | 'lrclib'
+
+export const LYRIC_PRIORITIES: ReadonlyArray<{ id: LyricPriority; label: string; hint: string }> = [
+  { id: 'ytmusic', label: 'YouTube Music', hint: 'Teks sama seperti di YT Music' },
+  { id: 'word', label: 'Per kata', hint: 'Karaoke per kata bila ada' },
+  { id: 'lrclib', label: 'LRCLIB', hint: 'LRCLIB / NetEase dulu' },
+]
+
 export interface LyricProviderPrefs {
+  /** Sumber yang diutamakan (lihat `LyricPriority`). */
+  priority: LyricPriority
   /** Saklar utama: false = pakai sumber lama saja (LRCLIB/NetEase/YT Music), tanpa memanggil provider kata. */
   wordSync: boolean
   order: WordProviderId[]
   disabled: WordProviderId[]
 }
 
-export const DEFAULT_PREFS: LyricProviderPrefs = { wordSync: true, order: WORD_PROVIDERS.map((p) => p.id), disabled: [] }
+export const DEFAULT_PREFS: LyricProviderPrefs = { priority: 'ytmusic', wordSync: true, order: WORD_PROVIDERS.map((p) => p.id), disabled: [] }
 
 const KEY = 'musicverse:lyricProviders'
 const isId = (v: unknown): v is WordProviderId => WORD_PROVIDERS.some((p) => p.id === v)
+const isPriority = (v: unknown): v is LyricPriority => LYRIC_PRIORITIES.some((p) => p.id === v)
 
 /** Membaca preferensi; nilai rusak / tidak dikenal diabaikan. Provider baru yang belum ada di urutan tersimpan ditaruh di akhir. */
 export function loadProviderPrefs(): LyricProviderPrefs {
@@ -28,6 +45,7 @@ export function loadProviderPrefs(): LyricProviderPrefs {
   const order = Array.isArray(v.order) ? v.order.filter(isId) : []
   for (const p of WORD_PROVIDERS) if (!order.includes(p.id)) order.push(p.id)
   return {
+    priority: isPriority(v.priority) ? v.priority : DEFAULT_PREFS.priority,
     wordSync: typeof v.wordSync === 'boolean' ? v.wordSync : true,
     order: [...new Set(order)],
     disabled: Array.isArray(v.disabled) ? [...new Set(v.disabled.filter(isId))] : [],
@@ -49,7 +67,8 @@ export function saveProviderPrefs(prefs: LyricProviderPrefs): void {
 
 /** Tanda pengaturan yang memengaruhi hasil lirik; cache persisten yang tandanya beda dianggap basi. */
 export function providerSignature(prefs: LyricProviderPrefs = loadProviderPrefs()): string {
-  return activeWordProviders(prefs).join(',') || 'off'
+  // Prioritas ikut menentukan hasil; entri cache lama dengan tanda berbeda dianggap basi.
+  return `${activeWordProviders(prefs).join(',') || 'off'}+${prefs.priority}`
 }
 
 /** Provider yang benar-benar dicoba: urutan tersimpan, tanpa yang dimatikan; kosong bila saklar utama mati. */

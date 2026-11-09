@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { audioEngine } from '../services/audioEngine'
 import { usePlaybackTime, useAudioPlayer } from './useAudioPlayer'
 import type { LyricsResult, SyncedVersion } from '../services/lyricsApi'
 import { findActiveLine, type LyricWord } from '../utils/lrc'
-import { readJson } from '../utils/safeStorage'
+import { getLyricOffset, offsetStorageKey, setLyricOffset, subscribeLyricOffset } from '../utils/lyricOffset'
 import { subTextsFor } from '../utils/lyricSubtext'
 import { useLyricDisplayPrefs } from './useLyricDisplayPrefs'
 
@@ -61,9 +61,7 @@ export function estimateActive(items: readonly LyricItem[], currentTime: number,
   return filled[filled.length - 1]
 }
 
-export function offsetStorageKey(trackKey?: string): string | null {
-  return trackKey ? `musicverse:lyricsOffset:${trackKey.toLowerCase()}` : null
-}
+export { offsetStorageKey }
 
 /**
  * Logika waktu lirik berwaktu yang dipakai bersama LyricsPanel (pemutar penuh) dan mini player:
@@ -95,12 +93,9 @@ export function useLyricTiming(result: Extract<LyricsResult, { kind: 'synced' }>
 
   // Penyelarasan manual (detik): positif = lirik maju. Disimpan per lagu.
   const storageKey = offsetStorageKey(trackKey)
-  const [offset, setOffset] = useState(0)
-  useEffect(() => {
-    if (!storageKey) return setOffset(0)
-    const saved = readJson(storageKey)
-    setOffset(saved.status === 'ok' && typeof saved.value === 'number' && Number.isFinite(saved.value) ? saved.value : 0)
-  }, [storageKey])
+  // Satu sumber (utils/lyricOffset): panel penuh, strip mini player, dan tombol +/- selalu sama.
+  const offset = useSyncExternalStore(subscribeLyricOffset, () => getLyricOffset(trackKey))
+  const setOffset = useCallback((value: number) => setLyricOffset(trackKey, value), [trackKey])
 
   const known = audioDuration !== null && lyricsDuration !== null && Number.isFinite(audioDuration) && audioDuration > 0
   const diff = known ? Math.abs(lyricsDuration - audioDuration) : 0

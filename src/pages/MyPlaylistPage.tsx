@@ -26,6 +26,7 @@ import type { PlaylistTrack } from '../types/spotify'
 import { fallbackCover } from '../utils/fallbackCover'
 import { isLikedId, MAX_MY_PLAYLIST_NAME } from '../utils/myPlaylistStorage'
 import { getRowActivity } from '../utils/playerStatus'
+import { prefersReducedMotion } from '../utils/motion'
 import { makeSongMatcher } from '../utils/sameSong'
 
 function TrackLine({
@@ -69,7 +70,7 @@ function TrackLine({
   // Hapus: baris memudar dan bergeser keluar dulu, baru dihapus dari data; baris di bawahnya lalu meluncur naik (useListFlip).
   const removeAnimated = (event: { currentTarget: HTMLElement }) => {
     const row = event.currentTarget.closest('li')
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const reduce = prefersReducedMotion()
     if (removing.current) return
     if (!row || reduce || typeof row.animate !== 'function') return onRemove()
     removing.current = true

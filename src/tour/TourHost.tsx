@@ -21,6 +21,7 @@ import {
   useTourState,
   whatsNewReady,
 } from './tourStore'
+import { prefersReducedMotion } from '../utils/motion'
 
 const PAD = 6
 const MARGIN = 12
@@ -41,7 +42,7 @@ interface Rect {
   h: number
 }
 
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 /** Elemen pertama dengan atribut `data-tour` itu yang benar-benar tampil (tab bawah dan sidebar sama-sama ada di DOM, satu disembunyikan). */
 function findTarget(step: TourStep): HTMLElement | null {

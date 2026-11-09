@@ -88,6 +88,21 @@
       animation-delay: 0ms !important;
     }
   }
+  /* Sama dengan di atas, tetapi dipicu saklar Pengaturan (kelas html.reduce-motion; ikut menyala bila sistem juga memintanya). */
+  html.reduce-motion *,
+  html.reduce-motion ::before,
+  html.reduce-motion ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  html.reduce-motion [data-mini-card][data-mini-card] {
+    animation-duration: 460ms !important;
+    animation-delay: 0ms !important;
+  }
 }
 
 @layer components {
@@ -169,6 +184,9 @@
     .back-glass:active {
       transform: none;
     }
+  }
+  html.reduce-motion .back-glass:active {
+    transform: none;
   }
 
   .btn-primary {
@@ -395,13 +413,9 @@ html.theme-anim *::after {
   }
 
   /* ---------- Banner Beranda ---------- */
-  /* Gambar mengendap dari sedikit lebih besar saat slide aktif (efek zoom pelan). */
+  /* Latar statis: dulu mengendap dari 1,14x ke 1x selama 7 dtk di lapisan seukuran slide, yang membuat geser banner patah-patah. */
   .mv-banner-img {
-    transform: scale(1.14);
-    transition: transform 7s cubic-bezier(0.2, 0.6, 0.2, 1);
-  }
-  .mv-banner-slide[data-active='true'] .mv-banner-img {
-    transform: none;
+    transform: scale(1.08);
   }
   /* Penanda, sampul, dan teks naik bergantian saat slide jadi aktif; slide lain menunggu dalam keadaan tersembunyi. */
   .mv-banner-chip {
@@ -545,6 +559,9 @@ html[data-fp-open] [data-mini-slot] {
   [data-mini-slot] {
     transition: none;
   }
+}
+html.reduce-motion [data-mini-slot] {
+  transition: none;
 }
 
 /* ---------- Splash ----------

@@ -29,6 +29,7 @@ import { PlayerError, QueueButton, SpotifyLink, TransportControls } from './Play
 import LyricLine from './LyricLine'
 import MiniBubble from './MiniBubble'
 import SeekBar from './SeekBar'
+import { prefersReducedMotion } from '../../utils/motion'
 
 /** Jarak seret ke bawah (px) yang cukup untuk MENUTUP musik (kartu tenggelam, pemutar dikosongkan). */
 const CLOSE_DISTANCE = 96
@@ -55,7 +56,7 @@ const LEAVE_MS = 440
 /** Diameter disc (px); sama dengan SIZE di MiniBubble. */
 const BUBBLE_PX = 72
 const RING_CIRC = 2 * Math.PI * 26
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 /** Salinan disc yang akan terbang ke sampul di kartu (lihat captureDisc / runDiscFly). */
 interface DiscFly {
@@ -168,11 +169,33 @@ function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
   inner.querySelectorAll<HTMLElement>('svg, span[class*="border-veil"]').forEach((el) => {
     animations.push(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FLY_MS * 0.35, fill: 'forwards', easing: 'ease-out' }))
   })
+  // Sampul di kartu masih bergerak saat disc terbang (dock naik ke atas nav ~300 ms setelah keyboard menutup), jadi posisi yang
+  // diukur di awal bisa basi dan disc mendarat di nav. Selisih posisi sampul sekarang vs saat diukur ditambahkan tiap frame lewat
+  // properti `translate` (terpisah dari `transform` animasi), sebanding dengan kemajuan terbang: tiba tepat di sampul yang asli.
+  const coverEl = cover
+  const cx0 = target.left + target.width / 2
+  const cy0 = target.top + target.height / 2
+  const flight = animations[0]
+  const place = () => {
+    const r = coverEl.getBoundingClientRect()
+    if (r.width <= 0) return
+    const p = flight.effect?.getComputedTiming().progress
+    const k = typeof p === 'number' ? Math.min(1, Math.max(0, p)) : 1
+    wrap.style.translate = `${(r.left + r.width / 2 - cx0) * k}px ${(r.top + r.height / 2 - cy0) * k}px`
+  }
+  let followRaf = 0
+  const follow = () => {
+    place()
+    followRaf = window.requestAnimationFrame(follow)
+  }
+  followRaf = window.requestAnimationFrame(follow)
   const resetSlot = () => {
     slotIn?.cancel()
     if (slot) slot.style.opacity = '0'
   }
   const finish = () => {
+    window.cancelAnimationFrame(followRaf)
+    place()
     // Disc mendarat di kotak: sampul memudar masuk di atas kotak kosong, lalu kotaknya memudar (sudah tertutup sampul).
     if (art) {
       art.style.transition = 'opacity 140ms ease-out'
@@ -191,6 +214,7 @@ function runDiscFly(fly: DiscFly, cover: HTMLElement | null) {
     }, 220)
   }
   animations[0].finished.then(finish, () => {
+    window.cancelAnimationFrame(followRaf)
     wrap.remove()
     if (art) art.style.opacity = ''
     resetSlot()

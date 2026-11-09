@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from 'react'
 import { springEasing } from '../utils/spring'
 import { swallowNextClick } from '../utils/swallowNextClick'
+import { prefersReducedMotion } from '../utils/motion'
 
 /** Jarak (px) sebelum sentuhan dianggap seretan, dan batas keputusan lepas. */
 const START_PX = 8
@@ -10,7 +11,7 @@ const CLOSE_VELOCITY = 0.6
 const SPRING_FALLBACK = 'cubic-bezier(0.34, 1.3, 0.64, 1)'
 const SPRING_MS = 460
 
-const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+const reduced = () => prefersReducedMotion()
 
 /** Elemen di antara target dan panel yang punya gestur sendiri (scroll / touch-action: none): seretan sheet tidak boleh membajaknya. */
 function ownsGesture(target: HTMLElement, panel: HTMLElement): boolean {

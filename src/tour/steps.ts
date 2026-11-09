@@ -466,4 +466,48 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
       },
     ],
   },
+  {
+    id: '0.5.54.3',
+    steps: [
+      {
+        id: 'wn-notifications',
+        route: '/',
+        target: 'home-notif',
+        title: 'Baru: notifikasi pembaruan dan fitur baru',
+        body: 'Aplikasi kini memeriksa pembaruan sendiri secara berkala. Versi baru dan daftar fitur baru muncul di lonceng notifikasi; titik di lonceng menandai yang belum kamu lihat.',
+        missing: 'Pemeriksaan pembaruan otomatis hanya di APK dan butuh koneksi internet. Fitur baru tetap tampil di lonceng notifikasi.',
+      },
+    ],
+  },
+  {
+    id: '0.5.54.4',
+    steps: [
+      {
+        id: 'wn-lyric-source',
+        route: '/settings/playback',
+        title: 'Baru: pilih sumber lirik dan geser waktunya',
+        body: 'Di Pengaturan > Pemutaran pilih sumber lirik yang diutamakan (YouTube Music, per kata, atau LRCLIB). Di panel lirik, tombol Sumber mengganti sumber khusus untuk satu lagu, dan tombol Lambat / Cepat menggeser waktu lirik per lagu.',
+        missing: 'Putar lagu lalu buka panel lirik untuk mencoba tombol Sumber dan Lambat / Cepat.',
+      },
+      {
+        id: 'wn-recap-streak',
+        route: '/history/recap',
+        title: 'Baru: streak dengar dan preset equalizer sendiri',
+        body: 'Rangkuman kini menampilkan streak hari berturut-turut kamu mendengar. Di Equalizer (APK) kamu bisa menyimpan pengaturan sebagai preset bernama sendiri.',
+        missing: 'Streak muncul setelah ada riwayat putar. Preset equalizer sendiri hanya ada di APK.',
+      },
+    ],
+  },
+  {
+    id: '0.5.54.6',
+    steps: [
+      {
+        id: 'wn-reduce-motion',
+        route: '/settings/theme',
+        nativeOnly: true,
+        title: 'Baru: Kurangi gerakan',
+        body: 'Di Pengaturan > Tema > Gerakan ada saklar Kurangi gerakan: animasi besar seperti transisi halaman, sheet yang meluncur, gelembung pemutar, dan banner geser dimatikan. Bagus untuk HP yang berat atau bila animasi bikin pusing.',
+      },
+    ],
+  },
 ]

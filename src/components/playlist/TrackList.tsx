@@ -10,6 +10,7 @@ import { makeSongMatcher, type SongRef } from '../../utils/sameSong'
 import { buildSearchIndex, filterSearchIndex } from '../../utils/trackSearch'
 import EmptyState from '../ui/EmptyState'
 import TrackRow, { TRACK_GRID } from './TrackRow'
+import { prefersReducedMotion } from '../../utils/motion'
 
 interface TrackListProps {
   /** Seluruh lagu playlist, urutan asli dari API. */
@@ -100,7 +101,7 @@ export default function TrackList({
       prevTops.current = new Map()
       return
     }
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const reduce = prefersReducedMotion()
     const next = new Map<string, number>()
     const count = Math.min(list.children.length, 60)
     for (let i = 0; i < count; i++) {

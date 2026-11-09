@@ -5,7 +5,7 @@ import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import { fallbackCover } from '../utils/fallbackCover'
 import { readPlayLog } from '../utils/playLog'
-import { computeRecap, formatListening, RECAP_PERIODS, WEEKDAYS, type RecapPeriod } from '../utils/recap'
+import { computeRecap, computeStreaks, formatListening, RECAP_PERIODS, WEEKDAYS, type RecapPeriod } from '../utils/recap'
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -27,6 +27,7 @@ export default function RecapPage() {
   const [period, setPeriod] = useState<RecapPeriod>('30d')
   const log = useMemo(readPlayLog, [])
   const recap = useMemo(() => computeRecap(log, period), [log, period])
+  const streaks = useMemo(() => computeStreaks(log), [log])
   const maxDay = Math.max(1, ...recap.perWeekday)
   const hourText = recap.busiestHour >= 0 ? `${String(recap.busiestHour).padStart(2, '0')}.00` : '-'
 
@@ -38,7 +39,7 @@ export default function RecapPage() {
       </Link>
       <header>
         <h1 className="text-3xl font-extrabold text-ink">Rangkuman</h1>
-        <p className="mt-1 text-sm text-ink-muted">Dihitung di perangkatmu dari Riwayat. Tidak ada data yang dikirim.</p>
+        <p className="mt-1 text-sm text-ink-muted">Dihitung di perangkatmu dari Riwayat (maksimal 1.500 putaran terakhir). Tidak ada data yang dikirim.</p>
       </header>
 
       <div role="tablist" aria-label="Periode" className="flex gap-2">
@@ -71,6 +72,12 @@ export default function RecapPage() {
               hint={recap.busiestDay ? `Rekor: ${dayText(recap.busiestDay.date)} (${recap.busiestDay.plays}×)` : undefined}
             />
             <Stat label="Jam favorit" value={hourText} hint="Waktu paling sering memutar" />
+            <Stat
+              label="Streak sekarang"
+              value={streaks.current > 0 ? `${streaks.current} hari` : '-'}
+              hint={streaks.current > 0 ? 'Mendengar berturut-turut' : 'Putar lagu hari ini untuk memulai'}
+            />
+            <Stat label="Streak terpanjang" value={streaks.longest > 0 ? `${streaks.longest} hari` : '-'} hint={`${recap.activeDays} hari aktif di periode ini`} />
           </section>
 
           <section aria-label="Per hari" className="rounded-lg bg-card p-4">

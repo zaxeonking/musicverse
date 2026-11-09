@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { prefersReducedMotion } from '../utils/motion'
 
 const SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
 
@@ -17,7 +18,7 @@ export function usePulse<T extends HTMLElement | SVGElement>(trigger: unknown, a
     }
     const el = ref.current
     if (!el || typeof el.animate !== 'function') return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    if (prefersReducedMotion()) return
     el.animate(
       [{ transform: 'scale(1)' }, { transform: `scale(${amount})`, offset: 0.4 }, { transform: 'scale(1)' }],
       { duration: ms, easing: SPRING },

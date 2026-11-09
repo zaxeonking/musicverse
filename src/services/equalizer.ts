@@ -92,8 +92,78 @@ export function setEqEnabled(enabled: boolean): void {
 }
 
 export function setEqPreset(name: string): void {
-  const gains = EQ_PRESETS[name]
+  const gains = EQ_PRESETS[name] ?? userPresets.find((p) => p.name === name)?.gains
   if (gains) commit({ ...state, preset: name, gains: [...gains] })
+}
+
+/* ---------------- preset buatan pengguna ---------------- */
+
+export interface UserPreset {
+  name: string
+  gains: number[]
+}
+
+const USER_KEY = 'musicverse:eq:presets:v1'
+export const MAX_USER_PRESETS = 10
+export const MAX_PRESET_NAME = 20
+
+function loadUserPresets(): UserPreset[] {
+  const out = readJson(USER_KEY)
+  if (out.status !== 'ok' || !Array.isArray(out.value)) return []
+  const list: UserPreset[] = []
+  for (const raw of out.value) {
+    const r = raw as { name?: unknown; gains?: unknown } | null
+    if (!r || typeof r.name !== 'string' || !Array.isArray(r.gains) || r.gains.length !== EQ_FREQS.length) continue
+    const name = cleanPresetName(r.name)
+    if (name && !isBuiltinName(name) && !list.some((p) => p.name === name)) list.push({ name, gains: r.gains.map(clampGain) })
+  }
+  return list.slice(0, MAX_USER_PRESETS)
+}
+
+let userPresets: UserPreset[] = loadUserPresets()
+const userListeners = new Set<() => void>()
+
+export function cleanPresetName(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, MAX_PRESET_NAME)
+}
+
+function isBuiltinName(name: string): boolean {
+  return name.toLowerCase() === 'custom' || Object.keys(EQ_PRESETS).some((n) => n.toLowerCase() === name.toLowerCase())
+}
+
+function commitUserPresets(next: UserPreset[]): void {
+  userPresets = next
+  writeJson(USER_KEY, next)
+  for (const l of [...userListeners]) l()
+}
+
+export function useUserPresets(): readonly UserPreset[] {
+  return useSyncExternalStore(
+    (cb) => {
+      userListeners.add(cb)
+      return () => userListeners.delete(cb)
+    },
+    () => userPresets,
+  )
+}
+
+/** Menyimpan pengaturan EQ saat ini sebagai preset bernama (nama sama = diganti). Mengembalikan alasan gagal, atau null bila berhasil. */
+export function saveUserPreset(rawName: string): 'empty' | 'builtin' | 'full' | null {
+  const name = cleanPresetName(rawName)
+  if (!name) return 'empty'
+  if (isBuiltinName(name)) return 'builtin'
+  const exists = userPresets.some((p) => p.name === name)
+  if (!exists && userPresets.length >= MAX_USER_PRESETS) return 'full'
+  const entry: UserPreset = { name, gains: [...state.gains] }
+  commitUserPresets(exists ? userPresets.map((p) => (p.name === name ? entry : p)) : [...userPresets, entry])
+  commit({ ...state, preset: name })
+  return null
+}
+
+/** Menghapus preset buatan pengguna; bila sedang dipakai, pengaturan tetap tapi namanya menjadi Custom. */
+export function deleteUserPreset(name: string): void {
+  commitUserPresets(userPresets.filter((p) => p.name !== name))
+  if (state.preset === name) commit({ ...state, preset: 'Custom' })
 }
 
 export function setEqGain(index: number, value: number): void {

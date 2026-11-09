@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -159,5 +161,10 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `motion-reduce:` berlaku bila sistem meminta kurangi gerakan ATAU saklar Pengaturan > Tema menyalakan html.reduce-motion (src/utils/motion.ts).
+    plugin(({ addVariant }) => {
+      addVariant('motion-reduce', ['@media (prefers-reduced-motion: reduce)', 'html.reduce-motion &'])
+    }),
+  ],
 }

@@ -5,6 +5,7 @@ import { useLyricDisplayPrefs } from '../../hooks/useLyricDisplayPrefs'
 import { saveDisplayPrefs } from '../../utils/lyricDisplayPrefs'
 import {
   DEFAULT_PREFS,
+  LYRIC_PRIORITIES,
   loadProviderPrefs,
   saveProviderPrefs,
   WORD_PROVIDERS,
@@ -33,11 +34,32 @@ export default function LyricProviderSettings() {
   const toggle = (id: WordProviderId) =>
     update({ ...prefs, disabled: prefs.disabled.includes(id) ? prefs.disabled.filter((d) => d !== id) : [...prefs.disabled, id] })
   const isDefault =
+    prefs.priority === DEFAULT_PREFS.priority &&
     prefs.wordSync === DEFAULT_PREFS.wordSync && prefs.disabled.length === 0 && prefs.order.every((id, i) => id === DEFAULT_PREFS.order[i])
 
   return (
     <div className="mt-6">
       <h2 className="mb-2 text-lg font-bold text-ink">Lirik</h2>
+      <p id="lyric-priority-label" className="text-sm font-medium text-ink">
+        Utamakan lirik dari
+      </p>
+      <div role="radiogroup" aria-labelledby="lyric-priority-label" className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
+        {LYRIC_PRIORITIES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={prefs.priority === item.id}
+            onClick={() => update({ ...prefs, priority: item.id })}
+            className={`focus-ring h-9 shrink-0 rounded-full px-4 text-sm font-medium ${prefs.priority === item.id ? 'bg-accent text-accent-on' : 'bg-raised text-ink'}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <p className="mb-3 mt-1.5 text-xs text-ink-muted">
+        {LYRIC_PRIORITIES.find((p) => p.id === prefs.priority)?.hint}. Sumber lain hanya dipakai bila yang diutamakan tidak punya lirik. Per lagu bisa diganti lewat tombol Sumber di panel lirik. Berlaku untuk lagu berikutnya.
+      </p>
       <SettingSwitch
         checked={prefs.wordSync}
         onChange={() => update({ ...prefs, wordSync: !prefs.wordSync })}

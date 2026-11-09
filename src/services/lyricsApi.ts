@@ -5,6 +5,9 @@ import { stripArtistPrefix } from '../utils/trackTitle'
 import { fetchYtMusicLyrics } from '../plugins/ytLyrics'
 import { fetchTrackIsrc, findDeezerTrackId } from './artistApi'
 import { fetchWordLyrics, normalizeIsrc, type WordLyricsHit } from './wordLyrics'
+import { loadProviderPrefs, type LyricPriority } from '../utils/lyricProviderPrefs'
+import { shouldPreferWord } from '../utils/lyricPriority'
+import { getLyricSourcePin, type LyricSourceId } from '../utils/lyricSourcePins'
 
 /**
  * Lirik dari LRCLIB (https://lrclib.net): gratis, tanpa kunci API. Dipanggil langsung dari browser;
@@ -33,7 +36,7 @@ export type LyricsResult =
       /** true = baris-barisnya punya waktu kata ASLI (karaoke tepat), bukan perkiraan. */
       wordSynced?: boolean
     }
-  | { kind: 'plain'; lines: string[]; duration: number | null }
+  | { kind: 'plain'; lines: string[]; duration: number | null; /** "ytmusic" bila dari YouTube Music. */ source?: string }
   | { kind: 'instrumental' }
   | { kind: 'none' }
 
@@ -134,7 +137,7 @@ function toResult(record: LrclibRecord, others: LrclibRecord[] = []): LyricsResu
         const parsed = parseLrc(other.syncedLyrics)
         if (parsed.length > 0) alternatives.push({ lines: parsed, duration: other.duration })
       }
-      return { kind: 'synced', lines, duration: record.duration, alternatives }
+      return { kind: 'synced', lines, duration: record.duration, alternatives, ...(record.source ? { source: record.source } : {}) }
     }
   }
   if (record.plainLyrics) {
@@ -142,6 +145,7 @@ function toResult(record: LrclibRecord, others: LrclibRecord[] = []): LyricsResu
       kind: 'plain',
       lines: record.plainLyrics.split(/\r?\n/).map((line) => line.trimEnd()),
       duration: record.duration,
+      ...(record.source ? { source: record.source } : {}),
     }
   }
   return record.instrumental ? { kind: 'instrumental' } : { kind: 'none' }
@@ -330,21 +334,27 @@ async function ovhRecords(title: string, artist: string, signal: AbortSignal): P
 /** Setelah ada versi bertanda waktu, sumber lain masih ditunggu sebentar supaya bisa dibandingkan. */
 const SOURCE_GRACE_MS = 1500
 
-/**
- * Mencari lirik dari BEBERAPA sumber sekaligus (LRCLIB, NetEase, lyrics.ovh). Semua versi bertanda waktu
- * dikumpulkan jadi satu daftar; yang durasinya paling dekat dengan lagu dipakai, sisanya dikembalikan
- * sebagai `alternatives` supaya pemutar bisa memilih ulang memakai durasi audio yang benar-benar terdengar.
- * Sumber yang gagal/diblokir tidak menggagalkan yang lain; galat baru dilaporkan jika SEMUA sumber gagal.
- */
-async function fetchLegacyLyrics(track: PlaylistTrack, options: { signal: AbortSignal }): Promise<LyricsResult> {
-  const { signal } = options
+interface LookupContext {
+  track: PlaylistTrack
+  baseTitle: string
+  title: string
+  artist: string
+  durationS: number | null
+  signal: AbortSignal
+}
+
+function lookupContext(track: PlaylistTrack, signal: AbortSignal): LookupContext {
   const durationS = parseDuration(track.duration)
   const artist = primaryArtist(track.artists)
   // Judul playlist sering "Artis - Judul": buang bagian artis, kalau tidak pencarian memakai nama artis sebagai judul.
   const baseTitle = stripArtistPrefix(track.title, track.artists)
   const title = cleanTitle(baseTitle) || baseTitle
+  return { track, baseTitle, title, artist, durationS, signal }
+}
 
-  // 1. YouTube Music dulu (bertanda waktu bila ada, kalau tidak lirik biasa). Hanya bila tidak ada, sumber lain di bawah dipakai.
+/** YouTube Music: bertanda waktu bila ada, kalau tidak lirik biasa. null = tidak ada. */
+async function ytMusicResult(ctx: LookupContext): Promise<LyricsResult | null> {
+  const { track, title, artist, durationS, signal } = ctx
   const yt = await fetchYtMusicLyrics(
     track,
     (hits) => {
@@ -359,24 +369,34 @@ async function fetchLegacyLyrics(track: PlaylistTrack, options: { signal: AbortS
     [title, artist].filter(Boolean).join(' '),
   )
   if (signal.aborted) throw new LyricsError('aborted', 'Permintaan lirik dibatalkan.')
-  if (yt) {
-    return toResult({
-      trackName: yt.title,
-      artistName: yt.artist,
-      duration: yt.durationSec,
-      instrumental: false,
-      plainLyrics: yt.plain,
-      syncedLyrics: yt.synced,
-      source: 'ytmusic',
-    })
-  }
+  if (!yt) return null
+  return toResult({
+    trackName: yt.title,
+    artistName: yt.artist,
+    duration: yt.durationSec,
+    instrumental: false,
+    plainLyrics: yt.plain,
+    syncedLyrics: yt.synced,
+    source: 'ytmusic',
+  })
+}
 
-  // 2. Sumber lain (LRCLIB, NetEase, lyrics.ovh) bersamaan.
-  const jobs: Array<Promise<LrclibRecord[]>> = [
-    lrclibRecords(track, baseTitle, title, artist, durationS, signal),
-    neteaseRecords(title, artist, signal),
-    ovhRecords(title, artist, signal),
+type RecordSource = 'lrclib' | 'netease' | 'ovh'
+
+/**
+ * Mencari lirik dari sumber-sumber lama (LRCLIB, NetEase, lyrics.ovh) sekaligus, atau hanya `only` bila diberikan.
+ * Semua versi bertanda waktu dikumpulkan jadi satu daftar; yang durasinya paling dekat dengan lagu dipakai, sisanya
+ * dikembalikan sebagai `alternatives` supaya pemutar bisa memilih ulang memakai durasi audio yang benar-benar terdengar.
+ * Sumber yang gagal/diblokir tidak menggagalkan yang lain; galat baru dilaporkan jika SEMUA sumber gagal.
+ */
+async function recordSourcesResult(ctx: LookupContext, only?: RecordSource): Promise<LyricsResult> {
+  const { track, baseTitle, title, artist, durationS, signal } = ctx
+  const all: Array<[RecordSource, () => Promise<LrclibRecord[]>]> = [
+    ['lrclib', () => lrclibRecords(track, baseTitle, title, artist, durationS, signal)],
+    ['netease', () => neteaseRecords(title, artist, signal)],
+    ['ovh', () => ovhRecords(title, artist, signal)],
   ]
+  const jobs = all.filter(([id]) => !only || id === only).map(([, run]) => run())
 
   const records: LrclibRecord[] = []
   const errors: unknown[] = []
@@ -414,16 +434,44 @@ async function fetchLegacyLyrics(track: PlaylistTrack, options: { signal: AbortS
   return { kind: 'none' }
 }
 
-/** Hasil provider kata menang atas sumber lama hanya bila benar-benar lebih baik. */
-export function shouldPreferWord(word: Pick<WordLyricsHit, 'lines' | 'wordSynced'>, legacy: LyricsResult | null): boolean {
-  if (!legacy) return true
-  if (legacy.kind === 'instrumental') return false // LRCLIB menandai instrumental: jangan dibantah oleh hasil kata yang meragukan
-  if (legacy.kind === 'synced') {
-    // Hasil per baris dari provider kata tidak menambah apa-apa di atas sumber lama; hasil per kata menang bila cukup lengkap.
-    return word.wordSynced && word.lines.length >= legacy.lines.length * 0.6
+/**
+ * Rantai sumber lama menurut prioritas. YouTube Music dicoba PERTAMA (bawaan), kecuali prioritas "lrclib": LRCLIB / NetEase /
+ * lyrics.ovh dulu, YouTube Music hanya cadangan bila yang lain tidak menemukan apa pun.
+ */
+async function fetchLegacyLyrics(ctx: LookupContext, priority: LyricPriority): Promise<LyricsResult> {
+  if (priority !== 'lrclib') {
+    const yt = await ytMusicResult(ctx)
+    if (yt) return yt
+    return recordSourcesResult(ctx)
   }
-  return true // sumber lama hanya lirik polos / tidak ada: lirik berwaktu dari provider kata lebih baik
+  let others: LyricsResult | null = null
+  let othersError: unknown
+  try {
+    others = await recordSourcesResult(ctx)
+  } catch (error) {
+    if (error instanceof LyricsError && error.code === 'aborted') throw error
+    othersError = error
+  }
+  if (others && others.kind !== 'none') return others
+  const yt = await ytMusicResult(ctx)
+  if (yt) return yt
+  if (others) return others
+  throw othersError
 }
+
+/** Satu sumber saja (pilihan manual pengguna untuk lagu ini). Tidak ada hasil = `none`, tidak diam-diam pindah sumber. */
+async function fetchFromSource(ctx: LookupContext, source: LyricSourceId): Promise<LyricsResult> {
+  if (source === 'ytmusic') return (await ytMusicResult(ctx)) ?? { kind: 'none' }
+  if (source === 'word') {
+    const isrc = await resolveIsrc(ctx.track, ctx.signal)
+    const word = await fetchWordLyrics({ title: ctx.title, artist: ctx.artist, album: ctx.track.album || undefined, isrc, durationS: ctx.durationS }, ctx.signal, { force: true })
+    if (ctx.signal.aborted) throw new LyricsError('aborted', 'Permintaan lirik dibatalkan.')
+    return word ? wordResult(word) : { kind: 'none' }
+  }
+  return recordSourcesResult(ctx, source)
+}
+
+export { shouldPreferWord }
 
 const isrcCache = new Map<string, string | undefined>()
 
@@ -455,34 +503,38 @@ export async function resolveIsrc(track: PlaylistTrack, signal: AbortSignal): Pr
   }
 }
 
+function wordResult(word: WordLyricsHit): LyricsResult {
+  // duration: null = anggap waktu lirik cocok dengan audio ("exact"). Waktu akhir baris terakhir BUKAN durasi lagu,
+  // dan mengisinya akan memaksa useLyricTiming masuk mode "scaled" / "estimated" yang salah.
+  return { kind: 'synced', lines: word.lines, duration: null, alternatives: [], source: word.provider, wordSynced: word.wordSynced }
+}
+
 /**
- * Titik masuk lirik. Provider per kata (LyricsPlus / BetterLyrics; lihat wordLyrics.ts) dijalankan BERSAMAAN dengan
- * rantai sumber lama; hasil per kata dipakai bila lebih baik (`shouldPreferWord`), kalau tidak sumber lama seperti biasa.
- * Provider kata tidak pernah menggagalkan pencarian: galat hanya dilaporkan dari sumber lama.
+ * Titik masuk lirik. Bila pengguna memilih sumber untuk lagu ini (`options.source` atau pilihan tersimpan), HANYA sumber itu
+ * yang dipakai. Selain itu: provider per kata (LyricsPlus / BetterLyrics; lihat wordLyrics.ts) dijalankan BERSAMAAN dengan
+ * rantai sumber lama; hasil per kata dipakai bila lebih baik (`shouldPreferWord`, menurut prioritas di Pengaturan), kalau tidak
+ * sumber lama seperti biasa. Provider kata tidak pernah menggagalkan pencarian: galat hanya dilaporkan dari sumber lama.
  */
-export async function fetchLyrics(track: PlaylistTrack, options: { signal: AbortSignal }): Promise<LyricsResult> {
+export async function fetchLyrics(track: PlaylistTrack, options: { signal: AbortSignal; source?: LyricSourceId | null }): Promise<LyricsResult> {
   const { signal } = options
-  const baseTitle = stripArtistPrefix(track.title, track.artists)
+  const ctx = lookupContext(track, signal)
+  const source = options.source !== undefined ? options.source : getLyricSourcePin(track)
+  if (source) return fetchFromSource(ctx, source)
+
+  const priority = loadProviderPrefs().priority
   const wordJob = resolveIsrc(track, signal).then((isrc) =>
-    fetchWordLyrics(
-      { title: cleanTitle(baseTitle) || baseTitle, artist: primaryArtist(track.artists), album: track.album || undefined, isrc, durationS: parseDuration(track.duration) },
-      signal,
-    ),
+    fetchWordLyrics({ title: ctx.title, artist: ctx.artist, album: track.album || undefined, isrc, durationS: ctx.durationS }, signal),
   )
   let legacy: LyricsResult | null = null
   let legacyError: unknown
   try {
-    legacy = await fetchLegacyLyrics(track, options)
+    legacy = await fetchLegacyLyrics(ctx, priority)
   } catch (error) {
     legacyError = error
   }
   if (signal.aborted) throw new LyricsError('aborted', 'Permintaan lirik dibatalkan.')
   const word = await wordJob
-  if (word && shouldPreferWord(word, legacy)) {
-    // duration: null = anggap waktu lirik cocok dengan audio ("exact"). Waktu akhir baris terakhir BUKAN durasi lagu,
-    // dan mengisinya akan memaksa useLyricTiming masuk mode "scaled" / "estimated" yang salah.
-    return { kind: 'synced', lines: word.lines, duration: null, alternatives: [], source: word.provider, wordSynced: word.wordSynced }
-  }
+  if (word && shouldPreferWord(word, legacy, priority)) return wordResult(word)
   if (legacy) return legacy
   throw legacyError
 }

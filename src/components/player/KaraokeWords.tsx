@@ -4,6 +4,7 @@ import { LEAD_S } from '../../hooks/useLyricTiming'
 import { audioEngine } from '../../services/audioEngine'
 import type { LyricWord } from '../../utils/lrc'
 import { activeWordIndex, sweepGradient, wordFill } from '../../utils/wordSync'
+import { prefersReducedMotion } from '../../utils/motion'
 
 /** Cara mengubah waktu audio menjadi waktu lirik (sama dengan hasil `useLyricTiming`). */
 export interface SweepTiming {
@@ -46,7 +47,7 @@ export default function KaraokeWords({
   useEffect(() => {
     const node = ref.current
     if (!node) return undefined
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const reduce = prefersReducedMotion()
     const nodes = Array.from(node.children) as HTMLElement[]
     const written: string[] = []
     let lastIndex = -2

@@ -1,12 +1,16 @@
-import { Bell, Compass, ListMusic, Mic2, Music2, Search, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
+import { ArrowDownToLine, Bell, Compass, ListMusic, Mic2, Music2, RefreshCw, Search, Sparkles, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { SITE_NAME } from '../../config/site'
 import { useSleepTimer } from '../../context/SleepTimerContext'
 import { useGreeting } from '../../hooks/greeting'
-import { useAppUpdate } from '../../hooks/useAppUpdate'
+import { checkForUpdate, useAppUpdate, type AppUpdateState, type UpdateCheckResult } from '../../hooks/useAppUpdate'
 import { useMountTransition } from '../../hooks/useMountTransition'
+import { updatesSupported } from '../../native/appUpdate'
+import { startWhatsNew, unseenWhatsNewSteps } from '../../tour/tourStore'
+import { WHATS_NEW } from '../../tour/steps'
 import { artistSearch } from '../../utils/artistSearchStore'
+import { markNotificationSeen, notificationSignature, readNotificationSeen } from '../../utils/notificationSeen'
 import SleepTimerSheet from '../player/SleepTimerSheet'
 import HomeMenuDrawer from './HomeMenuDrawer'
 
@@ -60,6 +64,103 @@ function MenuRow({ icon: Icon, title, hint, onClick }: { icon: typeof Search; ti
   )
 }
 
+const LATEST_WHATS_NEW = WHATS_NEW[WHATS_NEW.length - 1] ?? null
+
+const CHECK_TEXT: Record<UpdateCheckResult, string> = {
+  available: 'Ada versi baru, lihat di atas.',
+  latest: 'Aplikasi sudah versi terbaru.',
+  error: 'Belum bisa memeriksa. Coba lagi nanti.',
+  unsupported: '',
+}
+
+/** Isi lonceng: pembaruan aplikasi (dicek berkala di latar), tombol cek manual, dan fitur baru dari rilis terbaru. */
+function NotificationPanel({ update, onClose }: { update: AppUpdateState | null; onClose: () => void }) {
+  const [checkText, setCheckText] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
+  const supported = updatesSupported()
+  const unseen = unseenWhatsNewSteps().length > 0
+  const features = LATEST_WHATS_NEW ? LATEST_WHATS_NEW.steps.slice(0, 3) : []
+
+  // Lonceng dibuka = cek pembaruan lagi (ditahan bila baru saja dicek).
+  useEffect(() => {
+    if (supported) void checkForUpdate()
+  }, [supported])
+
+  const runCheck = () => {
+    if (checking) return
+    setChecking(true)
+    setCheckText(null)
+    void checkForUpdate().then((result) => {
+      setChecking(false)
+      setCheckText(CHECK_TEXT[result])
+    })
+  }
+
+  return (
+    <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
+      {update && (
+        <Link to="/settings/update" onClick={onClose} className="focus-ring tap-row flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-veil/10">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <ArrowDownToLine className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-ink">Pembaruan tersedia</span>
+            <span className="block truncate text-xs text-ink-muted">Versi {update.release.version}. Ketuk untuk memperbarui.</span>
+          </span>
+        </Link>
+      )}
+      {supported && (
+        <button type="button" onClick={runCheck} disabled={checking} className="focus-ring tap-row flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-veil/10 disabled:opacity-70">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <RefreshCw className={`h-5 w-5 ${checking ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-ink">Cek pembaruan</span>
+            <span className="block truncate text-xs text-ink-muted">{checking ? 'Memeriksa…' : (checkText ?? 'Dicek otomatis tiap beberapa menit.')}</span>
+          </span>
+        </button>
+      )}
+      {features.length > 0 && (
+        <>
+          <p className="px-3 pb-1 pt-3 text-[0.7rem] font-semibold uppercase tracking-wider text-ink-faint">Fitur baru</p>
+          {features.map((step) => {
+            const body = (
+              <>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+                  <Sparkles className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-ink">{step.title.replace(/^Baru:\s*/i, '')}</span>
+                  <span className="line-clamp-2 text-xs text-ink-muted">{step.body}</span>
+                </span>
+              </>
+            )
+            // Yang belum pernah dilihat membuka tur "Yang baru"; sesudahnya hanya pengumuman.
+            return unseen ? (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => {
+                  onClose()
+                  startWhatsNew()
+                }}
+                className="focus-ring tap-row flex w-full items-start gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-veil/10"
+              >
+                {body}
+              </button>
+            ) : (
+              <div key={step.id} className="flex items-start gap-3 rounded-2xl px-3 py-2.5">
+                {body}
+              </div>
+            )
+          })}
+        </>
+      )}
+      {!update && !supported && features.length === 0 && <p className="px-3 py-4 text-center text-sm text-ink-muted">Tidak ada notifikasi baru.</p>}
+    </div>
+  )
+}
+
 /**
  * Kepala Beranda MusicVerse: avatar polos (membuka laci menu), sapaan kecil di atas nama aplikasi, sleep timer dan
  * notifikasi. Di bawahnya kolom cari berbentuk kapsul polos dan tombol filter bulat.
@@ -69,7 +170,11 @@ export default function HomeHeader() {
   const greeting = useGreeting()
   const navigate = useNavigate()
   const timer = useSleepTimer()
-  const update = useAppUpdate()
+  // Lonceng tetap menampilkan pembaruan walau bannernya sudah ditutup; titiknya hilang saat lonceng dibuka.
+  const update = useAppUpdate({ includeDismissed: true })
+  const signature = notificationSignature(update?.release.version ?? null, LATEST_WHATS_NEW?.id ?? null)
+  const [seenSignature, setSeenSignature] = useState(readNotificationSeen)
+  const unread = seenSignature !== signature
   const [drawer, setDrawer] = useState(false)
   const [timerOpen, setTimerOpen] = useState(false)
   const [filter, setFilter] = useState(false)
@@ -114,31 +219,24 @@ export default function HomeHeader() {
         <div className="relative shrink-0">
           <button
             type="button"
+            data-tour="home-notif"
             onClick={() => {
               setFilter(false)
+              if (!bell) {
+                markNotificationSeen(signature)
+                setSeenSignature(signature)
+              }
               setBell((v) => !v)
             }}
-            aria-label={update ? 'Notifikasi, ada pembaruan' : 'Notifikasi'}
+            aria-label={update ? 'Notifikasi, ada pembaruan' : unread ? 'Notifikasi, ada yang baru' : 'Notifikasi'}
             aria-expanded={bell}
             className="icon-btn relative text-ink"
           >
-            <Bell className={`h-6 w-6 ${update ? 'mv-ring' : ''}`} aria-hidden="true" />
-            {update && <span aria-hidden="true" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-coral ring-2 ring-bg" />}
+            <Bell className={`h-6 w-6 ${update && unread ? 'mv-ring' : ''}`} aria-hidden="true" />
+            {unread && <span aria-hidden="true" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-coral ring-2 ring-bg" />}
           </button>
           <Popover open={bell} onClose={() => setBell(false)} label="Notifikasi">
-            {update ? (
-              <Link to="/settings/update" onClick={() => setBell(false)} className="focus-ring tap-row flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-veil/10">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
-                  <Music2 className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-ink">Pembaruan tersedia</span>
-                  <span className="block truncate text-xs text-ink-muted">Versi {update.release.version}. Ketuk untuk memperbarui.</span>
-                </span>
-              </Link>
-            ) : (
-              <p className="px-3 py-4 text-center text-sm text-ink-muted">Tidak ada notifikasi baru.</p>
-            )}
+            <NotificationPanel update={update} onClose={() => setBell(false)} />
           </Popover>
         </div>
       </div>

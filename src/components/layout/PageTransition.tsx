@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { useNavigationType, useOutlet } from 'react-router-dom'
 import { getNavItems } from '../../config/navigation'
+import { prefersReducedMotion } from '../../utils/motion'
 
 /** Lama halaman lama memudar sebelum halaman baru masuk (ms). Harus sama dengan `.page-exit` di index.css. */
 const EXIT_MS = 130
@@ -22,7 +23,7 @@ function directionBetween(from: string, to: string, popped: boolean): 1 | -1 {
   return popped ? -1 : 1
 }
 
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 interface PageTransitionProps {
   pathname: string

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { prefersReducedMotion } from '../../utils/motion'
 
 /** Jeda (ms) di awal teks dan setelah ujung teks terlihat, sebelum gulir berikutnya. */
 const PAUSE_MS = 1600
@@ -20,7 +21,7 @@ export default function MarqueeText({ text, className = '' }: { text: string; cl
     const box = boxRef.current
     const inner = textRef.current
     if (!box || !inner) return
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const reduce = prefersReducedMotion()
     let animation: Animation | null = null
 
     const apply = () => {

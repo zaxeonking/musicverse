@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
+import { prefersReducedMotion } from '../utils/motion'
 
 const EXIT_MS = 220
 
@@ -8,7 +9,7 @@ const EXIT_MS = 220
  * ke bawah, lalu bayangan dibuang. State aplikasi sudah bersih (fokus, riwayat Back, dsb. langsung dikembalikan).
  */
 function playExit(source: HTMLElement): (() => void) | null {
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return null
+  if (prefersReducedMotion()) return null
   const ghost = source.cloneNode(true) as HTMLElement
   ghost.setAttribute('aria-hidden', 'true')
   ghost.removeAttribute('role')

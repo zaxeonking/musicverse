@@ -8,6 +8,7 @@ import { getPlaylistDetail } from '../../services/homeFeed'
 import { fallbackCover } from '../../utils/fallbackCover'
 import { isSafeHttpUrl } from '../../utils/spotifyUrl'
 import { openArtistFromFeed, playlistPath } from './homeNav'
+import { prefersReducedMotion } from '../../utils/motion'
 
 interface HomeBannerProps {
   items: BannerItem[]
@@ -46,7 +47,7 @@ function describe(item: BannerItem): SlideView {
 /**
  * Sorotan utama Beranda (gaya sampul majalah): playlist pilihan, artis, dan lagu yang mungkin disukai. Artwork besar condong dan
  * menjorok keluar dari pojok kanan atas, judul besar di kiri bawah, tombol putar coral dengan cincin berdenyut.
- * Gerak: slide bergulir sendiri tiap 6 detik (berhenti saat disentuh / tab disembunyikan), gambar bergeser pelan mengikuti
+ * Gerak: slide bergulir sendiri tiap 6 detik (berhenti saat disentuh / tab disembunyikan; setelah disentuh pengguna tidak pernah memutar balik ke slide pertama), gambar bergeser pelan mengikuti
  * gulir (paralaks) dan mengendap dari sedikit lebih besar, teks naik bergantian saat slide aktif, titik penanda terisi
  * sebagai hitungan mundur. Semua gerak ikut "Kurangi gerakan" (isian titik dan gulir otomatis dimatikan).
  * Tanpa data (offline / web) jadi ajakan membuka tab Cari.
@@ -63,6 +64,10 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
   const [busy, setBusy] = useState<string | null>(null)
   const frame = useRef(0)
   const resume = useRef(0)
+  /** Parallax terakhir per slide: nilai yang sama / jauh di luar layar tidak ditulis ulang (hemat style recalc tiap frame). */
+  const lastP = useRef<number[]>([])
+  /** true setelah pengguna menyentuh / mengetuk banner: autoplay lanjut maju saja, tidak pernah memutar balik ke slide pertama. */
+  const manual = useRef(false)
 
   const count = items.length
 
@@ -72,18 +77,25 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
     return () => cancelAnimationFrame(id)
   }, [])
 
-  const goTo = useCallback((i: number) => {
+  const goTo = useCallback((i: number, instant = false) => {
     const el = scroller.current
     if (!el) return
-    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+    el.scrollTo({ left: i * el.clientWidth, behavior: instant ? 'auto' : 'smooth' })
   }, [])
 
   // Gulir otomatis. Tidak jalan bila "Kurangi gerakan" aktif, sedang disentuh, atau tab tidak terlihat.
   useEffect(() => {
     if (count < 2 || held) return
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (prefersReducedMotion()) return
     const timer = window.setTimeout(() => {
-      if (document.visibilityState === 'visible') goTo((index + 1) % count)
+      if (document.visibilityState !== 'visible') return
+      if (index < count - 1) {
+        goTo(index + 1)
+        return
+      }
+      // Di slide terakhir: kalau pengguna sudah menggeser sendiri, berhenti di sini (tidak menyeret balik ke awal).
+      // Kalau murni otomatis, ulang dari awal dengan potongan langsung, bukan gulir mundur melewati semua slide.
+      if (!manual.current) goTo(0, true)
     }, AUTOPLAY_MS)
     return () => window.clearTimeout(timer)
   }, [index, count, held, goTo])
@@ -96,8 +108,13 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
     const width = el.clientWidth
     setIndex(Math.round(el.scrollLeft / width))
     // Paralaks: tiap gambar bergeser berlawanan arah gulir (diubah langsung di elemen, tanpa render ulang).
+    // Hanya slide yang terlihat / bertetangga yang diperbarui; yang jauh dijepit ke +-1,2 dan ditulis sekali saja.
     slideRefs.current.forEach((slide, i) => {
-      slide?.style.setProperty('--p', String((i * width - el.scrollLeft) / width))
+      if (!slide) return
+      const p = Math.max(-1.2, Math.min(1.2, (i * width - el.scrollLeft) / width))
+      if (lastP.current[i] === p) return
+      lastP.current[i] = p
+      slide.style.setProperty('--p', String(p))
     })
   }
   const handleScroll = () => {
@@ -110,6 +127,7 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
   const hold = () => {
+    manual.current = true
     window.clearTimeout(resume.current)
     setHeld(true)
   }
@@ -183,17 +201,17 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
               role="group"
               aria-roledescription="slide"
               aria-label={`${i + 1} dari ${count}`}
-              className="mv-banner-slide relative aspect-[4/5] w-full shrink-0 snap-center overflow-hidden sm:aspect-[16/8]"
+              className="mv-banner-slide relative aspect-[4/5] w-full shrink-0 snap-center overflow-hidden [contain:layout_paint] sm:aspect-[16/8]"
               style={{ background: `linear-gradient(150deg, ${colors.from}, ${colors.to})` }}
             >
               {/* Latar: artwork yang sama diperbesar dan digelapkan (tanpa blur, supaya ringan di Android), bergeser pelan mengikuti gulir. */}
               {showPicture && (
-                <div className="absolute inset-y-0 -left-[9%] w-[118%] [transform:translate3d(calc(var(--p,0)*-9%),0,0)]">
+                <div className="absolute inset-y-0 -left-[9%] w-[118%] will-change-transform [transform:translate3d(calc(var(--p,0)*-9%),0,0)]">
                   <img
                     src={view.picture}
                     alt=""
                     decoding="async"
-                    loading={i === 0 ? 'eager' : 'lazy'}
+                    loading={i < 3 ? 'eager' : 'lazy'}
                     referrerPolicy="no-referrer"
                     className="mv-banner-img h-full w-full scale-125 object-cover opacity-45"
                   />
@@ -240,7 +258,7 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
                     onClick={() => act(item)}
                     disabled={loadingThis}
                     aria-label={`${view.cta}: ${view.title}`}
-                    className="focus-ring tap-card group pointer-events-auto mt-5 inline-flex items-center gap-3 rounded-full bg-white/10 py-1.5 pl-1.5 pr-5 text-sm font-bold text-white ring-1 ring-white/20 backdrop-blur-md disabled:opacity-80"
+                    className="focus-ring tap-card group pointer-events-auto mt-5 inline-flex items-center gap-3 rounded-full bg-black/35 py-1.5 pl-1.5 pr-5 text-sm font-bold text-white ring-1 ring-white/25 disabled:opacity-80"
                   >
                     <span className="relative flex h-12 w-12 items-center justify-center">
                       {active && !loadingThis && <span aria-hidden="true" className="absolute inset-0 animate-play-ring rounded-full bg-coral/60 motion-reduce:hidden" />}
@@ -274,7 +292,10 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
                 role="tab"
                 aria-selected={on}
                 aria-label={`Slide ${i + 1}`}
-                onClick={() => goTo(i)}
+                onClick={() => {
+                  manual.current = true
+                  goTo(i)
+                }}
                 className="focus-ring flex h-6 items-center justify-center px-[3px]"
               >
                 {/* Segmen tipis: yang aktif memanjang dan terisi sebagai hitungan mundur ke slide berikutnya. */}

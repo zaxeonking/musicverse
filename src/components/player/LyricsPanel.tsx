@@ -1,5 +1,5 @@
-import { Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { Layers, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useAudioPlayer, usePlaybackTime } from '../../hooks/useAudioPlayer'
 import type { LyricsState } from '../../hooks/useLyrics'
 import type { LyricsResult } from '../../services/lyricsApi'
@@ -7,14 +7,20 @@ import { estimateActive, useLyricTiming, type LyricItem as Item } from '../../ho
 import { useLyricDisplayPrefs } from '../../hooks/useLyricDisplayPrefs'
 import { romanize } from '../../utils/romanize'
 import { useLongPress } from '../../hooks/useLongPress'
-import { removeKey, writeJson } from '../../utils/safeStorage'
+import { OFFSET_STEP_S } from '../../utils/lyricOffset'
+import { getLyricSourcePin, LYRIC_SOURCES, subscribeLyricSourcePins } from '../../utils/lyricSourcePins'
+import type { PlaylistTrack } from '../../types/spotify'
+import LyricSourceSheet from './LyricSourceSheet'
 import KaraokeWords, { REST_COLOR, REST_COLOR_DIM, type SweepTiming } from './KaraokeWords'
+import { prefersReducedMotion } from '../../utils/motion'
 
 interface LyricsPanelProps {
   state: LyricsState
   onRetry: () => void
   /** Identitas lagu (judul|artis) untuk menyimpan penyelarasan manual per lagu. */
   trackKey?: string
+  /** Lagu yang liriknya dicari; dipakai menu Sumber lirik. Tanpa ini menu tidak ditampilkan. */
+  track?: PlaylistTrack | null
   /** Mode lirik layar penuh: daftar naik sampai ke bawah status bar. */
   fullscreen?: boolean
 }
@@ -36,7 +42,32 @@ const FADE_MASK = {
  *  - tanpa waktu / waktu tak bisa dipercaya → sorotan PERKIRAAN menurut progres lagu.
  * Ketuk baris (jika audio bisa di-seek) untuk loncat ke bagian itu, hanya pada mode berwaktu.
  */
-export default function LyricsPanel({ state, onRetry, trackKey, fullscreen = false }: LyricsPanelProps) {
+export default function LyricsPanel({ track, ...props }: LyricsPanelProps) {
+  const [sourceOpen, setSourceOpen] = useState(false)
+  const pin = useSyncExternalStore(subscribeLyricSourcePins, () => (track ? getLyricSourcePin(track) : null))
+  const pinLabel = pin ? LYRIC_SOURCES.find((s) => s.id === pin)?.label : undefined
+  return (
+    <div className="relative h-full">
+      <LyricsBody {...props} pinLabel={pinLabel} />
+      {track && (
+        <button
+          type="button"
+          onClick={() => setSourceOpen(true)}
+          aria-label={pinLabel ? `Sumber lirik: ${pinLabel}` : 'Sumber lirik'}
+          className={`focus-ring absolute right-2 z-10 inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold ${
+            props.fullscreen ? 'top-[max(0.25rem,var(--sat))]' : 'top-1'
+          } ${pin ? 'bg-accent text-accent-on' : 'bg-raised/80 text-ink-muted'}`}
+        >
+          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+          Sumber
+        </button>
+      )}
+      {sourceOpen && track && <LyricSourceSheet track={track} onClose={() => setSourceOpen(false)} />}
+    </div>
+  )
+}
+
+function LyricsBody({ state, onRetry, trackKey, fullscreen = false, pinLabel }: Omit<LyricsPanelProps, 'track'> & { pinLabel?: string }) {
   if (state.status === 'idle' || state.status === 'loading') {
     return (
       <Message>
@@ -56,7 +87,7 @@ export default function LyricsPanel({ state, onRetry, trackKey, fullscreen = fal
     )
   }
   const { result } = state
-  if (result.kind === 'none') return <Message>Lirik untuk lagu ini tidak ditemukan.</Message>
+  if (result.kind === 'none') return <Message>{pinLabel ? `Lirik tidak ditemukan di ${pinLabel}. Coba sumber lain lewat tombol Sumber.` : 'Lirik untuk lagu ini tidak ditemukan.'}</Message>
   if (result.kind === 'instrumental') return <Message>Lagu ini instrumental, tidak ada lirik.</Message>
   if (result.kind === 'plain') return <PlainLyrics lines={result.lines} fullscreen={fullscreen} />
   return <SyncedLyrics result={result} trackKey={trackKey} fullscreen={fullscreen} />
@@ -192,7 +223,7 @@ function LineList({
       if (!container || anchor < 0) return
       const node = container.querySelector<HTMLElement>(`[data-line="${anchor}"]`)
       if (!node) return
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const reduce = prefersReducedMotion()
       container.scrollTo({
         top: node.offsetTop - container.clientHeight / 2 + node.clientHeight / 2,
         behavior: reduce ? 'auto' : behavior,
@@ -216,7 +247,7 @@ function LineList({
 
   return (
     <div className="flex h-full flex-col">
-      {header && <div className={`shrink-0 px-4 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,var(--sat))]' : 'pt-2'}`}>{header}</div>}
+      {header && <div className={`shrink-0 px-14 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,var(--sat))]' : 'pt-2'}`}>{header}</div>}
       <div
         ref={containerRef}
         style={FADE_MASK}
@@ -244,9 +275,9 @@ function LineList({
   )
 }
 
-const SOURCE_NAMES: Record<string, string> = { lyricsplus: 'LyricsPlus', betterlyrics: 'BetterLyrics' }
+const SOURCE_NAMES: Record<string, string> = { lyricsplus: 'LyricsPlus', betterlyrics: 'BetterLyrics', ytmusic: 'YouTube Music', lrclib: 'LRCLIB', netease: 'NetEase', ovh: 'lyrics.ovh' }
 
-/** Keterangan sumber di ujung daftar. Tanpa `source` = rantai lama (LRCLIB / NetEase), teks bawaan dipakai. */
+/** Keterangan sumber di ujung daftar. Tanpa `source` (hasil cache lama) teks bawaan dipakai. */
 function creditFor(source: string | undefined, wordSynced: boolean | undefined): string | undefined {
   if (!source) return undefined
   const name = SOURCE_NAMES[source] ?? source
@@ -265,7 +296,7 @@ function PlainLyrics({ lines, fullscreen }: { lines: string[]; fullscreen?: bool
 }
 
 function SyncedLyrics({ result, trackKey, fullscreen }: { result: Extract<LyricsResult, { kind: 'synced' }>; trackKey?: string; fullscreen?: boolean }) {
-  const { items, active, mode, offset, setOffset, ratio, lyricTime, lyricsDuration, audioDuration, seekable, storageKey } = useLyricTiming(result, trackKey)
+  const { items, active, mode, offset, setOffset, ratio, lyricTime, lyricsDuration, audioDuration, seekable } = useLyricTiming(result, trackKey)
   const { seekTo } = useAudioPlayer()
 
   const modeNote =
@@ -282,28 +313,35 @@ function SyncedLyrics({ result, trackKey, fullscreen }: { result: Extract<Lyrics
       ? undefined
       : (item: Item) => {
           if (item.time === undefined) return
-          const next = Math.round((item.time + 0.75 - lyricTime) * 10) / 10
-          setOffset(next)
-          if (storageKey) writeJson(storageKey, next)
+          setOffset(item.time + 0.75 - lyricTime)
         }
-  const resetOffset = () => {
-    setOffset(0)
-    if (storageKey) removeKey(storageKey)
-  }
+  const resetOffset = () => setOffset(0)
+  const nudge = (delta: number) => setOffset(offset + delta)
 
+  const nudgeBtn = 'focus-ring inline-flex h-8 items-center rounded-full bg-raised px-3 text-xs font-semibold text-ink active:opacity-70'
   const header: ReactNode =
     mode === 'estimated' ? (
       modeNote
-    ) : offset !== 0 ? (
-      <span>
-        Diselaraskan {offset > 0 ? '+' : ''}
-        {offset.toFixed(1)} dtk ·{' '}
-        <button type="button" onClick={resetOffset} className="font-semibold text-accent underline focus-ring">
-          Reset
-        </button>
-      </span>
     ) : (
-      (modeNote ?? 'Lirik tidak pas? Tahan baris yang sedang dinyanyikan.')
+      <>
+        <span className="block">{modeNote ?? 'Lirik tidak pas? Geser waktunya, atau tahan baris yang sedang dinyanyikan.'}</span>
+        <span className="mt-1.5 flex items-center justify-center gap-2" role="group" aria-label="Penyelarasan waktu lirik">
+          <button type="button" onClick={() => nudge(-OFFSET_STEP_S)} aria-label={`Lirik lebih lambat ${OFFSET_STEP_S.toString().replace('.', ',')} detik`} className={nudgeBtn}>
+            − Lambat
+          </button>
+          <span role="status" className="min-w-[4.5rem] text-center text-[11px] tabular-nums text-ink-muted">
+            {offset === 0 ? 'Pas' : `${offset > 0 ? '+' : '−'}${Math.abs(offset).toFixed(1).replace('.', ',')} dtk`}
+          </span>
+          <button type="button" onClick={() => nudge(OFFSET_STEP_S)} aria-label={`Lirik lebih cepat ${OFFSET_STEP_S.toString().replace('.', ',')} detik`} className={nudgeBtn}>
+            Cepat +
+          </button>
+          {offset !== 0 && (
+            <button type="button" onClick={resetOffset} className="focus-ring text-xs font-semibold text-accent underline">
+              Reset
+            </button>
+          )}
+        </span>
+      </>
     )
 
   // Loncat ke baris hanya akurat pada mode berwaktu; waktu lirik dikonversi balik ke waktu audio.

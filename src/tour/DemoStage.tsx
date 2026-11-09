@@ -1,8 +1,9 @@
 import { Play } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { prefersReducedMotion } from '../utils/motion'
 import type { DemoKind } from './steps'
 
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 /** Satu putaran peragaan (ms). */
 const LOOP_MS = 4600

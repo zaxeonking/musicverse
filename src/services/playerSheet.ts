@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '../utils/motion'
 /**
  * Mesin gerak tunggal untuk perpindahan mini player <-> pemutar penuh.
  *
@@ -44,10 +45,7 @@ let spring: Spring | null = null
 
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value)
 
-const reducedMotion = () =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 function emit() {
   frameListeners.forEach((listener) => listener(progress))

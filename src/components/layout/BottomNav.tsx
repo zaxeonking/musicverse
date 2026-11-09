@@ -5,6 +5,7 @@ import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { activeNavIndex } from '../../utils/navActive'
 import { swallowNextClick } from '../../utils/swallowNextClick'
 import { navTourName } from '../../tour/steps'
+import { prefersReducedMotion } from '../../utils/motion'
 
 /**
  * Bottom nav MusicVerse: dok kaca melayang (blur + saturasi, jadi warnanya mengikuti konten yang lewat di belakangnya) dengan
@@ -127,7 +128,7 @@ export default function BottomNav() {
 
   const kick = useCallback(() => {
     const s = sim.current
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedMotion()) {
       s.x = s.target
       s.v = 0
       s.press = s.pressTarget

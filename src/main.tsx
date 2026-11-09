@@ -9,6 +9,7 @@ import { initNativeStorage } from './native/nativeStorage'
 import { startLyricsBackfill } from './native/offlineLyrics'
 import { isNativeApp } from './native/platform'
 import { initAppearance } from './native/appearance'
+import { initMotion, prefersReducedMotion } from './utils/motion'
 import { initTheme } from './utils/theme'
 
 /**
@@ -19,7 +20,7 @@ import { initTheme } from './utils/theme'
  */
 /**
  * Splash (index.html): logo -> nama -> zoom pelan, jadi tampil minimal ±3,4 dtk sejak dibuka (animasi masuk selesai ±1,7 dtk, lalu ditahan sebentar) (setelah itu zoom menembus keluar,
- * Beranda masuk bersamaan). Tanpa gerakan (preferensi "kurangi gerakan"): cukup ±0,5 dtk.
+ * Beranda masuk bersamaan). Tanpa gerakan (Pengaturan > Tema > Kurangi gerakan, atau preferensi sistem): cukup ±0,5 dtk.
  */
 const SPLASH_MIN_MS = 3400
 function dismissSplash() {
@@ -35,7 +36,7 @@ function dismissSplash() {
     })
     window.setTimeout(() => splash.remove(), 1400)
   }
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const reduced = prefersReducedMotion()
   const wait = Math.max(0, (reduced ? 500 : SPLASH_MIN_MS) - performance.now())
   // Dua frame supaya render pertama sudah digambar di balik splash sebelum fade dimulai.
   window.setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(reveal)), wait)
@@ -47,6 +48,8 @@ async function bootstrap() {
     document.documentElement.classList.add('native-app')
     installNativeBackButton()
     await initNativeStorage()
+    // Pilihan Kurangi gerakan ada di penyimpanan: baca sesudah dimuat, sebelum render pertama.
+    initMotion()
     initTheme()
     initAppearance()
     void initOffline().then(initDownloads).then(startLyricsBackfill)

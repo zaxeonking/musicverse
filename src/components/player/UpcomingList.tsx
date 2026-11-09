@@ -15,6 +15,7 @@ import {
 import type { IndexedTrack, PlaylistTrack } from '../../types/spotify'
 import { fallbackCover } from '../../utils/fallbackCover'
 import CoverArt from '../ui/CoverArt'
+import { prefersReducedMotion } from '../../utils/motion'
 
 const FOCUS = 'focus-ring'
 /** Lama menahan sebelum menu muncul, dan jarak geser yang masih dianggap \"diam\". */
@@ -32,7 +33,7 @@ function TrackCover({ track }: { track: PlaylistTrack }) {
 const SHIFT_EASING = 'cubic-bezier(0.22, 1.25, 0.36, 1)'
 const SHIFT_MS = 300
 const PICKUP_SCALE = 1.03
-const reducedMotion = () => typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+const reducedMotion = () => prefersReducedMotion()
 
 interface DragState {
   from: number

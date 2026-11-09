@@ -1,4 +1,5 @@
 import { useCallback, useRef, type MouseEvent, type PointerEvent } from 'react'
+import { prefersReducedMotion } from '../utils/motion'
 
 /** Jarak geser (px) yang membuat geser "siap" dan dipilih saat jari dilepas. */
 export const SWIPE_MIN_PX = 64
@@ -59,7 +60,7 @@ interface Drag {
   hintPosition: string | null
 }
 
-const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const reducedMotion = () => prefersReducedMotion()
 
 /** Ikuti jari: baris bergeser, membesar tipis, dan diberi bingkai hijau yang makin jelas sampai "siap" (getar sekali). */
 function paint(item: HTMLElement, dx: number, armed: boolean, hintEl: HTMLElement | null) {

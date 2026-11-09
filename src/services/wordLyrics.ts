@@ -1,7 +1,7 @@
 import type { LyricLine } from '../utils/lrc'
 import { parseTtml } from '../utils/ttml'
 import { parseLyricsPlus, ttmlFromBetterLyrics } from '../utils/lyricsPlus'
-import { activeWordProviders, type WordProviderId } from '../utils/lyricProviderPrefs'
+import { activeWordProviders, loadProviderPrefs, type WordProviderId } from '../utils/lyricProviderPrefs'
 
 /**
  * Provider lirik PER KATA (karaoke asli), diadaptasi dari analisis APK Auralys 4.3.2 (fork Metrolist):
@@ -190,8 +190,9 @@ const RUNNERS: Record<WordProviderId, (q: WordLyricsQuery, signal: AbortSignal) 
  * Coba provider kata sesuai preferensi (urutan + saklar). Hasil pertama yang masuk akal DAN berwaktu kata dipakai;
  * kalau hanya ada hasil per baris, hasil itu dikembalikan sebagai cadangan. TIDAK PERNAH melempar: null = tidak ada.
  */
-export async function fetchWordLyrics(q: WordLyricsQuery, outer: AbortSignal): Promise<WordLyricsHit | null> {
-  const providers = activeWordProviders()
+export async function fetchWordLyrics(q: WordLyricsQuery, outer: AbortSignal, options: { force?: boolean } = {}): Promise<WordLyricsHit | null> {
+  // `force`: pengguna memilih sumber ini secara manual, jadi saklar "Lirik per kata" dan provider yang dimatikan diabaikan.
+  const providers = options.force ? loadProviderPrefs().order : activeWordProviders()
   if (providers.length === 0 || !q.title) return null
   const total = new AbortController()
   const timer = setTimeout(() => total.abort(), TOTAL_TIMEOUT_MS)

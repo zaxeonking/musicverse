@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { springEasing } from '../utils/spring'
+import { prefersReducedMotion } from '../utils/motion'
 
 const FALLBACK = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
@@ -16,7 +17,7 @@ export function useListFlip(listRef: RefObject<HTMLElement>, signature: string) 
       prev.current = null
       return
     }
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const reduce = prefersReducedMotion()
     const tops = new Map<string, number>()
     const count = Math.min(list.children.length, 80)
     const before = prev.current

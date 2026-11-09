@@ -30,6 +30,8 @@ export interface Recap {
   busiestHour: number
   /** Hari kalender (YYYY-MM-DD) dengan putaran terbanyak. */
   busiestDay: { date: string; plays: number } | null
+  /** Jumlah hari kalender berbeda yang ada putarannya di periode ini. */
+  activeDays: number
 }
 
 export const WEEKDAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
@@ -101,6 +103,7 @@ export function computeRecap(log: readonly PlayLogEntry[], period: RecapPeriod, 
     busiestWeekday: argMax(perWeekday),
     busiestHour: argMax(perHour),
     busiestDay,
+    activeDays: days.size,
   }
 }
 
@@ -111,4 +114,35 @@ export function formatListening(seconds: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return m === 0 ? `${h} jam` : `${h} jam ${m} menit`
+}
+
+export interface Streaks {
+  /** Hari berturut-turut mendengar sampai hari ini (atau kemarin: hari ini masih boleh menyusul). 0 bila sudah terputus. */
+  current: number
+  /** Rangkaian hari berturut-turut terpanjang di seluruh log. */
+  longest: number
+}
+
+/** Nomor hari kalender lokal (bukan 24 jam penuh), supaya pergantian jam musim panas tidak memutus rangkaian. */
+function dayNumber(at: number): number {
+  const d = new Date(at)
+  return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000)
+}
+
+/** Streak mendengar harian dari SELURUH log (tidak terpengaruh pilihan periode). Log hanya menyimpan putaran terbaru. */
+export function computeStreaks(log: readonly PlayLogEntry[], now: number = Date.now()): Streaks {
+  const days = [...new Set(log.map((entry) => dayNumber(entry.at)))].sort((a, b) => a - b)
+  if (days.length === 0) return { current: 0, longest: 0 }
+  let longest = 1
+  let run = 1
+  for (let i = 1; i < days.length; i += 1) {
+    run = days[i] === days[i - 1] + 1 ? run + 1 : 1
+    if (run > longest) longest = run
+  }
+  const today = dayNumber(now)
+  const last = days[days.length - 1]
+  if (last < today - 1) return { current: 0, longest } // sudah lewat kemarin: rangkaian putus
+  let current = 1
+  for (let i = days.length - 1; i > 0 && days[i] === days[i - 1] + 1; i -= 1) current += 1
+  return { current, longest }
 }

@@ -1,7 +1,83 @@
 # Riwayat perubahan MusicVerse (arsip)
 
-Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.54.3.md`.
+Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.54.6.md`.
 Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
+
+<!-- sumber: CHANGES-0.5.54.5.md -->
+# 0.5.54.5 (Banner Beranda: lebih ringan, tidak memutar balik ke slide pertama)
+
+Files: src/components/home/HomeBanner.tsx, src/index.css, package.json (appVersion 0.5.54.5), CHANGES.md (0.5.54.4 diarsipkan), CHANGES-0.5.54.5.md, PROJECT_STRUCTURE.md
+
+1. Banner patah-patah saat digeser (otomatis maupun manual)
+   - Tombol Putar di tiap slide memakai `backdrop-blur-md` (enam filter blur aktif sekaligus; berat di WebView Android). Kini latar gelap polos `bg-black/35`.
+   - Gambar latar dulu mengendap dari 1,14x ke 1x selama 7 detik (`.mv-banner-img`, lapisan seukuran slide) dan tumpang tindih dengan geseran berikutnya. Kini statis (`scale(1.08)`).
+   - Paralaks menulis `--p` ke SEMUA slide tiap frame. Kini nilai dijepit ke +-1,2 dan hanya ditulis bila berubah; pembungkus paralaks diberi `will-change-transform`, slide diberi `contain: layout paint`.
+   - Gambar slide 2 dan 3 kini langsung dimuat (`eager`), bukan lazy, supaya tidak ada decode di tengah geseran.
+
+2. Banner balik ke slide pertama
+   - Autoplay selalu `(index + 1) % count`: di slide terakhir ia menggulir MUNDUR melewati semua slide ke awal. Kini: setelah pengguna menyentuh / mengetuk banner atau titik penanda, autoplay hanya maju dan berhenti di slide terakhir. Tanpa sentuhan sama sekali, banner mengulang dari awal dengan potongan langsung (tanpa gulir mundur).
+
+Catatan
+- Tidak butuh APK baru (JS dan CSS saja; bisa lewat OTA).
+- Belum diuji di perangkat. Perbaikan lag didasarkan pada pembacaan kode (filter blur, animasi besar, tulis gaya tiap frame); bila masih terasa berat di HP tertentu, beri tahu tipe HP-nya.
+
+<!-- sumber: CHANGES-0.5.54.4.md -->
+# 0.5.54.4 (Lirik: utamakan YouTube Music, pilih sumber per lagu, geser waktu; streak dengar; preset EQ sendiri)
+
+Files: src/services/lyricsApi.ts, src/services/wordLyrics.ts, src/services/equalizer.ts, src/hooks/useLyrics.ts, src/hooks/useLyricTiming.ts, src/utils/lyricProviderPrefs.ts, src/utils/lyricPriority.ts (baru), src/utils/lyricSourcePins.ts (baru), src/utils/lyricOffset.ts (baru), src/utils/recap.ts, src/native/offlineLyrics.ts, src/components/player/LyricsPanel.tsx, src/components/player/LyricSourceSheet.tsx (baru), src/components/player/FullPlayer.tsx, src/components/settings/LyricProviderSettings.tsx, src/pages/RecapPage.tsx, src/pages/EqualizerPage.tsx, src/tour/steps.ts, scripts/test-lyrics.mjs, package.json (appVersion 0.5.54.4), CHANGES.md (0.5.54.3 diarsipkan), CHANGES-0.5.54.4.md, PROJECT_STRUCTURE.md
+
+1. Lirik YouTube Music diutamakan
+   - Sebelumnya YT Music dicari pertama, tetapi hasil LyricsPlus / BetterLyrics (per kata) masih bisa menimpanya, sehingga teks lirik bisa beda dari YT Music. Kini hasil YT Music diberi tanda sumber (`source: 'ytmusic'`) dan tidak ditimpa provider kata.
+   - Semua hasil lirik kini membawa `source` (`ytmusic`, `lrclib`, `netease`, `ovh`, atau nama provider kata); keterangan di ujung lirik menampilkannya.
+
+2. Prioritas sumber lirik (Pengaturan > Pemutaran > Lirik)
+   - Tiga pilihan: YouTube Music (bawaan), Per kata (aturan lama: kata menang bila per kata dan cukup lengkap), LRCLIB (LRCLIB / NetEase dulu, YT Music hanya cadangan). Aturan ada di `utils/lyricPriority.ts` (murni, ada tesnya).
+   - Prioritas ikut `providerSignature`, jadi cache lirik lama dianggap basi dan dicari ulang.
+
+3. Pilih sumber lirik per lagu
+   - Tombol "Sumber" di panel lirik membuka menu: Otomatis, YouTube Music, LyricsPlus / BetterLyrics, LRCLIB, NetEase, lyrics.ovh. Pilihan HANYA memakai sumber itu (tanpa diam-diam pindah); bila kosong, panel menyarankan sumber lain. Provider kata yang dipilih manual mengabaikan saklar "Lirik per kata".
+   - Disimpan per lagu di `mv:lyricSource:v1` (ikut Cadangan). Pilihan jadi bagian kunci cache lirik. Salinan lirik unduhan di perangkat dilewati sekali saat sumber diganti, lalu diganti dengan yang baru.
+
+4. Geser waktu lirik per lagu
+   - Tombol "- Lambat" dan "Cepat +" (langkah 0,2 dtk, batas +-30 dtk) di atas lirik, plus Reset. Tahan baris untuk menyelaraskan tetap ada.
+   - Offset kini satu sumber (`utils/lyricOffset.ts`, kunci lama `musicverse:lyricsOffset:` tetap dipakai): panel penuh dan strip lirik mini player selalu sama. Catatan: widget layar utama (APK) mengambil offset saat lagu mulai, jadi perubahan di tengah lagu baru terasa di lagu berikutnya.
+
+5. Rangkuman: streak dengar
+   - Kartu "Streak sekarang" (hari ini atau kemarin masih dihitung), "Streak terpanjang", dan jumlah hari aktif di periode. Dihitung dari log Riwayat (maksimal 1.500 putaran terakhir), tidak terpengaruh pilihan periode.
+
+6. Equalizer: preset buatan sendiri
+   - Saat posisi slider berupa Custom, bisa disimpan dengan nama (maks. 10 preset, nama maks. 20 huruf, tidak boleh sama dengan preset bawaan). Preset sendiri tampil bersama preset bawaan dan bisa dihapus. Disimpan di `musicverse:eq:presets:v1`.
+
+Catatan
+- Tidak butuh APK baru untuk lirik, streak, maupun preset EQ (semua JS); preset EQ hanya terlihat di APK karena halaman Equalizer khusus APK. Bisa lewat pembaruan OTA.
+- Pengguna lama: pilihan bawaan sekarang YouTube Music; pengguna yang ingin perilaku lama memilih "Per kata". Lirik tersimpan di cache otomatis dicari ulang sekali.
+- Belum diuji di perangkat: build lengkap (`npm run build`) tidak dijalankan di lingkungan ini (tanpa node_modules). `npm run test:lyrics` lolos (44 tes, termasuk aturan prioritas, penyimpanan pilihan sumber, offset, dan streak). Periksa tampilan tombol Sumber dan Lambat / Cepat di layar kecil dan mode layar penuh.
+
+<!-- sumber: CHANGES-0.5.54.3.md -->
+# 0.5.54.3 (Kepala Beranda lebih polos)
+
+Files: src/components/home/HomeHeader.tsx, src/components/player/SeekBar.tsx, src/components/player/MiniPlayer.tsx, package.json (appVersion 0.5.54.3), CHANGES.md (0.5.54 diarsipkan), CHANGES-0.5.54.3.md, PROJECT_STRUCTURE.md
+
+1. Kepala Beranda lebih polos (`HomeHeader`)
+   - Dibuang: cincin gradien di avatar, ikon logo + nama dua warna, sudut tidak simetris pada kolom cari dan tombol filter, kotak ikon cari berwarna aksen, dan gelombang di kolom cari.
+   - Kini: avatar bulat polos, nama aplikasi satu warna, kolom cari dan tombol filter berbentuk kapsul/bulat. Fungsi, penanda tutorial, laci menu, sleep timer, notifikasi, dan menu filter tidak berubah.
+
+
+2. Bar progres tanpa layout ulang (`SeekBar`)
+   - Isi bar dan pegangan sebelumnya menganimasikan `width` dan `left` terus-menerus selama lagu diputar (layout ulang tiap frame di mini dan full player). Kini isi bar berupa batang penuh yang digeser dengan `transform`, dan pegangan ada di pembungkus yang digeser dengan `transform`. Tampilan, durasi (300 ms linear), dan perilaku seret/seek sama seperti sebelumnya.
+
+3. Disc -> kartu saat keyboard menutup (`MiniPlayer`)
+   - Sebelumnya disc ikut turun bersama layar yang melebar (ke posisi di atas nav) lebih dulu, baru terbang ke sampul di kartu. Kini begitu layar mulai melebar, dock berikut disc ditahan di posisi di atas keyboard (hanya transform); saat keyboard dinyatakan tertutup, disc disalin dari posisi itu dan terbang langsung ke sampul. Animasi saat keyboard naik tidak diubah.
+
+4. Disc mendarat di sampul, bukan di nav (`MiniPlayer.runDiscFly`)
+   - Dari rekaman layar: setelah keyboard menutup, disc terbang ke posisi sampul yang diukur sekali di awal, padahal dock masih naik ke atas nav (transisi margin 300 ms), sehingga disc mendarat di atas nav lalu sampul muncul di tempat lain. Kini selisih posisi sampul yang sebenarnya diterapkan tiap frame lewat properti `translate` (sebanding kemajuan terbang), jadi disc tiba tepat di sampul. Gerak, durasi, dan easing disc tidak berubah.
+
+5. Notifikasi pembaruan dan fitur baru (lonceng di Beranda)
+   - Cek pembaruan kini berkala: 4 detik setelah dibuka, lalu tiap 5 menit selama aplikasi terbuka dan layar terlihat, tiap kembali dari aplikasi lain (jeda minimum 1 menit), dan saat lonceng dibuka. Keadaan pembaruan dibagi satu untuk seluruh aplikasi (`useAppUpdate` kini memakai penyimpanan bersama), jadi banner dan lonceng selalu sinkron dan tidak ada pengecekan ganda.
+   - Lonceng menampilkan pembaruan walau bannernya sudah ditutup, tombol "Cek pembaruan" manual (hanya APK), dan bagian "Fitur baru" dari rilis terbaru (`WHATS_NEW`). Fitur yang belum dilihat membuka tur "Yang baru" bila diketuk.
+   - Titik di lonceng menandai notifikasi yang belum dilihat (versi baru atau entri fitur baru); hilang saat lonceng dibuka. Disimpan di perangkat (`mv:notif:seen`).
+   - Entri "Yang baru" 0.5.54.3 ditambahkan, dengan penanda tutorial `home-notif` pada lonceng.
+   - Files tambahan: src/hooks/useAppUpdate.ts, src/utils/notificationSeen.ts, src/tour/steps.ts, src/components/home/HomeHeader.tsx
 
 <!-- sumber: CHANGES-0.5.54.md -->
 # 0.5.54 (Optimasi performa: kontrol pemutar tidak lagi render ulang tiap detik)

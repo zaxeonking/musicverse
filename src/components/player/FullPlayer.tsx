@@ -648,7 +648,7 @@ export default function FullPlayer({
         <div ref={slotRef} onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className={`flex min-h-0 flex-1 items-center justify-center ${lyricsFullActive ? 'py-0' : 'py-2'}`}>
           {showLyrics ? (
             <div className="h-full min-h-0 w-full animate-lyrics-up">
-              <LyricsPanel state={lyrics} onRetry={retryLyrics} trackKey={`${currentTrack.title}|${currentTrack.artists}`} fullscreen={lyricsFullActive} />
+              <LyricsPanel state={lyrics} onRetry={retryLyrics} track={lyricsTrack} trackKey={`${currentTrack.title}|${currentTrack.artists}`} fullscreen={lyricsFullActive} />
             </div>
           ) : (
             <div

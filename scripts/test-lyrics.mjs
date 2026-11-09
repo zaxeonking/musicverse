@@ -7,6 +7,11 @@ import { fetchWordLyrics, plausibleFor, normalizeIsrc } from '../src/services/wo
 import { romanize } from '../src/utils/romanize.ts'
 import { subTextsFor } from '../src/utils/lyricSubtext.ts'
 import { pickDeezerTrackId } from '../src/utils/deezerMatch.ts'
+import { computeStreaks, computeRecap } from '../src/utils/recap.ts'
+import { shouldPreferWord } from '../src/utils/lyricPriority.ts'
+import { getLyricSourcePin, setLyricSourcePin, lyricPinKey } from '../src/utils/lyricSourcePins.ts'
+import { getLyricOffset, setLyricOffset, subscribeLyricOffset } from '../src/utils/lyricOffset.ts'
+import { loadProviderPrefs, saveProviderPrefs, providerSignature, DEFAULT_PREFS } from '../src/utils/lyricProviderPrefs.ts'
 import { wordsFor, activeWordIndex, wordFill, hasRealWordTiming, sweepGradient } from '../src/utils/wordSync.ts'
 
 let passed = 0
@@ -363,6 +368,100 @@ test('sweepGradient: tepi lembut bergerak lewat --p; 0 = redup semua, 1 = terang
     assert.equal(p * 120 - 20, brightEdge)
     assert.equal(p * 120, restEdge)
   }
+})
+
+// localStorage palsu supaya modul penyimpanan bisa dites di Node.
+const store = new Map()
+// Tes lama menghapus `window` di akhir; tes di bawah memasangnya lagi lewat useStore().
+const useStore = () => {
+  globalThis.window = { localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => void store.set(k, String(v)), removeItem: (k) => void store.delete(k) } }
+}
+
+const word = (n, wordSynced = true) => ({ lines: new Array(n).fill(0), wordSynced })
+const synced = (n, source) => ({ kind: 'synced', lines: new Array(n).fill(0), source })
+
+test('shouldPreferWord: prioritas YT Music tidak ditimpa provider kata (lirik bisa beda)', () => {
+  assert.equal(shouldPreferWord(word(40), synced(40, 'ytmusic'), 'ytmusic'), false)
+  assert.equal(shouldPreferWord(word(40), { kind: 'plain', source: 'ytmusic' }, 'ytmusic'), false)
+  assert.equal(shouldPreferWord(word(40), synced(40, 'lrclib'), 'ytmusic'), true) // sumber lain tetap bisa ditimpa kata
+})
+
+test('shouldPreferWord: prioritas per kata = aturan lama (kata menang bila per kata dan cukup lengkap)', () => {
+  assert.equal(shouldPreferWord(word(40), synced(40, 'ytmusic'), 'word'), true)
+  assert.equal(shouldPreferWord(word(40, false), synced(40, 'ytmusic'), 'word'), false)
+  assert.equal(shouldPreferWord(word(10), synced(40, 'ytmusic'), 'word'), false) // < 60% baris
+  assert.equal(shouldPreferWord(word(40), { kind: 'instrumental' }, 'word'), false)
+  assert.equal(shouldPreferWord(word(40), null, 'word'), true)
+})
+
+test('shouldPreferWord: prioritas LRCLIB melindungi LRCLIB / NetEase, bukan YT Music', () => {
+  assert.equal(shouldPreferWord(word(40), synced(40, 'lrclib'), 'lrclib'), false)
+  assert.equal(shouldPreferWord(word(40), synced(40, 'netease'), 'lrclib'), false)
+  assert.equal(shouldPreferWord(word(40), synced(40, 'ytmusic'), 'lrclib'), true)
+  assert.equal(shouldPreferWord(word(40), { kind: 'none' }, 'lrclib'), true) // tidak ada apa pun: kata lebih baik
+})
+
+test('pilihan sumber per lagu: simpan, baca (kunci tak peka huruf besar), hapus, abaikan nilai rusak', () => {
+  useStore()
+  const track = { title: 'Song', artists: 'Artist' }
+  assert.equal(getLyricSourcePin(track), null)
+  setLyricSourcePin(track, 'lrclib')
+  assert.equal(getLyricSourcePin({ title: 'SONG', artists: 'artist' }), 'lrclib')
+  assert.equal(getLyricSourcePin({ title: 'Other', artists: 'Artist' }), null)
+  setLyricSourcePin(track, 'ytmusic')
+  assert.equal(getLyricSourcePin(track), 'ytmusic')
+  setLyricSourcePin(track, null)
+  assert.equal(getLyricSourcePin(track), null)
+  store.set('mv:lyricSource:v1', JSON.stringify({ [lyricPinKey(track)]: { source: 'bogus', at: 1 } }))
+  assert.equal(getLyricSourcePin(track), null)
+})
+
+test('offset lirik: dibulatkan 0,1, dibatasi +-30, 0 menghapus kunci, pendengar diberi tahu, kunci lama terbaca', () => {
+  useStore()
+  const key = 'Song|Artist'
+  let calls = 0
+  const off = subscribeLyricOffset(() => (calls += 1))
+  assert.equal(getLyricOffset(key), 0)
+  setLyricOffset(key, 0.2 + 0.2 + 0.2) // 0.6000000000000001
+  assert.equal(getLyricOffset(key), 0.6)
+  assert.equal(store.get('musicverse:lyricsOffset:song|artist'), '0.6')
+  setLyricOffset(key, 99)
+  assert.equal(getLyricOffset(key), 30)
+  setLyricOffset(key, -99)
+  assert.equal(getLyricOffset(key), -30)
+  setLyricOffset(key, 0)
+  assert.equal(store.has('musicverse:lyricsOffset:song|artist'), false)
+  assert.equal(calls, 4)
+  off()
+  setLyricOffset(key, 1)
+  assert.equal(calls, 4)
+  assert.equal(getLyricOffset(undefined), 0)
+  store.set('musicverse:lyricsOffset:lama|lagu', '-1.5') // format lama (angka JSON) tetap terbaca
+  assert.equal(getLyricOffset('Lama|Lagu'), -1.5)
+})
+
+test('prefs lirik: bawaan YT Music, nilai tak dikenal diabaikan, prioritas ikut tanda cache', () => {
+  useStore()
+  store.delete('musicverse:lyricProviders')
+  assert.equal(loadProviderPrefs().priority, 'ytmusic')
+  saveProviderPrefs({ ...DEFAULT_PREFS, priority: 'lrclib' })
+  assert.equal(loadProviderPrefs().priority, 'lrclib')
+  assert.notEqual(providerSignature(), providerSignature({ ...DEFAULT_PREFS, priority: 'ytmusic' }))
+  store.set('musicverse:lyricProviders', JSON.stringify({ priority: 'aneh', wordSync: true }))
+  assert.equal(loadProviderPrefs().priority, 'ytmusic')
+  // prefs lama (tanpa `priority`) otomatis memakai YT Music
+  store.set('musicverse:lyricProviders', JSON.stringify({ wordSync: false, order: ['betterlyrics'], disabled: [] }))
+  assert.equal(loadProviderPrefs().priority, 'ytmusic')
+})
+
+test('streak harian: rangkaian terpanjang, saat ini (hari ini atau kemarin), putus bila lewat kemarin', () => {
+  const at = (y, m, d, h = 12) => new Date(y, m - 1, d, h).getTime()
+  const log = [at(2026, 11, 1), at(2026, 11, 1, 20), at(2026, 11, 2), at(2026, 11, 3), at(2026, 11, 5), at(2026, 11, 6), at(2026, 11, 7), at(2026, 11, 8), at(2026, 11, 9, 8)].map((t) => ({ at: t, track: { id: 'a', title: 'A', artists: 'X', album: '', url: 'u', duration: '3:00' } }))
+  assert.deepEqual(computeStreaks(log, at(2026, 11, 9, 23)), { current: 5, longest: 5 }) // 5-9 Nov
+  assert.deepEqual(computeStreaks(log, at(2026, 11, 10, 9)), { current: 5, longest: 5 }) // belum dengar hari ini: kemarin masih dihitung
+  assert.deepEqual(computeStreaks(log, at(2026, 11, 11, 9)), { current: 0, longest: 5 }) // lewat sehari penuh: putus
+  assert.deepEqual(computeStreaks([], at(2026, 11, 9)), { current: 0, longest: 0 })
+  assert.equal(computeRecap(log, 'all', 5, at(2026, 11, 9, 23)).activeDays, 8)
 })
 
 for (const run of pending) await run()

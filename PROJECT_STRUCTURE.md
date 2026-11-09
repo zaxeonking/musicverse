@@ -182,7 +182,8 @@ MiniBubble.tsx| Tampilan pemutar berbentuk gelembung mini.
 PlayerControls.tsx| Kontrol pemutaran musik.
 CrossfadeSheet.tsx| Panel pengaturan crossfade.
 MediaSessionSync.tsx| Sinkronisasi dengan Media Session API.
-LyricsPanel.tsx| Panel tampilan lirik musik.
+LyricsPanel.tsx| Panel tampilan lirik musik, tombol Sumber, dan tombol geser waktu Lambat / Cepat.
+LyricSourceSheet.tsx| Menu bawah Sumber lirik: pilih sumber lirik untuk satu lagu atau kembali ke otomatis.
 PlayerDock.tsx| Pengatur posisi atau area pemutar.
 SeekBar.tsx| Pengatur posisi waktu pemutaran lagu.
 SleepTimerSheet.tsx| Panel pengaturan sleep timer.
@@ -201,7 +202,7 @@ Berisi komponen khusus halaman pengaturan.
 
 File| Fungsi
 ColorField.tsx| Kolom pemilih warna (hex) untuk pengaturan tema.
-LyricProviderSettings.tsx| Pengaturan sumber lirik dan tampilan terjemahan/romanisasi.
+LyricProviderSettings.tsx| Pengaturan prioritas sumber lirik, lirik per kata, dan tampilan terjemahan/romanisasi.
 
 ---
 
@@ -221,10 +222,10 @@ SettingsPage.tsx| Halaman pengaturan utama.
 PlaybackSettingsPage.tsx| Halaman pengaturan pemutaran musik.
 DownloadSettingsPage.tsx| Halaman pengaturan unduhan.
 PlaylistSettingsPage.tsx| Halaman pengaturan playlist.
-EqualizerPage.tsx| Halaman equalizer audio.
+EqualizerPage.tsx| Halaman equalizer audio, termasuk simpan dan hapus preset buatan sendiri.
 BackupPage.tsx| Halaman pencadangan dan pemulihan data.
 LegalPage.tsx| Pengaturan > Kebijakan Privasi / Ketentuan Layanan di APK.
-RecapPage.tsx| Rekap dengar (7 hari, 30 hari, semua) dan kartu bagikan.
+RecapPage.tsx| Rekap dengar (7 hari, 30 hari, semua), streak harian, dan kartu bagikan.
 ThemeSettingsPage.tsx| Pengaturan > Tema: mode, aksen, gaya permukaan, tema siap pakai, layar pembuka & ikon.
 UpdateSettingsPage.tsx| Pengaturan > Pembaruan: cek, unduh, dan pasang APK terbaru.
 
@@ -291,7 +292,7 @@ File| Fungsi
 audioEngine.ts| Mesin utama untuk pemutaran audio.
 lyricsApi.ts| Mengelola komunikasi dengan API lirik.
 spotifyApi.ts| Mengelola integrasi API Spotify.
-equalizer.ts| Mengatur pemrosesan dan pengaturan equalizer audio.
+equalizer.ts| Mengatur pemrosesan dan pengaturan equalizer audio, serta preset buatan pengguna.
 artistApi.ts| Pencarian artis dari luar (Deezer + iTunes): profil, lagu, diskografi, chart dunia, artis dari kata kunci.
 homeFeed.ts| Pemuat data Beranda (chart, radio artis, foto artis) dengan cache berumur di perangkat; galat jaringan tidak dilempar.
 coverOrigin.ts| Asal thumbnail sampul untuk transisi sampul terbang ke pemutar penuh.
@@ -364,6 +365,7 @@ allSongs.ts| Mengelola data seluruh lagu.
 config/navigation.ts| Konfigurasi navigasi aplikasi.
 libraryStorage.ts| Mengelola penyimpanan data koleksi.
 playlistPrefs.ts| Mengelola preferensi playlist.
+motion.ts| Pengaturan Kurangi gerakan: saklar pengguna + preferensi sistem, `prefersReducedMotion()`, kelas `html.reduce-motion`.
 searchPlaylist.ts| Mengelola pencarian playlist.
 swallowNextClick.ts| Mengendalikan klik berikutnya.
 spotifyUrl.ts| Mengolah dan memvalidasi URL Spotify.
@@ -384,6 +386,9 @@ clipDetect.ts| Mendeteksi klip atau bagian audio.
 playerQueue.ts| Mengelola antrean pemutaran.
 safeStorage.ts| Mengelola penyimpanan data secara aman.
 lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
+lyricPriority.ts| Aturan kapan lirik provider kata boleh menimpa sumber lain, menurut prioritas pengguna.
+lyricSourcePins.ts| Sumber lirik pilihan pengguna per lagu (menu Sumber lirik).
+lyricOffset.ts| Penyelarasan waktu lirik per lagu (satu sumber untuk panel penuh dan mini player).
 localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
 artistSearchStore.ts| State pencarian artis di Beranda (mode, fase, urutan lagu).
 searchHistory.ts| Riwayat kata kunci yang dicari di tab Cari (maks. 20), bahan rekomendasi Beranda.
@@ -394,7 +399,7 @@ lyricSubtext.ts| Teks tambahan di bawah baris lirik setelah pengaturan diterapka
 nativeAdvance.ts| Penjaga rantai lagu native agar tidak memutar ulang lagu yang sama.
 playbackLog.ts| Log pemutaran ringan di aplikasi (200 baris terakhir).
 playlistMembership.ts| Menghitung keanggotaan lagu di playlist-playlist pengguna.
-recap.ts| Perhitungan rekap dengar per periode.
+recap.ts| Perhitungan rekap dengar per periode dan streak harian.
 romanize.ts| Romanisasi lokal lirik (kana, Hangul, Devanagari, Sirilik).
 sameSong.ts| Mengenali lagu yang sama antarsumber (playlist, unduhan, lokal, riwayat).
 shareCard.ts| Membuat kartu bagikan bergaya story 9:16.
@@ -691,7 +696,7 @@ File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
 CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
-CHANGES-0.5.54.3.md| Riwayat perubahan versi 0.5.54.3 (terbaru).
+CHANGES-0.5.54.6.md| Riwayat perubahan versi 0.5.54.6 (terbaru).
 
 ---
 

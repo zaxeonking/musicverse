@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { fetchLyrics, LyricsError, type LyricsResult } from '../services/lyricsApi'
 import { readOfflineLyrics, saveOfflineLyrics } from '../native/offlineLyrics'
 import { readCachedLyrics, saveCachedLyrics } from '../native/lyricsCache'
 import { onProviderPrefsChange } from '../utils/lyricProviderPrefs'
+import { getLyricSourcePin, lyricPinKey, subscribeLyricSourcePins } from '../utils/lyricSourcePins'
 import type { PlaylistTrack } from '../types/spotify'
 import { parseDuration } from '../utils/formatTime'
 
@@ -46,8 +47,18 @@ export function prefetchLyrics(track: PlaylistTrack): void {
   })()
 }
 
+/** Sumber yang dipilih pengguna ikut jadi kunci, supaya lirik dari sumber berbeda tidak saling menimpa di cache. */
 function cacheKey(track: PlaylistTrack): string {
-  return `${track.title}|${track.artists}|${track.album}|${Math.round(parseDuration(track.duration) ?? 0)}`.toLowerCase()
+  const pin = getLyricSourcePin(track)
+  return `${track.title}|${track.artists}|${track.album}|${Math.round(parseDuration(track.duration) ?? 0)}${pin ? `|src:${pin}` : ''}`.toLowerCase()
+}
+
+/** Lagu yang liriknya baru diganti sumbernya: salinan lirik unduhan di perangkat dilewati SEKALI supaya diganti yang baru. */
+const bypassStored = new Set<string>()
+
+/** Dipanggil menu Sumber lirik sebelum mengganti sumber. */
+export function markLyricsSourceChange(track: PlaylistTrack): void {
+  bypassStored.add(lyricPinKey(track))
 }
 
 /** Mengambil lirik untuk `track` selama `enabled`. Mengganti lagu membatalkan permintaan lama. */
@@ -56,6 +67,8 @@ export function useLyrics(track: PlaylistTrack | null, enabled: boolean): { stat
   const [attempt, setAttempt] = useState(0)
   const trackRef = useRef(track)
   trackRef.current = track
+  // Ganti sumber lirik (menu Sumber lirik) = kunci berubah = cari ulang.
+  useSyncExternalStore(subscribeLyricSourcePins, () => (track ? (getLyricSourcePin(track) ?? '') : ''))
   const key = track ? cacheKey(track) : null
 
   useEffect(() => {
@@ -77,8 +90,9 @@ export function useLyrics(track: PlaylistTrack | null, enabled: boolean): { stat
       setState({ status: 'ready', result })
     }
     void (async () => {
-      // Lagu unduhan: pakai lirik yang tersimpan di perangkat dulu (cepat, dan jalan tanpa internet).
-      const stored = await readOfflineLyrics(current)
+      // Lagu unduhan: pakai lirik yang tersimpan di perangkat dulu (cepat, dan jalan tanpa internet), kecuali sumbernya baru diganti.
+      const skipStored = bypassStored.delete(lyricPinKey(current))
+      const stored = skipStored ? null : await readOfflineLyrics(current)
       if (controller.signal.aborted) return
       if (stored) {
         remember(stored)
