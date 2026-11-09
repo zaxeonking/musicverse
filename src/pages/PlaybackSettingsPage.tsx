@@ -1,4 +1,4 @@
-import { ArrowLeft, PhoneCall, Radio, Volume2, Zap } from 'lucide-react'
+import { ArrowLeft, PhoneCall, Radio, Shuffle, Volume2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import LyricProviderSettings from '../components/settings/LyricProviderSettings'
@@ -7,6 +7,7 @@ import { getAutoResume, getDirectMode, setAutoResume, setDirectMode } from '../n
 import { isNativeApp } from '../native/platform'
 import { setRadioAuto, useRadioAuto } from '../services/radio'
 import { setVolumeNorm, useVolumeNorm } from '../services/volumeNorm'
+import { setSmartShuffle, useSmartShuffle } from '../utils/smartShuffle'
 
 /** Pengaturan mesin pemutar (APK). */
 export default function PlaybackSettingsPage() {
@@ -14,6 +15,7 @@ export default function PlaybackSettingsPage() {
   const [autoResume, setAutoResumeState] = useState(getAutoResume)
   const radioAuto = useRadioAuto()
   const volumeNorm = useVolumeNorm()
+  const smartShuffle = useSmartShuffle()
   if (!isNativeApp()) return <Navigate to="/" replace />
   return (
     <section aria-label="Pemutaran" className="px-4 pb-8 pt-2">
@@ -38,6 +40,13 @@ export default function PlaybackSettingsPage() {
         icon={Volume2}
         label="Normalisasi volume"
         hint="Meredam lagu yang lebih keras dari rata-rata supaya antar lagu terdengar rata. Lagu yang pelan tidak dinaikkan. Berlaku untuk lagu dari YouTube yang punya data kekerasan; unduhan dan lagu lokal tidak berubah."
+      />
+      <SettingSwitch
+        checked={smartShuffle}
+        onChange={() => setSmartShuffle(!smartShuffle)}
+        icon={Shuffle}
+        label="Acak cerdas"
+        hint="Saat acak menyala, artis yang sama tidak diputar berturut-turut dan lagu yang jarang kamu putar cenderung lebih awal (dari Riwayat). Mati: acak murni. Berlaku untuk urutan acak berikutnya."
       />
       <SettingSwitch
         checked={radioAuto}

@@ -38,6 +38,62 @@ export function createShuffleOrder(length: number, first: number, random: () => 
   return first >= 0 && first < length ? [first, ...rest] : rest
 }
 
+/** Artis pertama sebuah lagu (huruf kecil), dipakai untuk menghindari artis yang sama berturut-turut. Kosong = tidak diketahui. */
+function leadArtist(track: PlaylistTrack): string {
+  return track.artists.split(',')[0]?.trim().toLowerCase() ?? ''
+}
+
+/**
+ * Acak cerdas: tetap permutasi indeks seperti `createShuffleOrder`, tetapi
+ *  - lagu yang jarang diputar cenderung lebih awal (bobot 1 / (1 + jumlah putar)); lagu favorit tidak dibuang, hanya lebih belakang;
+ *  - artis yang sama tidak berturut-turut selama masih ada lagu dari artis lain (bila tinggal satu artis, tidak ada pilihan).
+ * `playCounts` dikunci lewat `keyOf(track)`. Lagu `first` tetap di posisi pertama.
+ */
+export function createSmartShuffleOrder(
+  tracks: readonly PlaylistTrack[],
+  first: number,
+  playCounts: ReadonlyMap<string, number>,
+  keyOf: (track: PlaylistTrack) => string,
+  random: () => number = Math.random,
+): number[] {
+  const hasFirst = first >= 0 && first < tracks.length
+  const pool: number[] = []
+  for (let i = 0; i < tracks.length; i++) if (i !== first || !hasFirst) pool.push(i)
+  const weightOf = (index: number) => 1 / (1 + (playCounts.get(keyOf(tracks[index])) ?? 0))
+
+  const order: number[] = hasFirst ? [first] : []
+  let previousArtist = hasFirst ? leadArtist(tracks[first]) : ''
+  while (pool.length > 0) {
+    // Kandidat: artis berbeda dari lagu sebelumnya; bila semuanya sama, boleh sama.
+    let candidates = previousArtist === '' ? pool : pool.filter((index) => leadArtist(tracks[index]) !== previousArtist)
+    if (candidates.length === 0) candidates = pool
+    // Satu artis menguasai lebih dari separuh sisa: dahulukan dia, kalau tidak sisanya terpaksa berderet artis yang sama.
+    const remaining = new Map<string, number>()
+    for (const index of pool) remaining.set(leadArtist(tracks[index]), (remaining.get(leadArtist(tracks[index])) ?? 0) + 1)
+    for (const [artist, count] of remaining) {
+      if (artist !== '' && artist !== previousArtist && count * 2 > pool.length) {
+        candidates = candidates.filter((index) => leadArtist(tracks[index]) === artist)
+        break
+      }
+    }
+    let total = 0
+    for (const index of candidates) total += weightOf(index)
+    let pick = random() * total
+    let chosen = candidates[candidates.length - 1]
+    for (const index of candidates) {
+      pick -= weightOf(index)
+      if (pick < 0) {
+        chosen = index
+        break
+      }
+    }
+    pool.splice(pool.indexOf(chosen), 1)
+    order.push(chosen)
+    previousArtist = leadArtist(tracks[chosen])
+  }
+  return order
+}
+
 /** Order hanya dipakai jika cocok dengan queue (panjang sama dan memuat indeks aktif). */
 export function isOrderUsable(order: ShuffleOrder, length: number, index: number | null): order is readonly number[] {
   return order !== null && order.length === length && index !== null && order.includes(index)

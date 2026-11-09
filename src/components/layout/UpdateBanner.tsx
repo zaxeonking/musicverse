@@ -118,9 +118,9 @@ function UpdateCard({ update }: { update: AppUpdateState }) {
 
   return (
     <div role="region" aria-label="Pembaruan aplikasi" className="pointer-events-auto">
-      <div className="relative w-full overflow-hidden rounded-3xl border border-veil/10 bg-card/80 text-sm text-ink shadow-2xl shadow-black/50 backdrop-blur-xl backdrop-saturate-150">
+      <div className="relative w-full overflow-hidden rounded-3xl border border-veil/10 bg-card/95 text-sm text-ink shadow-2xl shadow-black/50">
         {/* Cahaya aksen di pojok + garis kilap di tepi atas. */}
-        <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-14 h-40 w-40 rounded-full bg-accent/30 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-14 h-40 w-40 rounded-full mv-orb-accent" />
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
 
         <div className="relative space-y-3 p-4">

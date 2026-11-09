@@ -510,4 +510,24 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
       },
     ],
   },
+  {
+    id: '0.5.54.7',
+    steps: [
+      {
+        id: 'wn-search-history',
+        route: '/search',
+        target: 'search-history',
+        title: 'Baru: pencarian terakhir',
+        body: 'Di halaman Cari, kata kunci yang baru kamu cari muncul sebagai chip di bawah kolom saat kolom kosong. Ketuk chip untuk mencari lagi, atau Hapus semua untuk membersihkannya.',
+        missing: 'Chip muncul setelah kamu mencari sesuatu. Cari satu judul lagu atau nama artis dulu.',
+      },
+      {
+        id: 'wn-smart-shuffle',
+        route: '/settings/playback',
+        nativeOnly: true,
+        title: 'Baru: acak cerdas dan kartu rangkuman',
+        body: 'Di Pengaturan > Pemutaran, saklar Acak cerdas membuat artis yang sama tidak berturut-turut dan lagu yang jarang kamu putar lebih awal. Di Rangkuman ada tombol Bagikan kartu rangkuman: gambar siap kirim ke teman.',
+      },
+    ],
+  },
 ]

@@ -188,7 +188,7 @@ export default function MiniBubble({ now, side, width, onExpand, onSideChange, r
           transform: `translate3d(${x}px, ${y}px, 0) scale(${drag ? 1.08 : 1})`,
           transition: drag ? 'none' : 'transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
-        className="pointer-events-auto absolute left-0 top-0 h-[72px] w-[72px] touch-none select-none rounded-full bg-raised/80 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-xl focus-ring"
+        className="pointer-events-auto absolute left-0 top-0 h-[72px] w-[72px] touch-none select-none rounded-full bg-raised/95 shadow-[0_8px_24px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] focus-ring"
       >
         {/* Piringan: berputar saat playing, berhenti di posisi terakhir saat jeda. */}
         <span

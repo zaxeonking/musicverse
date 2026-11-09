@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { APK_RELEASE_URL, REPO_URL } from '../config/apk'
+import { APK_RELEASE_URL, DISTRIBUTION_PAUSED, REPO_URL } from '../config/apk'
 import SiteLogo from './SiteLogo'
 
 const FONTS_ID = 'mv-site-fonts'
@@ -76,14 +76,23 @@ export default function SiteLayout() {
           <a href={anchor('masukan')} className="hidden rounded-full px-3 py-2 text-site-slate hover:text-site-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green sm:block">
             Masukan
           </a>
-          <a
-            href={APK_RELEASE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-1 inline-flex h-10 items-center rounded-full bg-site-ink px-4 text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green focus-visible:ring-offset-2 focus-visible:ring-offset-site-fog"
-          >
-            Unduh APK
-          </a>
+          {DISTRIBUTION_PAUSED ? (
+            <a
+              href={anchor('upgrade')}
+              className="ml-1 inline-flex h-10 items-center rounded-full bg-site-ink px-4 text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green focus-visible:ring-offset-2 focus-visible:ring-offset-site-fog"
+            >
+              Kabar upgrade
+            </a>
+          ) : (
+            <a
+              href={APK_RELEASE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-1 inline-flex h-10 items-center rounded-full bg-site-ink px-4 text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green focus-visible:ring-offset-2 focus-visible:ring-offset-site-fog"
+            >
+              Unduh APK
+            </a>
+          )}
         </nav>
       </header>
 
@@ -106,9 +115,11 @@ export default function SiteLayout() {
             <Link to="/terms" className="rounded-md py-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green">
               Ketentuan Layanan
             </Link>
-            <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="rounded-md py-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green">
-              Rilis di GitHub
-            </a>
+            {!DISTRIBUTION_PAUSED && (
+              <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="rounded-md py-1 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green">
+                Rilis di GitHub
+              </a>
+            )}
           </nav>
         </div>
         <p className="mt-8 text-sm text-site-slate">© 2026 MusicVerse</p>

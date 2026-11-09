@@ -162,8 +162,8 @@ export default function HomeBanner({ items, loading }: HomeBannerProps) {
     }
     return (
       <section aria-label="Mulai" className="mv-in relative overflow-hidden rounded-[2.5rem_0.9rem_2.5rem_0.9rem] bg-card p-6 ring-1 ring-veil/[0.07] sm:p-8">
-        <span aria-hidden="true" className="mv-float pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-accent/30 blur-2xl" />
-        <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 right-6 h-24 w-24 rounded-full bg-coral/25 blur-2xl" />
+        <span aria-hidden="true" className="mv-float pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full mv-orb-accent" />
+        <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 right-6 h-24 w-24 rounded-full mv-orb-coral" />
         <h2 className="relative font-display text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] text-ink">Mulai dari lagu favoritmu</h2>
         <p className="relative mt-2 max-w-sm text-sm text-ink-muted">Cari judul atau artis, atau tempel tautan playlist Spotify. Rekomendasi muncul di sini setelah kamu mendengarkan.</p>
         <button type="button" onClick={() => navigate('/search', { state: { focus: true } })} className="btn-primary relative mt-5 !h-12 !px-7">

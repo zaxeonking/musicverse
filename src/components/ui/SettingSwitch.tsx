@@ -24,7 +24,7 @@ export default function SettingSwitch({ checked, onChange, icon: Icon, label, hi
         <span className="block text-xs text-ink-muted">{hint}</span>
       </span>
       <span aria-hidden="true" className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-veil/20'}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-[1.125rem]' : 'left-0.5'}`} />
+        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
       </span>
     </button>
   )

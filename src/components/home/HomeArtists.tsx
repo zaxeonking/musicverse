@@ -23,7 +23,7 @@ export default function HomeArtists({ artists, onOpen }: { artists: FavArtist[];
         className="mv-in tap-card focus-ring group relative flex w-full items-center overflow-hidden rounded-[0.8rem_2rem_0.8rem_2rem] p-4 pl-5 text-left ring-1 ring-veil/[0.07]"
         style={{ background: `linear-gradient(120deg, ${colors.to}, rgb(var(--mv-card)))` }}
       >
-        <span aria-hidden="true" className="pointer-events-none absolute -left-8 -top-10 h-32 w-32 rounded-full bg-accent/25 blur-2xl" />
+        <span aria-hidden="true" className="pointer-events-none absolute -left-8 -top-10 h-32 w-32 rounded-full mv-orb-accent" />
         <span className="relative min-w-0 flex-1 pr-3">
           <span className="block font-display text-[2rem] font-extrabold leading-[0.98] tracking-[-0.035em] text-ink [overflow-wrap:anywhere] line-clamp-3">{top.name}</span>
           <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-coral">

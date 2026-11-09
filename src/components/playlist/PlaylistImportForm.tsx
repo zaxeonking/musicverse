@@ -1,11 +1,11 @@
-import { ClipboardPaste, Link2, Loader2, X } from 'lucide-react'
+import { ClipboardPaste, History, Link2, Loader2, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { usePlaylist } from '../../context/PlaylistContext'
 import { readClipboardText } from '../../native/clipboard'
 import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
 import { getArtistSearchState, type SearchMode } from '../../utils/artistSearchStore'
-import { recordSearch } from '../../utils/searchHistory'
+import { clearSearchHistory, readSearchHistory, recordSearch } from '../../utils/searchHistory'
 import Chip from '../ui/Chip'
 
 interface PlaylistImportFormProps {
@@ -30,6 +30,8 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
   const inputRef = useRef<HTMLInputElement>(null)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [focused, setFocused] = useState(false)
+  // Pencarian terakhir (chip di bawah kolom saat kolom kosong). Dibaca ulang tiap kali ada pencarian baru.
+  const [history, setHistory] = useState<string[]>(readSearchHistory)
 
   // Saran judul (YouTube Music) saat mengetik judul; ditunda 300 ms dan dibatalkan bila teks berubah lagi.
   useEffect(() => {
@@ -63,12 +65,37 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
     return () => clearTimeout(timer)
   }, [value, mode, inputKind])
 
+  /** Catat kata kunci lalu segarkan chip riwayat. */
+  function remember(text: string) {
+    recordSearch(text)
+    setHistory(readSearchHistory())
+  }
+
   async function pickSuggestion(text: string) {
     setSuggestions([])
     setValue(text)
     setValidationError(null)
-    recordSearch(text)
+    remember(text)
     await loadPlaylist(text)
+  }
+
+  /** Ketuk chip riwayat: isi kolom dan langsung cari, sesuai jenis pencarian yang aktif (Lagu / Artis). */
+  async function pickRecent(text: string) {
+    if (loading) return
+    setSuggestions([])
+    setValue(text)
+    setValidationError(null)
+    remember(text)
+    if (mode === 'artist') {
+      onArtistSearch(text)
+      return
+    }
+    await loadPlaylist(text)
+  }
+
+  function handleClearHistory() {
+    clearSearchHistory()
+    setHistory([])
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -82,7 +109,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
       )
       return
     }
-    if (input.kind === 'search') recordSearch(input.query)
+    if (input.kind === 'search') remember(input.query)
     if (mode === 'artist') {
       if (input.kind === 'search') {
         // Nama artis: cari daftar artis (tanpa menyentuh playlist/hasil lagu yang sedang tampil).
@@ -240,6 +267,32 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
           Artis
         </Chip>
       </div>
+      {value.length === 0 && history.length > 0 && (
+        <section data-tour="search-history" aria-label="Pencarian terakhir" className="space-y-2 pt-1">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <History className="h-4 w-4 text-ink-muted" aria-hidden="true" />
+              Pencarian terakhir
+            </h2>
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              className="focus-ring rounded-full px-2 py-1 text-xs font-semibold text-ink-muted transition-colors hover:text-ink active:bg-veil/10"
+            >
+              Hapus semua
+            </button>
+          </div>
+          <ul className="mv-list flex flex-wrap gap-2">
+            {history.map((text) => (
+              <li key={text} className="max-w-full">
+                <Chip aria-pressed={undefined} onClick={() => void pickRecent(text)}>
+                  <span className="block max-w-[16rem] truncate">{text}</span>
+                </Chip>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {validationError && (
         <p id={errorId} role="alert" className="mv-drop text-sm text-danger">
           {validationError}

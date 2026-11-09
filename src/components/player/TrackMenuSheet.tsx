@@ -331,7 +331,8 @@ export default function TrackMenuSheet({ track, fromSearch, fromPlaylistId, plac
                   disabled={sharing}
                   onClick={() => {
                     setSharing(true)
-                    void shareNowPlayingCard(track).then((result) => {
+                    // Kartu selalu untuk lagu yang sedang diputar sekarang, bukan lagu saat menu dibuka (bisa sudah berganti).
+                    void shareNowPlayingCard(player.currentTrack ?? track).then((result) => {
                       setSharing(false)
                       if (result.message) onToast(result.message)
                       if (result.ok) onClose()

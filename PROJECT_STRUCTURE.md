@@ -65,6 +65,7 @@ Sidebar.tsx| Navigasi samping untuk tampilan desktop.
 BottomNav.tsx| Navigasi bawah mobile bergaya kaca cair: pil melayang, lensa aktif meluncur, turun saat keyboard terbuka (utils/navActive.ts menentukan tab aktif).
 MobileHeader.tsx| Header khusus tampilan mobile.
 UpdateBanner.tsx| Menampilkan pemberitahuan pembaruan aplikasi.
+MigrationNotice.tsx| Pengumuman satu kali (lembar bawah) bahwa MusicVerse dibangun ulang sebagai aplikasi Android native; penanda tutup di `utils/migrationNotice.ts`.
 OfflineBanner.tsx| Menampilkan status atau pemberitahuan ketika offline.
 PageTransition.tsx| Transisi antarhalaman: halaman lama memudar, halaman baru masuk geser maju/mundur.
 
@@ -383,7 +384,7 @@ matchTrack.ts| Mencocokkan data lagu.
 trackSearch.ts| Mengelola pencarian lagu.
 backup.ts| Mengelola sistem backup dan pemulihan.
 clipDetect.ts| Mendeteksi klip atau bagian audio.
-playerQueue.ts| Mengelola antrean pemutaran.
+playerQueue.ts| Mengelola antrean pemutaran, termasuk urutan acak biasa dan acak cerdas.
 safeStorage.ts| Mengelola penyimpanan data secara aman.
 lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
 lyricPriority.ts| Aturan kapan lirik provider kata boleh menimpa sumber lain, menurut prioritas pengguna.
@@ -391,7 +392,8 @@ lyricSourcePins.ts| Sumber lirik pilihan pengguna per lagu (menu Sumber lirik).
 lyricOffset.ts| Penyelarasan waktu lirik per lagu (satu sumber untuk panel penuh dan mini player).
 localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
 artistSearchStore.ts| State pencarian artis di Beranda (mode, fase, urutan lagu).
-searchHistory.ts| Riwayat kata kunci yang dicari di tab Cari (maks. 20), bahan rekomendasi Beranda.
+migrationNotice.ts| Penanda pengumuman migrasi sudah ditutup (`mv:migration-notice:v1`).
+searchHistory.ts| Riwayat kata kunci yang dicari di tab Cari (maks. 20), tampil sebagai chip Pencarian terakhir dan bahan rekomendasi Beranda.
 searchResultsFlag.ts| Penanda (di memori) bahwa hasil di tab Cari sedang dibuka pengguna, supaya playlist hasil pemulihan tidak menutup jelajah.
 deezerMatch.ts| Pencocokan lagu dengan hasil pencarian Deezer.
 lyricDisplayPrefs.ts| Penyimpanan pengaturan tampilan terjemahan/romanisasi lirik.
@@ -402,7 +404,8 @@ playlistMembership.ts| Menghitung keanggotaan lagu di playlist-playlist pengguna
 recap.ts| Perhitungan rekap dengar per periode dan streak harian.
 romanize.ts| Romanisasi lokal lirik (kana, Hangul, Devanagari, Sirilik).
 sameSong.ts| Mengenali lagu yang sama antarsumber (playlist, unduhan, lokal, riwayat).
-shareCard.ts| Membuat kartu bagikan bergaya story 9:16.
+shareCard.ts| Membuat kartu bagikan bergaya story 9:16 (Sedang diputar dan Rangkuman).
+smartShuffle.ts| Saklar Acak cerdas (bawaan mati) dan `makeShuffleOrder` untuk urutan acak antrean.
 spring.ts| Easing pegas untuk animasi sheet dan umpan balik.
 theme.ts| Mesin tema: warna, mode gelap/terang/otomatis, sudut, aksen dari sampul.
 viewportSettle.ts| Menunggu ukuran layar tenang setelah keyboard naik.
@@ -427,7 +430,7 @@ File| Fungsi
 navigation.ts| Mengatur konfigurasi navigasi.
 moods.ts| Daftar suasana tab Cari (judul, kata kunci playlist Deezer, warna dan bentuk kotak).
 homeShelves.ts| Deretan kurasi Beranda (judul, emoji, sumber Deezer).
-apk.ts| Menyimpan konfigurasi terkait APK.
+apk.ts| Menyimpan konfigurasi terkait APK, termasuk saklar `DISTRIBUTION_PAUSED` (jeda unduhan di situs).
 site.ts| Info situs dan tanggal terakhir dokumen hukum diubah.
 
 ---
@@ -469,7 +472,8 @@ Menyimpan situs web untuk peramban biasa. MusicVerse tidak punya versi web: satu
 File| Fungsi
 SiteApp.tsx| Aplikasi untuk peramban biasa; alamat lain dialihkan ke "/".
 SiteLayout.tsx| Kerangka situs: header, konten, footer.
-LandingPage.tsx| Halaman landing pemasangan APK.
+LandingPage.tsx| Halaman landing pemasangan APK (selama `DISTRIBUTION_PAUSED`: pengumuman migrasi, tanpa tombol unduh).
+MigrationNotice.tsx| Panel pengumuman migrasi di situs, pengganti tombol Unduh APK saat distribusi dijeda.
 PhoneMock.tsx| Ilustrasi ponsel di landing (lirik karangan sendiri).
 EqBars.tsx| Batang equalizer animasi seperti logo.
 FeedbackSection.tsx| Formulir saran, ulasan, dan laporan bug.
@@ -696,7 +700,7 @@ File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
 CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
-CHANGES-0.5.54.6.md| Riwayat perubahan versi 0.5.54.6 (terbaru).
+CHANGES-0.5.54.7.md| Riwayat perubahan versi 0.5.54.7 (terbaru).
 
 ---
 

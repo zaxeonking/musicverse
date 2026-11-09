@@ -253,11 +253,7 @@ export default function BottomNav() {
       >
         <nav
           aria-label="Navigasi utama"
-          style={{
-            WebkitBackdropFilter: 'blur(16px) saturate(120%) brightness(var(--mv-nav-dim, 0.55))',
-            backdropFilter: 'blur(16px) saturate(120%) brightness(var(--mv-nav-dim, 0.55))',
-          }}
-          className={`relative w-full max-w-md rounded-[1.9rem] border border-accent/20 bg-card/85 p-1 shadow-[0_14px_36px_rgb(0_0_0/var(--mv-nav-shadow,0.45)),0_2px_8px_rgb(0_0_0/var(--mv-nav-shadow-sm,0.3)),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.28),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06),inset_0_0_18px_rgb(var(--mv-veil,255_255_255)/0.05)] supports-[backdrop-filter]:bg-card/60 ${
+          className={`relative w-full max-w-md rounded-[1.9rem] border border-accent/20 bg-card/95 p-1 shadow-[0_14px_36px_rgb(0_0_0/var(--mv-nav-shadow,0.45)),0_2px_8px_rgb(0_0_0/var(--mv-nav-shadow-sm,0.3)),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.28),inset_0_-1px_0_rgb(var(--mv-veil,255_255_255)/0.06),inset_0_0_18px_rgb(var(--mv-veil,255_255_255)/0.05)] ${
             keyboardOpen ? 'pointer-events-none' : 'pointer-events-auto'
           }`}
         >

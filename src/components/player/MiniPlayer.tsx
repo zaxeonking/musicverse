@@ -1216,7 +1216,7 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
           e.stopPropagation()
         }
       }}
-      className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-[1.9rem_0.9rem_1.9rem_0.9rem] border border-accent/25 bg-raised/80 shadow-[0_10px_36px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)] backdrop-blur-3xl backdrop-saturate-150 [-webkit-backdrop-filter:blur(40px)_saturate(150%)]`}
+      className={`${regionGrow} pointer-events-auto relative touch-none overflow-hidden rounded-[1.9rem_0.9rem_1.9rem_0.9rem] border border-accent/25 bg-raised/95 shadow-[0_10px_36px_rgba(0,0,0,0.55),inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.12)]`}
     >
       {/* Pegangan. Geser kiri/kanan = kartu bergulir jadi disc, geser ke bawah = tutup musik. Ketuk = cadangan (keyboard/pembaca layar) untuk jadi disc. */}
       <button

@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string
   /** Repo GitHub rilis APK (USER/REPO): tujuan tombol unduh di halaman web (releases/latest) dan sumber cek update di APK. */
   readonly VITE_GITHUB_REPO?: string
+  readonly VITE_DISTRIBUTION_PAUSED?: string
   /** Base URL NetEase untuk lirik. Default: /netease (proxy) di web, https://music.163.com di APK. */
   readonly VITE_LYRICS_NETEASE_BASE?: string
   readonly VITE_LYRICS_PLUS_BASE?: string

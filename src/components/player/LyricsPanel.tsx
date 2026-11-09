@@ -134,7 +134,7 @@ function Row({
   const tone = bg
     ? state === 'active' ? 'scale-[1.03] text-ink/80' : state === 'past' ? 'text-white/20' : 'text-white/35'
     : state === 'active' ? 'scale-105 text-ink' : state === 'past' ? 'text-white/30' : 'text-white/50'
-  const className = `block w-full select-none rounded-md px-1 leading-snug transition-all duration-300 ${align} ${size} ${tone}`
+  const className = `block w-full select-none rounded-md px-1 leading-snug transition-[transform,color] duration-300 ${align} ${size} ${tone}`
   const text = item.text || '♪'
   // Waktu kata hanya dipercaya bila waktu lirik persis cocok dengan audio.
   const reliable = !!fill && fill.timing.mode === 'exact'
@@ -247,7 +247,10 @@ function LineList({
 
   return (
     <div className="flex h-full flex-col">
-      {header && <div className={`shrink-0 px-14 text-center text-[11px] text-ink-faint ${fullscreen ? 'pt-[max(0.5rem,var(--sat))]' : 'pt-2'}`}>{header}</div>}
+      {/* Atas dikosongkan setinggi tombol Sumber (absolut di pojok kanan atas, lihat LyricsPanel) supaya tidak menimpa teks. */}
+      {header && (
+        <div className={`shrink-0 px-6 text-center text-[11px] leading-snug text-ink-faint ${fullscreen ? 'pt-[calc(max(0.25rem,var(--sat))+2.25rem)]' : 'pt-9'}`}>{header}</div>
+      )}
       <div
         ref={containerRef}
         style={FADE_MASK}
@@ -318,25 +321,27 @@ function SyncedLyrics({ result, trackKey, fullscreen }: { result: Extract<Lyrics
   const resetOffset = () => setOffset(0)
   const nudge = (delta: number) => setOffset(offset + delta)
 
-  const nudgeBtn = 'focus-ring inline-flex h-8 items-center rounded-full bg-raised px-3 text-xs font-semibold text-ink active:opacity-70'
+  const nudgeBtn = 'focus-ring inline-flex h-8 min-w-[4.75rem] items-center justify-center whitespace-nowrap rounded-full px-3 text-xs font-semibold text-ink active:bg-veil/10'
   const header: ReactNode =
     mode === 'estimated' ? (
       modeNote
     ) : (
       <>
         <span className="block">{modeNote ?? 'Lirik tidak pas? Geser waktunya, atau tahan baris yang sedang dinyanyikan.'}</span>
-        <span className="mt-1.5 flex items-center justify-center gap-2" role="group" aria-label="Penyelarasan waktu lirik">
+        <span className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1" role="group" aria-label="Penyelarasan waktu lirik">
+          <span className="inline-flex items-center rounded-full bg-raised/70 p-0.5">
           <button type="button" onClick={() => nudge(-OFFSET_STEP_S)} aria-label={`Lirik lebih lambat ${OFFSET_STEP_S.toString().replace('.', ',')} detik`} className={nudgeBtn}>
             − Lambat
           </button>
-          <span role="status" className="min-w-[4.5rem] text-center text-[11px] tabular-nums text-ink-muted">
+          <span role="status" className="min-w-[3.75rem] whitespace-nowrap text-center text-[11px] tabular-nums text-ink-muted">
             {offset === 0 ? 'Pas' : `${offset > 0 ? '+' : '−'}${Math.abs(offset).toFixed(1).replace('.', ',')} dtk`}
           </span>
           <button type="button" onClick={() => nudge(OFFSET_STEP_S)} aria-label={`Lirik lebih cepat ${OFFSET_STEP_S.toString().replace('.', ',')} detik`} className={nudgeBtn}>
             Cepat +
           </button>
+          </span>
           {offset !== 0 && (
-            <button type="button" onClick={resetOffset} className="focus-ring text-xs font-semibold text-accent underline">
+            <button type="button" onClick={resetOffset} className="focus-ring whitespace-nowrap text-xs font-semibold text-accent underline">
               Reset
             </button>
           )}

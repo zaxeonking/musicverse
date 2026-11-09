@@ -23,8 +23,8 @@ import { createClipGuard, isLikelyClip } from '../utils/clipDetect'
 import { getNetworkTier, PRELOAD_LEAD_BY_TIER_S, startNetworkMonitor } from '../utils/networkQuality'
 import { plog } from '../utils/playbackLog'
 import { readJson, writeJson } from '../utils/safeStorage'
+import { makeShuffleOrder } from '../utils/smartShuffle'
 import {
-  createShuffleOrder,
   getNextIndex,
   getPreviousIndex,
   canRestartQueue,
@@ -268,7 +268,7 @@ function buildBootSession(): BootSession | null {
   const shuffleOrder = prefs.shuffle
     ? isOrderUsable(saved.shuffleOrder, saved.queue.length, saved.index)
       ? saved.shuffleOrder
-      : createShuffleOrder(saved.queue.length, saved.index)
+      : makeShuffleOrder(saved.queue, saved.index)
     : null
   return {
     state: {
@@ -830,7 +830,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
         shuffleOrder =
           options.keepOrder && previous.queue === queue && isOrderUsable(previous.shuffleOrder, queue.length, index)
             ? previous.shuffleOrder
-            : createShuffleOrder(queue.length, index)
+            : makeShuffleOrder(queue, index)
       }
       // Harus sinkron di dalam gestur klik (lihat AudioEngine.prime). Juga menghentikan lagu lama
       // dan membuang lagu yang sudah dimuat untuk crossfade (daftar berikutnya bisa saja berubah).
@@ -1505,7 +1505,7 @@ export function useAudioPlayerController(playlistTracks: PlaylistTrack[]) {
     const { queue, currentIndex } = stateRef.current
     // Lagu aktif tidak terganggu: hanya urutan setelahnya yang dibuat/dibuang.
     commit({
-      shuffleOrder: enabled && isValidIndex(queue, currentIndex) ? createShuffleOrder(queue.length, currentIndex) : null,
+      shuffleOrder: enabled && isValidIndex(queue, currentIndex) ? makeShuffleOrder(queue, currentIndex) : null,
     })
   }, [commit, updatePrefs])
 

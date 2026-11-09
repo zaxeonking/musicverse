@@ -22,7 +22,7 @@ function HeaderBackdrop({ src }: { src: string }) {
       aria-hidden="true"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
-      className="pointer-events-none absolute inset-0 -z-10 h-full w-full scale-125 object-cover opacity-30 blur-3xl"
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full scale-125 transform-gpu object-cover opacity-30 blur-2xl"
     />
   )
 }

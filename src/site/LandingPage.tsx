@@ -1,8 +1,9 @@
 import { ChevronDown, Download } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { APK_RELEASE_URL } from '../config/apk'
+import { APK_RELEASE_URL, DISTRIBUTION_PAUSED } from '../config/apk'
 import FeedbackSection from './FeedbackSection'
+import MigrationNotice from './MigrationNotice'
 import PhoneMock from './PhoneMock'
 
 /** Fitur disusun menurut situasi pemakai, bukan daftar spesifikasi. Hanya fitur yang benar-benar ada di APK. */
@@ -37,8 +38,10 @@ const SCENARIOS: ReadonlyArray<{ title: string; text: string }> = [
   },
 ]
 
-const PLATFORMS: ReadonlyArray<{ name: string; status: 'Tersedia' | 'Menyusul'; note: string }> = [
-  { name: 'Android', status: 'Tersedia', note: 'Pasang lewat berkas APK dari halaman rilis GitHub.' },
+const PLATFORMS: ReadonlyArray<{ name: string; status: 'Tersedia' | 'Dibangun ulang' | 'Menyusul'; note: string }> = [
+  DISTRIBUTION_PAUSED
+    ? { name: 'Android', status: 'Dibangun ulang', note: 'Sedang dibangun ulang sebagai aplikasi Android native. Unduhan baru dijeda sementara.' }
+    : { name: 'Android', status: 'Tersedia', note: 'Pasang lewat berkas APK dari halaman rilis GitHub.' },
   { name: 'Windows', status: 'Menyusul', note: 'Belum ada tanggal rilis.' },
   { name: 'iOS', status: 'Menyusul', note: 'Belum ada tanggal rilis.' },
 ]
@@ -50,6 +53,14 @@ const STEPS: readonly string[] = [
 ]
 
 const FAQ: ReadonlyArray<{ q: string; a: ReactNode }> = [
+  ...(DISTRIBUTION_PAUSED
+    ? [
+        {
+          q: 'Kenapa unduhan dijeda?',
+          a: 'MusicVerse sedang dibangun ulang sebagai aplikasi Android native supaya lebih cepat, mulus, dan stabil. Ini perombakan besar, bukan pembaruan kecil, jadi unduhan baru dijeda selama pengembangan. MusicVerse tidak berhenti; kabar terbarunya akan muncul di halaman ini.',
+        },
+      ]
+    : []),
   {
     q: 'Kenapa tidak ada versi web?',
     a: 'Memutar dan mengunduh lagu butuh akses yang tidak diberikan peramban, dan musik di latar belakang juga tidak bisa seandal di aplikasi. Karena itu MusicVerse hanya ada sebagai aplikasi.',
@@ -81,7 +92,7 @@ const FAQ: ReadonlyArray<{ q: string; a: ReactNode }> = [
   },
   {
     q: 'Aman dipasang?',
-    a: 'APK hanya dibagikan lewat halaman rilis GitHub yang ditautkan di situs ini. Android menampilkan peringatan untuk semua aplikasi yang dipasang dari luar toko aplikasi, dan itu normal. Jangan pasang berkas dari tempat lain.',
+    a: 'APK hanya dibagikan lewat halaman rilis GitHub yang ditautkan di situs ini (saat ini unduhan baru dijeda). Android menampilkan peringatan untuk semua aplikasi yang dipasang dari luar toko aplikasi, dan itu normal. Jangan pasang berkas dari tempat lain.',
   },
   { q: 'Kapan Windows dan iOS?', a: 'Belum ada tanggal. Kabar terbarunya akan muncul di halaman ini.' },
 ]
@@ -105,16 +116,22 @@ export default function LandingPage() {
           <p className="mt-6 max-w-[34rem] text-xl leading-[1.55] text-site-slate">
             MusicVerse adalah pemutar musik untuk Android. Tanpa akun, tanpa iklan, dan musiknya tetap jalan saat layar mati.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
-            <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
-              <Download className="h-5 w-5" aria-hidden="true" />
-              Unduh APK
-            </a>
-            <a href="#pasang" className="rounded-md py-2 font-display text-base font-semibold underline decoration-site-line decoration-2 underline-offset-[6px] hover:decoration-site-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green">
-              Lihat cara pasang
-            </a>
-          </div>
-          <p className="mt-4 text-sm text-site-slate">Gratis. Diunduh dari halaman rilis GitHub. Windows dan iOS menyusul.</p>
+          {DISTRIBUTION_PAUSED ? (
+            <MigrationNotice />
+          ) : (
+            <>
+              <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+                <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
+                  <Download className="h-5 w-5" aria-hidden="true" />
+                  Unduh APK
+                </a>
+                <a href="#pasang" className="rounded-md py-2 font-display text-base font-semibold underline decoration-site-line decoration-2 underline-offset-[6px] hover:decoration-site-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green">
+                  Lihat cara pasang
+                </a>
+              </div>
+              <p className="mt-4 text-sm text-site-slate">Gratis. Diunduh dari halaman rilis GitHub. Windows dan iOS menyusul.</p>
+            </>
+          )}
         </div>
 
         <div className="lg:pb-16 lg:pl-6">
@@ -147,14 +164,14 @@ export default function LandingPage() {
           </h2>
           <ul className="mt-10 divide-y divide-white/15 border-y border-white/15">
             {PLATFORMS.map((platform) => {
-              const ready = platform.status === 'Tersedia'
+              const ready = platform.status !== 'Menyusul'
               return (
                 <li key={platform.name} className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:gap-8 sm:py-8">
                   <p className={`font-display text-4xl font-extrabold tracking-[-0.03em] sm:w-[16rem] sm:text-6xl ${ready ? '' : 'text-white/45'}`}>{platform.name}</p>
                   <p className="min-w-0 flex-1 text-[1.0625rem] leading-snug text-[#A9B7BC]">{platform.note}</p>
                   <p
                     className={`w-fit rounded-full px-3.5 py-1.5 font-display text-sm font-semibold ${
-                      ready ? 'bg-[#1DB954] text-black' : 'text-[#A9B7BC] ring-1 ring-inset ring-white/30'
+                      platform.status === 'Tersedia' ? 'bg-[#1DB954] text-black' : 'text-[#A9B7BC] ring-1 ring-inset ring-white/30'
                     }`}
                   >
                     {platform.status}
@@ -166,31 +183,33 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Cara pasang */}
-      <section id="pasang" aria-labelledby="judul-pasang" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
-        <h2 id="judul-pasang" className="font-display text-3xl font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-5xl">
-          Cara pasang di Android
-        </h2>
-        <div>
-          <ol className="space-y-6">
-            {STEPS.map((step, index) => (
-              <li key={step} className="flex gap-5">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-site-ink font-display text-base font-bold text-white" aria-hidden="true">
-                  {index + 1}
-                </span>
-                <p className="max-w-[34rem] pt-1 text-[1.0625rem] leading-[1.6]">
-                  <span className="sr-only">{`Langkah ${index + 1}: `}</span>
-                  {step}
-                </p>
-              </li>
-            ))}
-          </ol>
-          <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={`${primaryBtn} mt-9`}>
-            <Download className="h-5 w-5" aria-hidden="true" />
-            Unduh APK
-          </a>
-        </div>
-      </section>
+      {/* Cara pasang (disembunyikan selama unduhan dijeda; tidak ada tombol unduh yang bisa diikuti langkahnya) */}
+      {!DISTRIBUTION_PAUSED && (
+        <section id="pasang" aria-labelledby="judul-pasang" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
+          <h2 id="judul-pasang" className="font-display text-3xl font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-5xl">
+            Cara pasang di Android
+          </h2>
+          <div>
+            <ol className="space-y-6">
+              {STEPS.map((step, index) => (
+                <li key={step} className="flex gap-5">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-site-ink font-display text-base font-bold text-white" aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <p className="max-w-[34rem] pt-1 text-[1.0625rem] leading-[1.6]">
+                    <span className="sr-only">{`Langkah ${index + 1}: `}</span>
+                    {step}
+                  </p>
+                </li>
+              ))}
+            </ol>
+            <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={`${primaryBtn} mt-9`}>
+              <Download className="h-5 w-5" aria-hidden="true" />
+              Unduh APK
+            </a>
+          </div>
+        </section>
+      )}
 
       {/* Tanya jawab */}
       <section id="tanya" aria-labelledby="judul-tanya" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">

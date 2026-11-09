@@ -120,7 +120,7 @@ export default function ThemeSettingsPage() {
       <h1 className="mb-3 text-3xl font-extrabold text-ink">Tema</h1>
 
       {/* Menempel di atas area scroll: perubahan terlihat langsung tanpa naik-turun halaman. */}
-      <div className="sticky top-0 z-20 -mx-4 bg-bg/90 px-4 pb-2 pt-1 backdrop-blur">
+      <div className="sticky top-0 z-20 -mx-4 bg-bg/95 px-4 pb-2 pt-1">
         <LivePreview glow={theme.glow} />
       </div>
 

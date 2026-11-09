@@ -170,15 +170,14 @@
     z-index: 30;
     border-radius: 9999px;
     border: 1px solid rgb(var(--mv-veil, 255 255 255) / 0.12);
-    background-color: rgb(var(--mv-bg, 18 18 18) / 0.6);
-    -webkit-backdrop-filter: blur(16px) saturate(1.5);
-    backdrop-filter: blur(16px) saturate(1.5);
+    /* Tanpa backdrop-filter: tombol ini menempel di atas daftar yang digulir, blur-nya dihitung ulang tiap frame gulir. */
+    background-color: rgb(var(--mv-bg, 18 18 18) / 0.9);
     box-shadow: 0 4px 18px rgb(0 0 0 / 0.25), inset 0 1px 0 rgb(var(--mv-veil, 255 255 255) / 0.08);
     transition: transform 150ms var(--ease), background-color 150ms var(--ease);
   }
   .back-glass:active {
     transform: scale(0.96);
-    background-color: rgb(var(--mv-bg, 18 18 18) / 0.8);
+    background-color: rgb(var(--mv-bg, 18 18 18) / 0.97);
   }
   @media (prefers-reduced-motion: reduce) {
     .back-glass:active {
@@ -635,4 +634,13 @@ html[data-theme='light'] .bg-raised {
 [data-mini-card][data-morphing] {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+
+/* Bulatan cahaya dekoratif: gradasi radial (murah), bukan filter: blur(). Boleh bergerak (transform) tanpa menghitung ulang blur tiap frame. */
+.mv-orb-accent {
+  background: radial-gradient(closest-side, rgb(var(--mv-accent, 29 185 84) / 0.32), transparent);
+}
+.mv-orb-coral {
+  background: radial-gradient(closest-side, rgb(var(--mv-coral, 255 118 87) / 0.28), transparent);
 }

@@ -436,7 +436,7 @@ export default function TourHost() {
           </p>
           <div className="flex items-center gap-1" aria-hidden="true">
             {steps.map((item, i) => (
-              <span key={item.id} className={`h-1.5 rounded-full transition-all ${i === index ? 'w-4 bg-accent' : i < index ? 'w-1.5 bg-accent/60' : 'w-1.5 bg-raised'}`} />
+              <span key={item.id} className={`h-1.5 rounded-full transition-[width,background-color] ${i === index ? 'w-4 bg-accent' : i < index ? 'w-1.5 bg-accent/60' : 'w-1.5 bg-raised'}`} />
             ))}
           </div>
         </div>

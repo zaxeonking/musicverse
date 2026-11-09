@@ -1,10 +1,12 @@
-import { ArrowLeft, BarChart3 } from 'lucide-react'
+import { ArrowLeft, BarChart3, Loader2, Share2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useTrackMenu } from '../context/TrackMenuContext'
 import { Link } from 'react-router-dom'
 import CoverArt from '../components/ui/CoverArt'
 import EmptyState from '../components/ui/EmptyState'
 import { fallbackCover } from '../utils/fallbackCover'
 import { readPlayLog } from '../utils/playLog'
+import { shareRecapCard } from '../utils/shareCard'
 import { computeRecap, computeStreaks, formatListening, RECAP_PERIODS, WEEKDAYS, type RecapPeriod } from '../utils/recap'
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -29,6 +31,20 @@ export default function RecapPage() {
   const recap = useMemo(() => computeRecap(log, period), [log, period])
   const streaks = useMemo(() => computeStreaks(log), [log])
   const maxDay = Math.max(1, ...recap.perWeekday)
+  const { showToast } = useTrackMenu()
+  const [sharing, setSharing] = useState(false)
+  const periodLabel = RECAP_PERIODS.find((item) => item.id === period)?.label ?? ''
+
+  async function share() {
+    if (sharing) return
+    setSharing(true)
+    try {
+      const result = await shareRecapCard(recap, streaks, periodLabel)
+      if (result.message) showToast(result.message)
+    } finally {
+      setSharing(false)
+    }
+  }
   const hourText = recap.busiestHour >= 0 ? `${String(recap.busiestHour).padStart(2, '0')}.00` : '-'
 
   return (
@@ -63,6 +79,16 @@ export default function RecapPage() {
         <EmptyState compact icon={BarChart3} title="Belum ada data di periode ini" />
       ) : (
         <>
+          <button
+            type="button"
+            data-tour="recap-share"
+            onClick={() => void share()}
+            disabled={sharing}
+            className="btn-primary h-11 w-full gap-2 px-6 text-sm"
+          >
+            {sharing ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Share2 className="h-4 w-4" aria-hidden="true" />}
+            {sharing ? 'Membuat kartu…' : 'Bagikan kartu rangkuman'}
+          </button>
           <section aria-label="Ringkasan" className="grid grid-cols-2 gap-3">
             <Stat label="Total waktu dengar" value={formatListening(recap.totalSeconds)} hint="Perkiraan dari durasi lagu" />
             <Stat label="Putaran" value={String(recap.plays)} hint={`${recap.uniqueTracks} lagu · ${recap.uniqueArtists} artis`} />

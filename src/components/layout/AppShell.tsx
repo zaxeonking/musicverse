@@ -6,6 +6,7 @@ import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useTheme } from '../../hooks/useTheme'
 import ErrorBoundary from '../ui/ErrorBoundary'
+import MigrationNotice from './MigrationNotice'
 import OfflineBanner from './OfflineBanner'
 import PageTransition from './PageTransition'
 import UpdateBanner from './UpdateBanner'
@@ -102,6 +103,7 @@ export default function AppShell() {
         <BottomNav />
       </div>
       <TourHost />
+      <MigrationNotice />
     </div>
   )
 }
