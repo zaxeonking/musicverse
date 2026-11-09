@@ -223,6 +223,11 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   const restBottom = useRef({ width: 0, height: 0, bottom: 0 })
   const pinOffset = useRef(0)
   const pinStop = useRef<(() => void) | null>(null)
+  // Keyboard menutup saat disc tampil: dock (dan disc) ditahan di posisi di atas keyboard selama layar melebar, supaya disc tidak
+  // ikut turun ke nav lebih dulu. Saat keyboard dinyatakan tertutup, disc terbang dari posisi tahan itu langsung ke sampul.
+  const kbBase = useRef(0)
+  const holdOffset = useRef(0)
+  const holdStop = useRef<(() => void) | null>(null)
   const kbTimer = useRef(0)
   const prevKeyboard = useRef(false)
   // Pengguna mengetuk gelembung saat keyboard terbuka: keyboard ditutup dulu, kartu membesar sesudahnya.
@@ -380,6 +385,70 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
   useLayoutEffect(() => {
     if (kbBubble && pinOffset.current > 0) releasePin()
   })
+
+  /** Tahan dock di posisi layar `kbBase` (tepi bawah saat keyboard terbuka) walau layar melebar; hanya transform, tanpa render React. */
+  const startHold = () => {
+    const el = dockRef.current
+    if (!el || holdStop.current || !(kbBase.current > 0)) return
+    const target = kbBase.current
+    let raf = 0
+    const apply = () => {
+      const natural = el.getBoundingClientRect().bottom - holdOffset.current
+      const offset = target - natural
+      if (Math.abs(offset - holdOffset.current) < 0.5) return
+      holdOffset.current = offset
+      el.style.transform = `translate3d(0, ${offset}px, 0)`
+    }
+    // Tepat saat ukuran berubah (sebelum digambar); rAF menambal margin dock yang beranimasi.
+    const loop = () => {
+      apply()
+      raf = window.requestAnimationFrame(loop)
+    }
+    window.addEventListener('resize', apply)
+    window.visualViewport?.addEventListener('resize', apply)
+    apply()
+    raf = window.requestAnimationFrame(loop)
+    holdStop.current = () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener('resize', apply)
+      window.visualViewport?.removeEventListener('resize', apply)
+      el.style.transform = ''
+      holdOffset.current = 0
+      holdStop.current = null
+    }
+  }
+
+  // Selama disc keyboard tampil: catat tepi bawah dock, dan begitu layar mulai melebar (keyboard menutup) tahan dock di sana.
+  useEffect(() => {
+    if (!kbBubble) return undefined
+    const viewportHeight = () => {
+      const vv = window.visualViewport
+      return vv && vv.height < window.innerHeight ? vv.height : window.innerHeight
+    }
+    kbBase.current = dockRef.current?.getBoundingClientRect().bottom ?? 0
+    let lastH = viewportHeight()
+    const onResize = () => {
+      const h = viewportHeight()
+      if (h > lastH + 1) {
+        startHold()
+      } else if (h < lastH - 1) {
+        // Keyboard naik lagi (mis. ganti kolom): lepas tahanan dan catat ulang posisi.
+        holdStop.current?.()
+        kbBase.current = dockRef.current?.getBoundingClientRect().bottom ?? 0
+      } else if (!holdStop.current) {
+        kbBase.current = dockRef.current?.getBoundingClientRect().bottom ?? kbBase.current
+      }
+      lastH = h
+    }
+    window.addEventListener('resize', onResize)
+    window.visualViewport?.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.visualViewport?.removeEventListener('resize', onResize)
+      holdStop.current?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kbBubble])
 
   /** Kartu di belakang nav (true) atau kembali di depannya (false, z-40 bawaan). */
   const behindNav = (on: boolean) => {
@@ -880,7 +949,9 @@ export default function MiniPlayer({ onOpen, onOpenQueue }: { onOpen: () => void
       }
     }
     if (kbBubble) {
+      // Disc disalin dari posisi tahan (di atas keyboard), baru dock dilepas: disc terbang langsung ke sampul tanpa singgah di nav.
       discFly.current = captureDisc()
+      holdStop.current?.()
       setGrowFrom(side)
       setKbBubble(false)
       setBubbleRise(false)

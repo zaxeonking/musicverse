@@ -691,7 +691,7 @@ File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
 CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
-CHANGES-0.5.54.md| Riwayat perubahan versi 0.5.54 (terbaru).
+CHANGES-0.5.54.3.md| Riwayat perubahan versi 0.5.54.3 (terbaru).
 
 ---
 

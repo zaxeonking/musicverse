@@ -75,8 +75,8 @@ export default function SeekBar({ size = 'md', stacked = false, className = '' }
   useEffect(() => {
     lastPercent.current = percent
   }, [percent])
-  const glide = smooth ? 'transition-[width] duration-300 ease-linear motion-reduce:transition-none' : ''
-  const glideLeft = smooth ? 'transition-[left,opacity] duration-300 ease-linear motion-reduce:transition-none' : 'transition-opacity'
+  // Hanya `transform` yang beranimasi (jalur compositor): tanpa layout ulang tiap frame selama lagu diputar.
+  const glide = smooth ? 'transition-transform duration-300 ease-linear motion-reduce:transition-none' : ''
 
   const commit = () => {
     const target = dragRef.current
@@ -108,18 +108,20 @@ export default function SeekBar({ size = 'md', stacked = false, className = '' }
         <div
           className={`${trackHeight} w-full overflow-hidden rounded-full bg-raised group-has-[:focus-visible]:ring-2 group-has-[:focus-visible]:ring-accent`}
         >
-          <div className={`h-full rounded-full bg-ink group-focus-within:bg-accent group-hover:bg-accent ${glide}`} style={{ width: `${percent}%` }} />
+          {/* Batang penuh yang digeser ke kiri (bukan diubah lebarnya); ujung kirinya terpotong track, ujung kanan tetap membulat. */}
+          <div className={`h-full w-full rounded-full bg-ink group-focus-within:bg-accent group-hover:bg-accent ${glide}`} style={{ transform: `translate3d(${percent - 100}%, 0, 0)` }} />
         </div>
 
         {/* Pegangan terlihat: selalu di pemutar penuh (sentuh), saat hover/fokus di mini player. */}
         {canSeek && (
-          <span
-            aria-hidden="true"
-            style={{ left: `${percent}%` }}
-            className={`pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ${glideLeft} group-focus-within:opacity-100 group-hover:opacity-100 ${
-              size === 'sm' ? 'opacity-0 [@media(hover:none)]:opacity-100' : 'opacity-100'
-            }`}
-          />
+          // Pembungkus selebar track yang digeser lewat transform; pegangan di tepi kirinya ikut bergerak ke posisi yang sama dengan `left: percent%` sebelumnya.
+          <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 left-0 w-full ${glide}`} style={{ transform: `translate3d(${percent}%, 0, 0)` }}>
+            <span
+              className={`absolute left-0 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 ${
+                size === 'sm' ? 'opacity-0 [@media(hover:none)]:opacity-100' : 'opacity-100'
+              }`}
+            />
+          </span>
         )}
 
         {canSeek ? (

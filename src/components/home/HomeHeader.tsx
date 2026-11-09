@@ -8,8 +8,6 @@ import { useAppUpdate } from '../../hooks/useAppUpdate'
 import { useMountTransition } from '../../hooks/useMountTransition'
 import { artistSearch } from '../../utils/artistSearchStore'
 import SleepTimerSheet from '../player/SleepTimerSheet'
-import { LogoMark } from '../ui/Logo'
-import Waveform from '../ui/Waveform'
 import HomeMenuDrawer from './HomeMenuDrawer'
 
 /** Kartu kecil yang muncul di bawah tombol (filter, notifikasi): membesar dari pojok kanan atas, tutup lewat ketuk di luar atau Escape. */
@@ -63,8 +61,8 @@ function MenuRow({ icon: Icon, title, hint, onClick }: { icon: typeof Search; ti
 }
 
 /**
- * Kepala Beranda MusicVerse: avatar berlingkar aksen (membuka laci menu), sapaan kecil di atas nama aplikasi, sleep timer dan
- * notifikasi. Di bawahnya kolom cari berbentuk "gelombang" (sudut tidak sama, batang audio di ujung kanan) dan tombol filter.
+ * Kepala Beranda MusicVerse: avatar polos (membuka laci menu), sapaan kecil di atas nama aplikasi, sleep timer dan
+ * notifikasi. Di bawahnya kolom cari berbentuk kapsul polos dan tombol filter bulat.
  * Kolom cari tetap hanya pintu ke tab Jelajah. Timer membuka lembar sleep timer yang sama dengan pemutar penuh.
  */
 export default function HomeHeader() {
@@ -93,19 +91,14 @@ export default function HomeHeader() {
           onClick={() => setDrawer(true)}
           aria-label="Buka menu"
           aria-haspopup="dialog"
-          className="focus-ring tap-card shrink-0 rounded-full p-[2.5px] [background:conic-gradient(from_210deg,rgb(var(--mv-accent)),rgb(var(--mv-coral)),rgb(var(--mv-accent)))]"
+          className="focus-ring tap-card flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-raised text-ink ring-1 ring-veil/10"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-ink">
-            <UserRound className="h-5 w-5" aria-hidden="true" />
-          </span>
+          <UserRound className="h-5 w-5" aria-hidden="true" />
         </button>
         <div className="mv-in min-w-0 flex-1">
           <p className="truncate text-[0.78rem] leading-none text-ink-muted">{greeting}</p>
-          <h1 id="home-title" className="mt-1 flex items-center gap-1.5 font-display text-[1.45rem] font-extrabold leading-none tracking-[-0.03em] text-ink">
-            <LogoMark className="h-6 w-6" />
-            <span className="truncate">
-              Music<span className="font-medium text-ink-muted">{SITE_NAME.replace(/^Music/, '')}</span>
-            </span>
+          <h1 id="home-title" className="mt-1 truncate font-display text-[1.4rem] font-bold leading-none tracking-[-0.02em] text-ink">
+            {SITE_NAME}
           </h1>
         </div>
         <button
@@ -156,14 +149,10 @@ export default function HomeHeader() {
           state={{ focus: true }}
           data-tour="home-search"
           aria-label="Buka pencarian"
-          className="focus-ring tap-row group flex h-12 min-w-0 flex-1 items-center gap-3 rounded-[1.5rem_0.6rem_1.5rem_0.6rem] bg-raised pl-1.5 pr-4 text-ink-faint ring-1 ring-veil/[0.06] hover:bg-raised-hover"
+          className="focus-ring tap-row group flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full bg-raised pl-4 pr-4 text-ink-faint hover:bg-raised-hover"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[1.1rem_0.45rem_1.1rem_0.45rem] bg-accent text-accent-on">
-            <Search className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />
-          </span>
+          <Search className="h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
           <span className="truncate text-[0.98rem]">Lagu, artis, atau tautan</span>
-          {/* Gelombang diam sebagai penanda "audio" (tanpa animasi: kolom ini hanya pintu ke pencarian). */}
-          <Waveform playing={false} bars={6} className="ml-auto shrink-0 text-coral/80 transition-opacity group-active:opacity-60" />
         </Link>
         <div className="relative shrink-0">
           <button
@@ -174,7 +163,7 @@ export default function HomeHeader() {
             }}
             aria-label="Filter pencarian"
             aria-expanded={filter}
-            className="focus-ring tap-card flex h-12 w-12 items-center justify-center rounded-[0.6rem_1.5rem_0.6rem_1.5rem] bg-raised text-ink ring-1 ring-veil/[0.06] hover:bg-raised-hover"
+            className="focus-ring tap-card flex h-12 w-12 items-center justify-center rounded-full bg-raised text-ink hover:bg-raised-hover"
           >
             <SlidersHorizontal className={`h-5 w-5 transition-transform duration-300 motion-reduce:transition-none ${filter ? 'rotate-90' : ''}`} aria-hidden="true" />
           </button>

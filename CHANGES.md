@@ -1,7 +1,17 @@
 # Riwayat perubahan MusicVerse (arsip)
 
-Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.54.md`.
+Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.54.3.md`.
 Tiap bagian diawali komentar `sumber:` dengan nama berkas aslinya.
+
+<!-- sumber: CHANGES-0.5.54.md -->
+# 0.5.54 (Optimasi performa: kontrol pemutar tidak lagi render ulang tiap detik)
+
+Files: src/context/AudioPlayerContext.tsx, src/hooks/useAudioPlayer.ts, src/components/player/PlayerControls.tsx, package.json (appVersion 0.5.54), CHANGES.md (0.5.53 diarsipkan), CHANGES-0.5.54.md, PROJECT_STRUCTURE.md
+
+1. Render ulang kontrol transport
+   - `TransportControls` (Prev/Play/Next di mini dan full player) sebelumnya membaca seluruh konteks waktu hanya untuk `seekable`, sehingga render ulang sekitar 4 kali per detik saat lagu diputar.
+   - Kini `seekable` punya konteks sendiri (`PlaybackSeekableContext`, nilai boolean) dan hook `useSeekable()`. Komponen hanya render ulang saat nilainya berubah.
+   - Tidak ada perubahan tampilan, animasi, efek, perilaku pemutaran, maupun logika bisnis.
 
 <!-- sumber: CHANGES-0.5.53.md -->
 # 0.5.53 (Beranda ala StreamBeats: banner bergerak, Recently, deretan kurasi, dan animasi)
