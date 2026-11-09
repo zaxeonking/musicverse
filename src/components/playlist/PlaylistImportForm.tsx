@@ -5,6 +5,7 @@ import { readClipboardText } from '../../native/clipboard'
 import { getSearchSuggestions } from '../../plugins/suggestions'
 import { classifyImportInput, validateSpotifyPlaylistUrl } from '../../utils/spotifyUrl'
 import { getArtistSearchState, type SearchMode } from '../../utils/artistSearchStore'
+import { recordSearch } from '../../utils/searchHistory'
 import Chip from '../ui/Chip'
 
 interface PlaylistImportFormProps {
@@ -66,6 +67,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
     setSuggestions([])
     setValue(text)
     setValidationError(null)
+    recordSearch(text)
     await loadPlaylist(text)
   }
 
@@ -80,6 +82,7 @@ export default function PlaylistImportForm({ mode, onModeChange, onArtistSearch 
       )
       return
     }
+    if (input.kind === 'search') recordSearch(input.query)
     if (mode === 'artist') {
       if (input.kind === 'search') {
         // Nama artis: cari daftar artis (tanpa menyentuh playlist/hasil lagu yang sedang tampil).

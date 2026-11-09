@@ -20,6 +20,7 @@ import PlaylistMenuSheet from './PlaylistMenuSheet'
 import { SelectableCard, SelectionBar } from './PlaylistSelection'
 import SavedPlaylistCard from './SavedPlaylistCard'
 import SavedPlaylistMenuSheet from './SavedPlaylistMenuSheet'
+import { searchResults } from '../../utils/searchResultsFlag'
 
 const sortOptions: { id: LibrarySort; label: string }[] = [
   { id: 'recent', label: 'Terbaru' },
@@ -131,11 +132,12 @@ export default function PlaylistsSection() {
     return all.sort((a, b) => rank(a) - rank(b) || within(a, b))
   }, [mine, saved, prefs.sort])
 
-  /** Membuka playlist tersimpan di Beranda. Playlist yang sudah aktif dan playback-nya tidak disentuh. */
+  /** Membuka playlist tersimpan di tab Cari. Playlist yang sudah aktif dan playback-nya tidak disentuh. */
   const handleOpen = useCallback(
     (playlist: SavedPlaylist) => {
       restoreActivePlaylist(toPlaylistDetail(playlist))
-      navigate('/')
+      searchResults.set(true)
+      navigate('/search')
     },
     [restoreActivePlaylist, navigate],
   )
@@ -264,7 +266,7 @@ export default function PlaylistsSection() {
             icon={Library}
             title="Belum ada playlist"
             action={
-              <Link to="/" className="btn-primary">
+              <Link to="/search" className="btn-primary">
                 Muat playlist
               </Link>
             }

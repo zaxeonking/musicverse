@@ -372,3 +372,91 @@ export function albumsFromSongs(songs: readonly PlaylistTrack[]): AlbumHit[] {
     local: true,
   }))
 }
+
+/* ---------- Bahan Beranda: chart dunia dan penentuan artis dari kata kunci ---------- */
+
+interface DeezerSearchTrack extends DeezerTrack {
+  artist?: { id?: number; name?: string; picture_big?: string; picture_medium?: string }
+}
+
+/** Lagu teratas chart Deezer. Dipakai Beranda (banner dan rekomendasi) saat belum ada riwayat dengar. */
+export async function fetchChartTracks(limit = 30, signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const rows = await getList<DeezerTrack>(`${DEEZER}/chart/0/tracks?limit=${limit}`, 'data', signal)
+  return mapDeezerRows(rows)
+}
+
+/** Artis teratas chart Deezer. */
+export async function fetchChartArtists(limit = 20, signal?: AbortSignal): Promise<ArtistHit[]> {
+  const rows = await getList<DeezerArtist>(`${DEEZER}/chart/0/artists?limit=${limit}`, 'data', signal)
+  const out: ArtistHit[] = []
+  for (const row of rows) {
+    if (!row.id || !row.name) continue
+    out.push({ id: String(row.id), name: row.name, picture: pictureOf(row), fans: row.nb_fan ?? 0 })
+  }
+  return out
+}
+
+/**
+ * Artis dari hasil teratas pencarian bebas (judul lagu ATAU nama artis). Dipakai Beranda untuk mengubah
+ * kata kunci yang pernah dicari menjadi "benih" rekomendasi. Null bila tidak ada hasil.
+ */
+export async function searchTrackArtist(query: string, signal?: AbortSignal): Promise<ArtistHit | null> {
+  const term = query.trim()
+  if (!term) return null
+  const rows = await getList<DeezerSearchTrack>(`${DEEZER}/search?q=${encodeURIComponent(term)}&limit=1`, 'data', signal)
+  const artist = rows[0]?.artist
+  if (!artist?.id || !artist.name) return null
+  return { id: String(artist.id), name: artist.name, picture: pictureOf(artist), fans: 0 }
+}
+
+/* ---------- Bahan tab Cari (kosong): genre dan suasana ---------- */
+
+export interface GenreHit {
+  id: string
+  name: string
+  picture: string
+}
+
+/** Daftar genre Deezer (tanpa "Semua"). */
+export async function fetchGenres(signal?: AbortSignal): Promise<GenreHit[]> {
+  const rows = await getList<{ id?: number; name?: string; picture_medium?: string }>(`${DEEZER}/genre`, 'data', signal)
+  const out: GenreHit[] = []
+  for (const row of rows) {
+    if (!row.id || !row.name) continue
+    out.push({ id: String(row.id), name: row.name, picture: row.picture_medium ?? '' })
+  }
+  return out
+}
+
+/** Lagu teratas satu genre. */
+export async function fetchGenreTracks(genreId: string, limit = 50, signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const rows = await getList<DeezerTrack>(`${DEEZER}/chart/${encodeURIComponent(genreId)}/tracks?limit=${limit}`, 'data', signal)
+  return mapDeezerRows(rows)
+}
+
+/** Artis teratas satu genre. */
+export async function fetchGenreArtists(genreId: string, limit = 12, signal?: AbortSignal): Promise<ArtistHit[]> {
+  const rows = await getList<DeezerArtist>(`${DEEZER}/chart/${encodeURIComponent(genreId)}/artists?limit=${limit}`, 'data', signal)
+  const out: ArtistHit[] = []
+  for (const row of rows) {
+    if (!row.id || !row.name) continue
+    out.push({ id: String(row.id), name: row.name, picture: pictureOf(row), fans: row.nb_fan ?? 0 })
+  }
+  return out
+}
+
+/**
+ * Lagu untuk satu suasana: isi playlist Deezer teratas dari kata kunci (playlist kurasi lebih pas daripada mencocokkan judul).
+ * Bila tidak ada playlist yang cukup besar, jatuh ke pencarian lagu biasa.
+ */
+export async function fetchMoodTracks(query: string, limit = 50, signal?: AbortSignal): Promise<PlaylistTrack[]> {
+  const q = encodeURIComponent(query)
+  const lists = await getList<{ id?: number }>(`${DEEZER}/search/playlist?q=${q}&limit=3`, 'data', signal)
+  for (const list of lists) {
+    if (!list.id) continue
+    const rows = await getList<DeezerTrack>(`${DEEZER}/playlist/${list.id}/tracks?limit=${limit}`, 'data', signal)
+    const tracks = mapDeezerRows(rows)
+    if (tracks.length >= 10) return tracks
+  }
+  return mapDeezerRows(await getList<DeezerTrack>(`${DEEZER}/search?q=${q}&limit=${limit}`, 'data', signal))
+}

@@ -61,14 +61,14 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: 'import',
-    route: '/',
+    route: '/search',
     target: 'import-input',
-    title: 'Mulai dari sini',
-    body: 'Tempel tautan playlist Spotify, atau ketik judul lagu atau nama artis lalu tekan Enter.',
+    title: 'Mulai dari tab Cari',
+    body: 'Tempel tautan playlist Spotify, atau ketik judul lagu atau nama artis lalu tekan Enter. Kolom di Beranda mengantarmu ke sini.',
   },
   {
     id: 'search-mode',
-    route: '/',
+    route: '/search',
     target: 'search-mode',
     title: 'Cari lagu atau artis',
     body: 'Pilih Lagu untuk mencari judul atau menempel tautan. Pilih Artis untuk melihat artis dan lagu-lagunya. Hasil artis muncul sambil kamu mengetik.',
@@ -435,6 +435,24 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         title: 'Baru: sorotan per kata di lirik pemutar penuh',
         body: 'Bila lirik punya waktu per kata, lirik di pemutar penuh terisi halus kata demi kata. Kalau tidak pas atau tidak tersedia, baris yang dinyanyikan disorot utuh per kalimat.',
         missing: 'Putar lagu, buka pemutar penuh, lalu ketuk ikon mik. Lirik dengan waktu per kata disorot kata demi kata; sisanya per kalimat.',
+      },
+    ],
+  },
+  {
+    id: '0.5.52',
+    steps: [
+      {
+        id: 'wn-home-feed',
+        route: '/',
+        title: 'Baru: Beranda ala Spotify',
+        body: 'Beranda kini punya banner acak, playlist dan artis yang sering kamu dengar, serta rekomendasi dari lagu yang diputar dan kata kunci yang kamu cari. Ketuk kolom cari di Beranda untuk langsung ke tab Cari.',
+        missing: 'Putar beberapa lagu dan cari beberapa judul atau artis; deretan Beranda terisi dari situ. Rekomendasi online butuh APK dan koneksi.',
+      },
+      {
+        id: 'wn-search-browse',
+        route: '/search',
+        title: 'Baru: jelajah di tab Cari',
+        body: 'Semua pencarian dan hasilnya kini ada di tab Cari. Saat kosong, ada Kejutkan aku, pintasan isi perangkat, suasana, dan genre. Semua lagu pindah ke kotak Semua lagu.',
       },
     ],
   },

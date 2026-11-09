@@ -8,7 +8,7 @@ const MAX_SHOWN = 3
 
 /**
  * Blok "Artis" di atas hasil lagu pada tab Cari: nama artis tampil sebagai baris artis (foto bulat), bukan sebagai lagu.
- * Ketuk membuka halaman artis di Beranda. Pencarian online (hanya jalan di APK); kalau gagal atau kosong, blok ini tidak tampil.
+ * Ketuk membuka halaman artis di tab Cari. Pencarian online (hanya jalan di APK); kalau gagal atau kosong, blok ini tidak tampil.
  */
 export default function ArtistMatches({ query }: { query: string }) {
   const navigate = useNavigate()
@@ -45,7 +45,7 @@ export default function ArtistMatches({ query }: { query: string }) {
       onOpen={(artist) => {
         artistSearch.setMode('artist')
         artistSearch.open(artist, true)
-        navigate('/')
+        navigate('/search')
       }}
     />
   )

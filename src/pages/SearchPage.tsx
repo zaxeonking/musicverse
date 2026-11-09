@@ -1,54 +1,67 @@
-import { Music2, Search, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import ArtistMatches from '../components/playlist/ArtistMatches'
-import TrackList from '../components/playlist/TrackList'
-import EmptyState from '../components/ui/EmptyState'
-import SectionHeader from '../components/ui/SectionHeader'
-import { useLibrary } from '../context/LibraryContext'
+import { useEffect, useRef } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { consumeFeedReturn } from '../components/home/homeNav'
+import AllSongsView from '../components/search/AllSongsView'
+import BrowseDetail from '../components/search/BrowseDetail'
+import SearchBrowse from '../components/search/SearchBrowse'
+import ArtistSearchPanel from '../components/playlist/ArtistSearchPanel'
+import PlaylistImportForm from '../components/playlist/PlaylistImportForm'
+import PlaylistView from '../components/playlist/PlaylistView'
 import { usePlaylist } from '../context/PlaylistContext'
-import { useAudioPlayer } from '../hooks/useAudioPlayer'
-import { collectAllSongs } from '../utils/allSongs'
-import { getRowActivity } from '../utils/playerStatus'
+import { artistSearch, useArtistSearch } from '../utils/artistSearchStore'
+import { searchResults } from '../utils/searchResultsFlag'
 
 /**
- * Halaman Cari: satu daftar "All Songs" dari semua lagu yang benar-benar ada di perangkat
- * (playlist aktif + Koleksi + riwayat putar). Kolom pencarian menyaring daftar itu berdasarkan
- * judul dan nama artis; kolom kosong = semua lagu tampil lagi. Tidak ada data contoh.
+ * Halaman Cari. Kolom di atas menampung semua pencarian (judul lagu, nama artis, tautan lagu/playlist Spotify). Di bawahnya:
+ *  - ada hasil (playlist/lagu/artis yang dibuka): hasilnya;
+ *  - kosong: jelajah ala Spotify (Kejutkan aku, pintasan perangkat, suasana, genre), atau isi satu kotak jelajah
+ *    lewat alamat `?view=all|mood|genre`.
  */
 export default function SearchPage() {
-  const [query, setQuery] = useState('')
-  const { playlist, status } = usePlaylist()
-  const { saved, recent } = useLibrary()
-  const player = useAudioPlayer()
+  const [params] = useSearchParams()
+  const location = useLocation()
+  const { mode, phase } = useArtistSearch()
+  const { status, fromCache } = usePlaylist()
 
-  const songs = useMemo(
-    () =>
-      collectAllSongs([
-        playlist?.tracks ?? [],
-        ...saved.map((item) => item.tracks),
-        recent.map((item) => item.track),
-      ]),
-    [playlist, saved, recent],
-  )
+  // Hasil "dibuka" = pengguna sendiri yang memintanya. Playlist yang cuma dipulihkan saat aplikasi dibuka tidak menutup jelajah.
+  const fresh = status === 'loading' || status === 'error' || (status === 'success' && !fromCache)
+  useEffect(() => {
+    if (fresh) searchResults.set(true)
+    else if (status === 'idle') searchResults.set(false)
+  }, [fresh, status])
+  const artistActive = mode === 'artist'
+  const playlistActive = mode !== 'artist' && status !== 'idle' && (fresh || searchResults.isOpen())
+  const showResults = artistActive || playlistActive
 
-  const emptyState =
-    status === 'loading' ? (
-      <EmptyState
-        icon={Music2}
-        title="Memuat lagu…"
-      />
-    ) : (
-      <EmptyState
-        icon={Music2}
-        title="Belum ada lagu"
-        action={
-          <Link to="/" className="btn-primary">
-            Ke Beranda
-          </Link>
-        }
-      />
-    )
+  // Kembali dari halaman artis yang dibuka lewat Beranda/jelajah: pulihkan mode Lagu supaya jelajah tampil lagi.
+  useEffect(() => {
+    if (mode === 'artist' && phase === 'idle' && consumeFeedReturn()) artistSearch.setMode('track')
+  }, [mode, phase])
+
+  // Datang dari kolom cari di Beranda: langsung fokus ke kolom, sekali saja.
+  const focusDone = useRef(false)
+  const wantsFocus = (location.state as { focus?: boolean } | null)?.focus === true
+  useEffect(() => {
+    if (!wantsFocus || focusDone.current) return
+    focusDone.current = true
+    const timer = window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-tour="import-input"]')?.focus(), 80)
+    return () => window.clearTimeout(timer)
+  }, [wantsFocus])
+
+  const view = params.get('view')
+  const id = params.get('id')
+
+  let body
+  if (showResults) {
+    // Ganti kategori (Lagu / Artis): isi baru memudar masuk, bukan muncul mendadak.
+    body = <div key={mode} className="mv-swap">{mode === 'artist' ? <ArtistSearchPanel /> : <PlaylistView />}</div>
+  } else if (view === 'all') {
+    body = <AllSongsView />
+  } else if ((view === 'mood' || view === 'genre') && id) {
+    body = <BrowseDetail key={`${view}-${id}`} view={view} id={id} name={params.get('name') ?? undefined} />
+  } else {
+    body = <SearchBrowse />
+  }
 
   return (
     <div className="space-y-6">
@@ -61,56 +74,14 @@ export default function SearchPage() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 -top-6 -z-10 bottom-[-14px] backdrop-blur-md [-webkit-mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)] [mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)]"
         />
-        <label htmlFor="search-input" className="sr-only">
-          Cari lagu berdasarkan judul atau artis
-        </label>
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted"
-            aria-hidden="true"
-          />
-          <input
-            id="search-input"
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Judul lagu atau artis"
-            enterKeyHint="search"
-            autoComplete="off"
-            className="h-12 w-full rounded-full border border-veil/10 bg-raised/60 bg-[linear-gradient(to_bottom,rgb(var(--mv-accent,29_185_84)/0.14),transparent_85%)] shadow-[inset_0_1px_0_rgb(var(--mv-veil,255_255_255)/0.1)] backdrop-blur-md pl-12 pr-12 text-base text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Hapus pencarian"
-              className="mv-pop icon-btn absolute right-0.5 top-1/2 -translate-y-1/2"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-          )}
-        </div>
+        <PlaylistImportForm
+          mode={mode}
+          onModeChange={artistSearch.setMode}
+          onArtistSearch={(q) => (q ? artistSearch.search(q) : artistSearch.clear())}
+        />
       </div>
 
-      <ArtistMatches query={query} />
-
-      <section aria-label="All Songs">
-        <SectionHeader
-          title="All Songs"
-          subtitle={songs.length > 0 ? `${songs.length} lagu` : undefined}
-        />
-        <TrackList
-          tracks={songs}
-          query={query}
-          onQueryChange={setQuery}
-          includeAlbum={false}
-          emptyState={emptyState}
-          searchable
-          onPlay={player.selectTrack}
-          playingTrack={player.currentTrack}
-          playbackActivity={getRowActivity(player.status)}
-        />
-      </section>
+      {body}
     </div>
   )
 }

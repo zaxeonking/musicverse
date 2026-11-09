@@ -75,7 +75,7 @@ export default function LibraryPage() {
           <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Playlist</h1>
         </div>
         {saved.length > 0 && (
-          <Link to="/" className={primaryButton}>
+          <Link to="/search" className={primaryButton}>
             Muat playlist
           </Link>
         )}

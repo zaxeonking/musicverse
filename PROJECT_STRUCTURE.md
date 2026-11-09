@@ -1,7 +1,7 @@
 MusicVerse — Project Structure
 
 Project: MusicVerse
-Version: v0.5.51.85
+Version: v0.5.52
 Architecture: React + TypeScript + Vite + Tailwind CSS + Capacitor
 Platform: Web / Android
 
@@ -85,6 +85,26 @@ OverlayPortal.tsx| Akar semua menu bawah (sheet), dirender di <body> pada lapisa
 PlayingBars.tsx| Indikator equalizer tiga batang untuk lagu yang sedang diputar.
 Presence.tsx| Menahan komponen tetap terpasang selama animasi keluar berjalan.
 RoundAction.tsx| Tombol aksi bulat berikon (label hanya untuk pembaca layar).
+
+components/search/
+
+Berisi komponen tab Cari saat kosong (jelajah).
+
+File| Fungsi
+BrowseTile.tsx| Kotak jelajah berwarna dengan hiasan miring di pojok (Link atau tombol).
+SearchBrowse.tsx| Isi tab Cari kosong: Kejutkan aku, Di perangkatmu, Suasana, Genre.
+BrowseDetail.tsx| Isi satu suasana atau genre: Putar semua, Acak, artis teratas, daftar lagu.
+AllSongsView.tsx| Kotak "Semua lagu": semua lagu di perangkat dengan kolom saring sendiri (dulu isi halaman Cari).
+
+components/home/
+
+Berisi komponen Beranda ala Spotify (banner acak dan deretan rekomendasi di bawah kolom cari).
+
+File| Fungsi
+HomeBanner.tsx| Banner bergulir di atas Beranda: artis dan lagu acak yang mungkin disukai; tanpa data jadi ajakan membuka tab Cari.
+HomeSections.tsx| Deretan Beranda: playlist sering didengar, artis favorit, rekomendasi, dan Dengar lagi.
+HomeCards.tsx| Kartu dan pembungkus deretan: HomeRow, TrackCard, PlaylistTile, ArtistBubble.
+homeNav.ts| Membuka halaman artis dari Beranda/jelajah dan mengingat asalnya agar jelajah tampil lagi saat kembali.
 
 components/music/
 
@@ -185,8 +205,8 @@ LyricProviderSettings.tsx| Pengaturan sumber lirik dan tampilan terjemahan/roman
 Folder yang menyimpan halaman utama aplikasi.
 
 File| Fungsi
-HomePage.tsx| Halaman utama MusicVerse.
-SearchPage.tsx| Halaman pencarian musik.
+HomePage.tsx| Halaman utama MusicVerse: sapaan, banner, tombol cari (mengantar ke tab Cari), lalu deretan rekomendasi.
+SearchPage.tsx| Halaman Cari: kolom cari (judul, artis, tautan Spotify) + hasilnya; saat kosong jelajah (Kejutkan aku, pintasan perangkat, suasana, genre) atau satu kotak jelajah lewat ?view=all|mood|genre.
 BrowsePage.tsx| Halaman penjelajahan artis dan album.
 LibraryPage.tsx| Halaman koleksi musik pengguna.
 MyPlaylistPage.tsx| Halaman playlist pribadi.
@@ -229,6 +249,7 @@ useAudioPlayer.ts| Mengakses fungsi dan state pemutar musik.
 useAudioPlayerController.ts| Mengatur logika kontrol pemutaran audio.
 useLongPress.ts| Mendeteksi interaksi tekan lama.
 greeting.ts| Menghasilkan sapaan berdasarkan waktu.
+useHomeFeed.ts| Data Beranda: playlist/artis favorit, rekomendasi, Dengar lagi, dan item banner (dari riwayat dengar dan cari di perangkat).
 usePlaylistPrefs.ts| Mengelola preferensi playlist.
 useLyrics.ts| Mengambil dan mengelola data lirik.
 useMiniPlayerMode.ts| Mengatur mode mini player.
@@ -263,7 +284,8 @@ audioEngine.ts| Mesin utama untuk pemutaran audio.
 lyricsApi.ts| Mengelola komunikasi dengan API lirik.
 spotifyApi.ts| Mengelola integrasi API Spotify.
 equalizer.ts| Mengatur pemrosesan dan pengaturan equalizer audio.
-artistApi.ts| Pencarian artis dari luar (Deezer + iTunes): profil, lagu, diskografi.
+artistApi.ts| Pencarian artis dari luar (Deezer + iTunes): profil, lagu, diskografi, chart dunia, artis dari kata kunci.
+homeFeed.ts| Pemuat data Beranda (chart, radio artis, foto artis) dengan cache berumur di perangkat; galat jaringan tidak dilempar.
 coverOrigin.ts| Asal thumbnail sampul untuk transisi sampul terbang ke pemutar penuh.
 playbackSpeed.ts| Kecepatan putar tersimpan (nada tetap).
 playerSheet.ts| Mesin gerak tunggal mini player <-> pemutar penuh.
@@ -356,6 +378,8 @@ safeStorage.ts| Mengelola penyimpanan data secara aman.
 lyricsTrack.ts| Mencocokkan data lirik dengan lagu.
 localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
 artistSearchStore.ts| State pencarian artis di Beranda (mode, fase, urutan lagu).
+searchHistory.ts| Riwayat kata kunci yang dicari di tab Cari (maks. 20), bahan rekomendasi Beranda.
+searchResultsFlag.ts| Penanda (di memori) bahwa hasil di tab Cari sedang dibuka pengguna, supaya playlist hasil pemulihan tidak menutup jelajah.
 deezerMatch.ts| Pencocokan lagu dengan hasil pencarian Deezer.
 lyricDisplayPrefs.ts| Penyimpanan pengaturan tampilan terjemahan/romanisasi lirik.
 lyricSubtext.ts| Teks tambahan di bawah baris lirik setelah pengaturan diterapkan.
@@ -388,6 +412,7 @@ Menyimpan konfigurasi internal aplikasi.
 
 File| Fungsi
 navigation.ts| Mengatur konfigurasi navigasi.
+moods.ts| Daftar suasana tab Cari (judul, kata kunci playlist Deezer, warna dan bentuk kotak).
 apk.ts| Menyimpan konfigurasi terkait APK.
 site.ts| Info situs dan tanggal terakhir dokumen hukum diubah.
 
@@ -657,7 +682,7 @@ File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
 CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
-CHANGES-0.5.51.85.md| Riwayat perubahan versi 0.5.51.85 (terbaru).
+CHANGES-0.5.52.md| Riwayat perubahan versi 0.5.52 (terbaru).
 
 ---
 
@@ -823,7 +848,7 @@ Dokumentasi ini harus selalu diperbarui ketika struktur project mengalami peruba
   
 End of Project Structure Documentation
 Project: MusicVerse
-Reference Version: v0.5.51.85
+Reference Version: v0.5.52
 Document: PROJECT_STRUCTURE.md
 ## Lirik per kata (0.5.54 – 0.5.56)
 - `src/utils/`: `lrc.ts` (model + eLRC), `ttml.ts`, `lyricsPlus.ts`, `wordSync.ts`, `lyricProviderPrefs.ts`
