@@ -57,8 +57,17 @@ export default function SearchPage() {
     body = <div key={mode} className="mv-swap">{mode === 'artist' ? <ArtistSearchPanel /> : <PlaylistView />}</div>
   } else if (view === 'all') {
     body = <AllSongsView />
-  } else if ((view === 'mood' || view === 'genre') && id) {
-    body = <BrowseDetail key={`${view}-${id}`} view={view} id={id} name={params.get('name') ?? undefined} />
+  } else if ((view === 'mood' || view === 'genre' || view === 'playlist' || view === 'album') && id) {
+    body = (
+      <BrowseDetail
+        key={`${view}-${id}`}
+        view={view}
+        id={id}
+        name={params.get('name') ?? undefined}
+        artist={params.get('artist') ?? undefined}
+        cover={params.get('cover') ?? undefined}
+      />
+    )
   } else {
     body = <SearchBrowse />
   }
@@ -67,19 +76,12 @@ export default function SearchPage() {
     <div className="space-y-6">
       <h1 className="font-display text-2xl font-extrabold tracking-tight sm:text-4xl">Cari</h1>
 
-      {/* Tanpa latar pekat: cahaya latar (mv-glow di AppShell) tetap menyambung di belakang kolom cari. Lapisan blur tanpa warna, memudar di
-          atas dan bawah (tanpa tepi keras), hanya menjaga daftar yang tergulir tidak menabrak kolom cari. */}
-      <div className="sticky top-0 z-10 -mx-4 px-4 py-2 lg:-mx-8 lg:px-8">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 -top-6 -z-10 bottom-[-14px] backdrop-blur-md [-webkit-mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)] [mask-image:linear-gradient(to_bottom,transparent,black_35%,black_65%,transparent)]"
-        />
-        <PlaylistImportForm
-          mode={mode}
-          onModeChange={artistSearch.setMode}
-          onArtistSearch={(q) => (q ? artistSearch.search(q) : artistSearch.clear())}
-        />
-      </div>
+      {/* Kolom cari diam di atas halaman (tidak ikut tergulir): isinya tinggi (kolom, tombol, chip) dan akan menutupi daftar bila sticky. */}
+      <PlaylistImportForm
+        mode={mode}
+        onModeChange={artistSearch.setMode}
+        onArtistSearch={(q) => (q ? artistSearch.search(q) : artistSearch.clear())}
+      />
 
       {body}
     </div>

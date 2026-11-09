@@ -378,8 +378,93 @@ html.theme-anim *::after {
     transition-duration: 90ms;
   }
 
+  /* ---------- Banner Beranda ---------- */
+  /* Gambar mengendap dari sedikit lebih besar saat slide aktif (efek zoom pelan). */
+  .mv-banner-img {
+    transform: scale(1.14);
+    transition: transform 7s cubic-bezier(0.2, 0.6, 0.2, 1);
+  }
+  .mv-banner-slide[data-active='true'] .mv-banner-img {
+    transform: none;
+  }
+  /* Penanda, sampul, dan teks naik bergantian saat slide jadi aktif; slide lain menunggu dalam keadaan tersembunyi. */
+  .mv-banner-chip {
+    opacity: 0;
+    transform: translate3d(-12px, 0, 0);
+    transition:
+      opacity 420ms var(--ease) 60ms,
+      transform 560ms var(--ease-spring) 60ms;
+  }
+  .mv-banner-cover {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.88) rotate(-4deg);
+    transition:
+      opacity 480ms var(--ease) 120ms,
+      transform 700ms var(--ease-spring) 120ms;
+  }
+  .mv-banner-text > * {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+    transition:
+      opacity 480ms var(--ease),
+      transform 640ms var(--ease-spring);
+  }
+  .mv-banner-text > :nth-child(1) { transition-delay: 90ms; }
+  .mv-banner-text > :nth-child(2) { transition-delay: 170ms; }
+  .mv-banner-text > :nth-child(3) { transition-delay: 250ms; }
+  .mv-banner-slide[data-active='true'] .mv-banner-chip,
+  .mv-banner-slide[data-active='true'] .mv-banner-cover,
+  .mv-banner-slide[data-active='true'] .mv-banner-text > * {
+    opacity: 1;
+    transform: none;
+  }
+  /* Titik penanda aktif terisi sebagai hitungan mundur ke slide berikutnya. */
+  .mv-dot-fill {
+    animation: mv-dot-fill linear forwards;
+  }
+  /* Bulatan cahaya di kartu ajakan melayang pelan. */
+  .mv-float {
+    animation: mv-float 7s ease-in-out infinite;
+  }
+  /* Lonceng bergoyang sekali saat ada pembaruan. */
+  .mv-ring {
+    transform-origin: 50% 10%;
+    animation: mv-ring 900ms var(--ease) 600ms 2;
+  }
+
 }
 
+@keyframes mv-dot-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mv-float {
+  50% {
+    transform: translate3d(0, 12px, 0) scale(1.08);
+  }
+}
+@keyframes mv-ring {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(14deg);
+  }
+  40% {
+    transform: rotate(-12deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  80% {
+    transform: rotate(-5deg);
+  }
+}
 @keyframes mv-swap {
   from {
     opacity: 0;

@@ -36,10 +36,10 @@ export default function PlayingBars({ playing, className = '' }: { playing: bool
  * `absolute inset-0` di dalam pembungkus `relative`: tidak menambah ukuran sehingga baris tidak bergeser. Hanya tampil saat
  * lagunya aktif (playing/paused); batang bergerak saat playing dan diam saat jeda.
  */
-export function CoverPlayingBadge({ activity }: { activity: string }) {
+export function CoverPlayingBadge({ activity, className = 'rounded-md' }: { activity: string; className?: string }) {
   if (activity !== 'playing' && activity !== 'paused') return null
   return (
-    <span className="mv-in pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-black/45 text-white" aria-hidden="true">
+    <span className={`mv-in pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-white ${className}`} aria-hidden="true">
       <PlayingBars playing={activity === 'playing'} />
     </span>
   )

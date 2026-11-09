@@ -5,14 +5,20 @@ import { cachedArtistSearch } from '../utils/artistSearchStore'
 import {
   fetchArtistRadio,
   fetchChartArtists,
+  fetchChartPlaylists,
   fetchChartTracks,
   fetchGenreArtists,
   fetchGenres,
   fetchGenreTracks,
   fetchMoodTracks,
+  fetchNewReleases,
+  fetchPlaylistDetail,
+  searchPlaylists,
   searchTrackArtist,
   type ArtistHit,
   type GenreHit,
+  type NewAlbumHit,
+  type PlaylistHit,
 } from './artistApi'
 
 /**
@@ -99,4 +105,54 @@ export function getMoodTracks(query: string): Promise<PlaylistTrack[] | null> {
     if (tracks.length === 0) throw new Error('empty')
     return tracks
   })
+}
+
+/* ---------- Beranda ala StreamBeats ---------- */
+
+export function getChartPlaylists(): Promise<PlaylistHit[] | null> {
+  return cached('mv:home:chart-playlists:v1', 6 * HOUR, () => fetchChartPlaylists(14))
+}
+
+export function getNewReleases(): Promise<NewAlbumHit[] | null> {
+  return cached('mv:home:new-releases:v1', 6 * HOUR, () => fetchNewReleases(16))
+}
+
+/** Gabungan playlist dari beberapa kata kunci (satu permintaan per kata kunci, hasilnya disimpan per deretan). */
+export function getShelfPlaylists(shelfId: string, queries: readonly string[], perQuery: number): Promise<PlaylistHit[] | null> {
+  return cached(`mv:home:shelf:${shelfId}:v1`, 12 * HOUR, async () => {
+    const seen = new Set<string>()
+    const out: PlaylistHit[] = []
+    for (const query of queries) {
+      try {
+        for (const hit of await searchPlaylists(query, perQuery)) {
+          if (seen.has(hit.id) || !hit.cover) continue
+          seen.add(hit.id)
+          out.push(hit)
+        }
+      } catch {
+        /* satu kata kunci gagal: lainnya tetap dipakai */
+      }
+    }
+    if (out.length === 0) throw new Error('empty')
+    return out
+  })
+}
+
+/** Deskripsi + lagu satu playlist (dipakai banner dan halaman detail). */
+export function getPlaylistDetail(playlistId: string): Promise<{ playlist: PlaylistHit; tracks: PlaylistTrack[] } | null> {
+  return cached(`mv:home:playlist:${playlistId}`, 12 * HOUR, async () => {
+    const found = await fetchPlaylistDetail(playlistId)
+    if (!found || found.tracks.length === 0) throw new Error('empty')
+    return found
+  })
+}
+
+/** Hanya deskripsi playlist (kecil). Banner memakai ini supaya daftar lagu tidak ikut menumpuk di penyimpanan; lagu baru dimuat saat diputar. */
+export async function getPlaylistDescription(playlistId: string): Promise<string> {
+  const out = await cached(`mv:home:playlist-desc:${playlistId}`, 3 * DAY, async () => {
+    const found = await fetchPlaylistDetail(playlistId)
+    if (!found) throw new Error('empty')
+    return { description: found.playlist.description }
+  })
+  return out?.description ?? ''
 }

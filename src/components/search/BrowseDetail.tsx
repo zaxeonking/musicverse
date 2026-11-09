@@ -1,10 +1,10 @@
 import { ArrowLeft, CloudOff, Play, Shuffle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { MOODS } from '../../config/moods'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import type { ArtistHit } from '../../services/artistApi'
-import { getGenreArtists, getGenreTracks, getMoodTracks } from '../../services/homeFeed'
+import { fetchAlbumSongs, type ArtistHit } from '../../services/artistApi'
+import { getGenreArtists, getGenreTracks, getMoodTracks, getPlaylistDetail } from '../../services/homeFeed'
 import type { PlaylistTrack } from '../../types/spotify'
 import { getRowActivity } from '../../utils/playerStatus'
 import { ArtistBubble, HomeRow } from '../home/HomeCards'
@@ -15,15 +15,21 @@ import EmptyState from '../ui/EmptyState'
 type Phase = 'loading' | 'ready' | 'error'
 
 interface BrowseDetailProps {
-  view: 'genre' | 'mood'
+  view: 'genre' | 'mood' | 'playlist' | 'album'
   id: string
-  /** Nama genre (dari alamat). Suasana memakai judul dari config. */
+  /** Nama genre / playlist / album (dari alamat). Suasana memakai judul dari config. */
   name?: string
+  /** Hanya album: nama artis dan sampul (dari alamat). */
+  artist?: string
+  cover?: string
 }
 
 /** Isi satu suasana atau genre: lagu teratas (dan artis teratas untuk genre), dengan Putar semua dan Acak. */
-export default function BrowseDetail({ view, id, name }: BrowseDetailProps) {
+export default function BrowseDetail({ view, id, name, artist, cover }: BrowseDetailProps) {
   const player = useAudioPlayer()
+  const navigate = useNavigate()
+  // Playlist/album dibuka dari Beranda: kembali ke tempat asal (Beranda), bukan ke jelajah.
+  const fromHome = view === 'playlist' || view === 'album'
   const mood = view === 'mood' ? MOODS.find((m) => m.id === id) : undefined
   const title = mood?.title ?? name ?? 'Jelajah'
   const [phase, setPhase] = useState<Phase>('loading')
@@ -38,7 +44,10 @@ export default function BrowseDetail({ view, id, name }: BrowseDetailProps) {
     let off = false
     setPhase('loading')
     void (async () => {
-      const found = mood ? await getMoodTracks(mood.query) : await getGenreTracks(id)
+      let found: PlaylistTrack[] | null
+      if (view === 'playlist') found = (await getPlaylistDetail(id))?.tracks ?? null
+      else if (view === 'album') found = await fetchAlbumSongs({ id, title: name ?? '', cover: cover ?? '', year: '', kind: 'Album' }, artist ?? '').catch(() => null)
+      else found = mood ? await getMoodTracks(mood.query) : await getGenreTracks(id)
       const top = view === 'genre' ? await getGenreArtists(id) : null
       if (off) return
       if (!found || found.length === 0) {
@@ -52,17 +61,29 @@ export default function BrowseDetail({ view, id, name }: BrowseDetailProps) {
     return () => {
       off = true
     }
-  }, [view, id, mood])
+  }, [view, id, mood, name, artist, cover])
 
   return (
     <div className="space-y-5">
-      <Link to="/search" className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Jelajah
-      </Link>
+      {fromHome ? (
+        <button type="button" onClick={() => navigate(-1)} className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Kembali
+        </button>
+      ) : (
+        <Link to="/search" className="back-glass focus-ring inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-ink">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Jelajah
+        </Link>
+      )}
       <header>
         <h2 className="font-display text-3xl font-extrabold tracking-tight text-ink">{title}</h2>
-        {phase === 'ready' && <p className="mt-1 text-sm text-ink-muted">{tracks.length} lagu</p>}
+        {phase === 'ready' && (
+          <p className="mt-1 text-sm text-ink-muted">
+            {view === 'album' && artist ? `${artist} · ` : ''}
+            {tracks.length} lagu
+          </p>
+        )}
       </header>
 
       {phase === 'loading' && (
@@ -103,8 +124,8 @@ export default function BrowseDetail({ view, id, name }: BrowseDetailProps) {
 
           {artists.length > 0 && (
             <HomeRow title="Artis teratas">
-              {artists.map((artist) => (
-                <ArtistBubble key={artist.id} name={artist.name} picture={artist.picture} onOpen={() => openArtistFromFeed(artist)} />
+              {artists.map((hit) => (
+                <ArtistBubble key={hit.id} name={hit.name} picture={hit.picture} onOpen={() => openArtistFromFeed(hit)} />
               ))}
             </HomeRow>
           )}

@@ -26,3 +26,14 @@ export function consumeFeedReturn(): boolean {
   fromFeed = false
   return was
 }
+
+/** Alamat detail playlist Deezer (isi lagunya tampil di tab Cari, seperti suasana dan genre). */
+export function playlistPath(id: string, title: string): string {
+  return `/search?view=playlist&id=${encodeURIComponent(id)}&name=${encodeURIComponent(title)}`
+}
+
+/** Alamat detail album; judul, artis, dan sampul ikut di alamat supaya halaman tidak perlu memuat ulang infonya. */
+export function albumPath(album: { id: string; title: string; artist: string; cover: string }): string {
+  const q = new URLSearchParams({ view: 'album', id: album.id, name: album.title, artist: album.artist, cover: album.cover })
+  return `/search?${q.toString()}`
+}

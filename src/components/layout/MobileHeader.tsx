@@ -1,5 +1,5 @@
 import { Settings } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { usePlayerUiActions } from '../../context/PlayerUiContext'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
 import { isNativeApp } from '../../native/platform'
@@ -10,6 +10,10 @@ export default function MobileHeader() {
   const { status, currentTrack } = useAudioPlayer()
   const { openQueue } = usePlayerUiActions()
   const active = status !== 'idle' && currentTrack !== null
+  const { pathname } = useLocation()
+
+  // Beranda punya kepala sendiri (menu, sapaan, timer, notifikasi), jadi kepala umum tidak ditumpuk di atasnya.
+  if (pathname === '/') return <div aria-hidden="true" className="h-[var(--sat)] shrink-0 lg:hidden" />
 
   return (
     // Tinggi dihitung TERMASUK safe area atas, supaya logo tidak terjepit di perangkat berponi.

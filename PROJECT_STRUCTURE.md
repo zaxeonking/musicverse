@@ -84,6 +84,7 @@ SectionHeader.tsx| Komponen judul bagian atau section.
 OverlayPortal.tsx| Akar semua menu bawah (sheet), dirender di <body> pada lapisan paling atas.
 PlayingBars.tsx| Indikator equalizer tiga batang untuk lagu yang sedang diputar.
 Presence.tsx| Menahan komponen tetap terpasang selama animasi keluar berjalan.
+Reveal.tsx| Isi memudar masuk saat pertama tergulir ke layar.
 RoundAction.tsx| Tombol aksi bulat berikon (label hanya untuk pembaca layar).
 
 components/search/
@@ -93,17 +94,21 @@ Berisi komponen tab Cari saat kosong (jelajah).
 File| Fungsi
 BrowseTile.tsx| Kotak jelajah berwarna dengan hiasan miring di pojok (Link atau tombol).
 SearchBrowse.tsx| Isi tab Cari kosong: Kejutkan aku, Di perangkatmu, Suasana, Genre.
-BrowseDetail.tsx| Isi satu suasana atau genre: Putar semua, Acak, artis teratas, daftar lagu.
+BrowseDetail.tsx| Isi satu suasana, genre, playlist, atau album: Putar semua, Acak, artis teratas, daftar lagu.
 AllSongsView.tsx| Kotak "Semua lagu": semua lagu di perangkat dengan kolom saring sendiri (dulu isi halaman Cari).
 
 components/home/
 
-Berisi komponen Beranda ala Spotify (banner acak dan deretan rekomendasi di bawah kolom cari).
+Berisi komponen Beranda ala StreamBeats (kepala, banner bergulir, Recently, deretan kurasi dan rekomendasi).
 
 File| Fungsi
-HomeBanner.tsx| Banner bergulir di atas Beranda: artis dan lagu acak yang mungkin disukai; tanpa data jadi ajakan membuka tab Cari.
-HomeSections.tsx| Deretan Beranda: playlist sering didengar, artis favorit, rekomendasi, dan Dengar lagi.
-HomeCards.tsx| Kartu dan pembungkus deretan: HomeRow, TrackCard, PlaylistTile, ArtistBubble.
+HomeHeader.tsx| Kepala Beranda: menu, sapaan, sleep timer, notifikasi, kolom cari dan filter.
+HomeMenuDrawer.tsx| Laci menu dari kiri (navigasi, Pengaturan, Tutorial).
+HomeBanner.tsx| Banner besar bergulir otomatis: playlist pilihan, artis, dan lagu rekomendasi; tanpa data jadi ajakan membuka tab Cari.
+HomeRecently.tsx| Recently: lagu baru diputar dalam tiga baris menyamping.
+HomeShelf.tsx| Satu deretan kurasi (playlist, album, atau lagu) yang dimuat saat mendekati layar.
+HomeSections.tsx| Susunan deretan Beranda: Recently, favorit, kurasi, rekomendasi, dan Dengar lagi.
+HomeCards.tsx| Kartu dan pembungkus deretan: HomeRow, MediaCard, TrackCard, PlaylistTile, ArtistBubble.
 homeNav.ts| Membuka halaman artis dari Beranda/jelajah dan mengingat asalnya agar jelajah tampil lagi saat kembali.
 
 components/music/
@@ -249,7 +254,10 @@ useAudioPlayer.ts| Mengakses fungsi dan state pemutar musik.
 useAudioPlayerController.ts| Mengatur logika kontrol pemutaran audio.
 useLongPress.ts| Mendeteksi interaksi tekan lama.
 greeting.ts| Menghasilkan sapaan berdasarkan waktu.
-useHomeFeed.ts| Data Beranda: playlist/artis favorit, rekomendasi, Dengar lagi, dan item banner (dari riwayat dengar dan cari di perangkat).
+useHomeFeed.ts| Data Beranda: playlist/artis favorit, rekomendasi, Dengar lagi, dan item banner (riwayat di perangkat + playlist chart).
+useHomeShelf.ts| Memuat satu deretan kurasi hanya saat sudah dekat layar.
+useInView.ts| True sekali saat elemen mendekati layar (IntersectionObserver).
+useMountTransition.ts| Menahan elemen terpasang selama animasi keluar (laci, popover).
 usePlaylistPrefs.ts| Mengelola preferensi playlist.
 useLyrics.ts| Mengambil dan mengelola data lirik.
 useMiniPlayerMode.ts| Mengatur mode mini player.
@@ -413,6 +421,7 @@ Menyimpan konfigurasi internal aplikasi.
 File| Fungsi
 navigation.ts| Mengatur konfigurasi navigasi.
 moods.ts| Daftar suasana tab Cari (judul, kata kunci playlist Deezer, warna dan bentuk kotak).
+homeShelves.ts| Deretan kurasi Beranda (judul, emoji, sumber Deezer).
 apk.ts| Menyimpan konfigurasi terkait APK.
 site.ts| Info situs dan tanggal terakhir dokumen hukum diubah.
 
@@ -682,7 +691,7 @@ File changelog menyimpan riwayat perubahan dari berbagai versi MusicVerse.
 
 File| Fungsi
 CHANGES.md| Arsip gabungan riwayat perubahan semua versi lama (sampai 0.5.51.7), terbaru di atas.
-CHANGES-0.5.52.md| Riwayat perubahan versi 0.5.52 (terbaru).
+CHANGES-0.5.53.md| Riwayat perubahan versi 0.5.53 (terbaru).
 
 ---
 

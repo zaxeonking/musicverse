@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLibrary } from '../context/LibraryContext'
 import { useMyPlaylists } from '../context/MyPlaylistsContext'
-import type { ArtistHit } from '../services/artistApi'
+import type { ArtistHit, PlaylistHit } from '../services/artistApi'
 import {
   getArtistRadio,
   getChartArtists,
+  getChartPlaylists,
   getChartTracks,
+  getPlaylistDescription,
   resolveArtistByName,
   resolveArtistByQuery,
 } from '../services/homeFeed'
@@ -54,6 +56,7 @@ export interface RecSection {
 
 export type BannerItem =
   | { id: string; kind: 'artist'; label: string; artist: ArtistHit }
+  | { id: string; kind: 'playlist'; label: string; playlist: PlaylistHit }
   | { id: string; kind: 'track'; label: string; tracks: PlaylistTrack[]; index: number }
 
 export interface HomeFeed {
@@ -194,6 +197,32 @@ function useChartArtists(enabled: boolean): { artists: ArtistHit[]; done: boolea
   return state
 }
 
+
+/** Playlist chart untuk banner. Deskripsinya menyusul satu per satu (Deezer hanya memberinya di detail playlist). */
+function useBannerPlaylists(enabled: boolean): { playlists: PlaylistHit[]; done: boolean } {
+  const [state, setState] = useState<{ playlists: PlaylistHit[]; done: boolean }>({ playlists: [], done: false })
+  useEffect(() => {
+    if (!enabled) return
+    let off = false
+    void (async () => {
+      const found = (await getChartPlaylists())?.filter((p) => p.cover).slice(0, 4) ?? []
+      if (off) return
+      setState({ playlists: found, done: true })
+      for (const item of found) {
+        const description = await getPlaylistDescription(item.id)
+        if (off) return
+        if (description) {
+          setState((prev) => ({ ...prev, playlists: prev.playlists.map((p) => (p.id === item.id ? { ...p, description } : p)) }))
+        }
+      }
+    })()
+    return () => {
+      off = true
+    }
+  }, [enabled])
+  return state
+}
+
 /** `enabled` = false saat hasil pencarian tampil: tidak ada permintaan jaringan yang dimulai di belakangnya. */
 export function useHomeFeed(enabled: boolean): HomeFeed {
   const log = useMemo(() => readPlayLog(), [])
@@ -205,6 +234,7 @@ export function useHomeFeed(enabled: boolean): HomeFeed {
   const favArtists = useFavoriteArtists(top, enabled)
   const { sections, loading: recLoading } = useRecommendations(topNames, enabled)
   const { artists: chartArtists, done: chartDone } = useChartArtists(enabled)
+  const { playlists: bannerPlaylists, done: playlistsDone } = useBannerPlaylists(enabled)
 
   const replay = useMemo(() => {
     const map = new Map<string, { track: PlaylistTrack; count: number; last: number }>()
@@ -225,33 +255,36 @@ export function useHomeFeed(enabled: boolean): HomeFeed {
   }, [log])
 
   const items = useMemo<BannerItem[]>(() => {
-    const out: BannerItem[] = []
+    const rest: BannerItem[] = []
     const used = new Set<string>()
     for (const fav of favArtists) {
       if (!fav.hit || used.has(fav.hit.id) || used.size >= 3) continue
       used.add(fav.hit.id)
-      out.push({ id: `a-${fav.hit.id}`, kind: 'artist', label: 'Artis favoritmu', artist: fav.hit })
+      rest.push({ id: `a-${fav.hit.id}`, kind: 'artist', label: 'Artis favoritmu', artist: fav.hit })
     }
     for (const artist of chartArtists) {
       if (used.size >= 3) break
       if (used.has(artist.id)) continue
       used.add(artist.id)
-      out.push({ id: `a-${artist.id}`, kind: 'artist', label: 'Artis populer', artist })
+      rest.push({ id: `a-${artist.id}`, kind: 'artist', label: 'Artis populer', artist })
     }
     const source = sections[0]
     if (source) {
       const label = source.id === 'chart' ? 'Lagu top' : 'Mungkin kamu suka'
-      source.tracks.slice(0, 3).forEach((track, index) => out.push({ id: `t-${track.id}`, kind: 'track', label, tracks: source.tracks, index }))
+      source.tracks.slice(0, 3).forEach((track, index) => rest.push({ id: `t-${track.id}`, kind: 'track', label, tracks: source.tracks, index }))
     }
-    // Urutan acak, tetap sama selama Beranda terbuka (tidak berubah tiap data baru masuk).
-    return out.sort((a, b) => hashOf(a.id + shuffleSeed) - hashOf(b.id + shuffleSeed))
-  }, [favArtists, chartArtists, sections, shuffleSeed])
+    // Urutan acak untuk artis dan lagu, tetap sama selama Beranda terbuka (tidak berubah tiap data baru masuk).
+    rest.sort((a, b) => hashOf(a.id + shuffleSeed) - hashOf(b.id + shuffleSeed))
+    // Playlist pilihan selalu di depan (kartu utama Beranda), seperti StreamBeats; urutannya ikut chart.
+    const lead: BannerItem[] = bannerPlaylists.map((playlist) => ({ id: `p-${playlist.id}`, kind: 'playlist', label: 'Playlist pilihan', playlist }))
+    return [...lead, ...rest].slice(0, 10)
+  }, [favArtists, chartArtists, sections, shuffleSeed, bannerPlaylists])
 
   return {
     favPlaylists,
     favArtists,
     sections,
     replay,
-    banner: { items, loading: enabled && items.length === 0 && (recLoading || !chartDone) },
+    banner: { items, loading: enabled && items.length === 0 && (recLoading || !chartDone || !playlistsDone) },
   }
 }

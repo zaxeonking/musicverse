@@ -460,3 +460,89 @@ export async function fetchMoodTracks(query: string, limit = 50, signal?: AbortS
   }
   return mapDeezerRows(await getList<DeezerTrack>(`${DEEZER}/search?q=${q}&limit=${limit}`, 'data', signal))
 }
+
+/* ---------- Bahan Beranda ala StreamBeats: playlist kurasi dan rilisan baru ---------- */
+
+export interface PlaylistHit {
+  id: string
+  title: string
+  cover: string
+  /** Sampul besar (±1000px), hanya untuk banner: jangan dipakai di kartu (memori gambar besar). */
+  coverXl: string
+  /** Jumlah lagu (0 bila tidak diketahui). */
+  count: number
+  /** Pembuat playlist (Deezer, editor, atau pengguna). */
+  by: string
+  /** Deskripsi; hanya terisi dari `fetchPlaylistDetail`. */
+  description: string
+}
+
+export interface NewAlbumHit {
+  id: string
+  title: string
+  artist: string
+  cover: string
+}
+
+interface DeezerPlaylist {
+  id?: number
+  title?: string
+  description?: string
+  nb_tracks?: number
+  picture_big?: string
+  picture_xl?: string
+  picture_medium?: string
+  user?: { name?: string }
+  creator?: { name?: string }
+  tracks?: { data?: DeezerTrack[] }
+}
+
+function mapPlaylistRow(row: DeezerPlaylist): PlaylistHit | null {
+  if (!row.id || !row.title) return null
+  return {
+    id: String(row.id),
+    title: row.title,
+    cover: row.picture_big || row.picture_medium || row.picture_xl || '',
+    coverXl: row.picture_xl || row.picture_big || row.picture_medium || '',
+    count: row.nb_tracks ?? 0,
+    by: row.user?.name || row.creator?.name || '',
+    description: (row.description ?? '').trim(),
+  }
+}
+
+/** Playlist yang sedang ramai di chart Deezer ("Trending community playlists"). */
+export async function fetchChartPlaylists(limit = 12, signal?: AbortSignal): Promise<PlaylistHit[]> {
+  const rows = await getList<DeezerPlaylist>(`${DEEZER}/chart/0/playlists?limit=${limit}`, 'data', signal)
+  return rows.flatMap((row) => mapPlaylistRow(row) ?? [])
+}
+
+/** Playlist dari kata kunci. `limit` kecil: tiap kata kunci hanya mengambil beberapa teratas. */
+export async function searchPlaylists(query: string, limit = 2, signal?: AbortSignal): Promise<PlaylistHit[]> {
+  const term = query.trim()
+  if (!term) return []
+  const rows = await getList<DeezerPlaylist>(`${DEEZER}/search/playlist?q=${encodeURIComponent(term)}&limit=${limit}`, 'data', signal)
+  return rows.flatMap((row) => mapPlaylistRow(row) ?? [])
+}
+
+/** Satu playlist lengkap: deskripsi dan lagunya (satu permintaan). */
+export async function fetchPlaylistDetail(playlistId: string, signal?: AbortSignal): Promise<{ playlist: PlaylistHit; tracks: PlaylistTrack[] } | null> {
+  const body = (await getJson(`${DEEZER}/playlist/${encodeURIComponent(playlistId)}`, signal)) as DeezerPlaylist
+  const playlist = mapPlaylistRow(body)
+  if (!playlist) return null
+  return { playlist, tracks: mapDeezerRows((body.tracks?.data ?? []).slice(0, 100)) }
+}
+
+/** Album dan single yang baru rilis (pilihan editor Deezer). */
+export async function fetchNewReleases(limit = 16, signal?: AbortSignal): Promise<NewAlbumHit[]> {
+  const rows = await getList<{ id?: number; title?: string; cover_big?: string; cover_medium?: string; artist?: { name?: string } }>(
+    `${DEEZER}/editorial/0/releases?limit=${limit}`,
+    'data',
+    signal,
+  )
+  const out: NewAlbumHit[] = []
+  for (const row of rows) {
+    if (!row.id || !row.title) continue
+    out.push({ id: String(row.id), title: row.title, artist: row.artist?.name ?? '', cover: row.cover_big || row.cover_medium || '' })
+  }
+  return out
+}

@@ -152,12 +152,9 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: 'settings',
     route: '/',
     target: 'settings-btn',
-    animate: 'tap',
-    advanceOnTargetClick: true,
     nativeOnly: true,
     title: 'Pengaturan',
-    body: 'Semua pengaturan aplikasi ada di balik ikon gerigi ini.',
-    task: 'Ketuk ikon gerigi',
+    body: 'Semua pengaturan aplikasi ada di menu ini: ketuk ikon tiga garis di kiri atas Beranda, lalu pilih Pengaturan.',
   },
   {
     id: 'settings-list',
@@ -260,7 +257,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     route: '/',
     target: 'tour-restart',
     title: 'Selesai 🎉',
-    body: 'Tutorial bisa diulang kapan saja lewat Pengaturan (ikon gerigi, menu Tutorial) atau tombol Tutorial di menu samping.',
+    body: 'Tutorial bisa diulang kapan saja lewat menu di kiri atas Beranda (Pengaturan, lalu Tutorial) atau tombol Tutorial di menu samping.',
   },
 ]
 
@@ -453,6 +450,19 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
         route: '/search',
         title: 'Baru: jelajah di tab Cari',
         body: 'Semua pencarian dan hasilnya kini ada di tab Cari. Saat kosong, ada Kejutkan aku, pintasan isi perangkat, suasana, dan genre. Semua lagu pindah ke kotak Semua lagu.',
+      },
+    ],
+  },
+  {
+    id: '0.5.53',
+    steps: [
+      {
+        id: 'wn-home-streambeats',
+        route: '/',
+        target: 'home-search',
+        title: 'Baru: Beranda lebih lengkap dan bergerak',
+        body: 'Banner besar kini bergulir sendiri dengan playlist pilihan, di bawahnya ada Recently, rilisan baru, All Time Hits, playlist trending, dan deretan lain. Menu, sleep timer, notifikasi, dan filter cari ada di bagian atas.',
+        missing: 'Deretan kurasi (rilisan baru, playlist trending, dan lainnya) butuh APK dan koneksi internet. Recently terisi dari lagu yang sudah kamu putar.',
       },
     ],
   },

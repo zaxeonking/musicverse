@@ -5,6 +5,7 @@ import { useEnterClosesKeyboard } from '../../hooks/useEnterClosesKeyboard'
 import { useKeyboardOpen } from '../../hooks/useKeyboardOpen'
 import { useMiniPlayerMode } from '../../hooks/useMiniPlayerMode'
 import { useTheme } from '../../hooks/useTheme'
+import ErrorBoundary from '../ui/ErrorBoundary'
 import OfflineBanner from './OfflineBanner'
 import PageTransition from './PageTransition'
 import UpdateBanner from './UpdateBanner'
@@ -67,17 +68,35 @@ export default function AppShell() {
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pl-[var(--sal)] pr-[var(--sar)] outline-none lg:pr-0"
         >
           {/* Transisi geser horizontal antar halaman (halaman lama memudar, lalu halaman baru masuk). */}
-          <PageTransition
-            pathname={pathname}
-            onSwap={scrollToTop}
-            className={`mx-auto w-full max-w-6xl px-4 pt-2 lg:px-8 lg:pt-8 ${
-              playerActive
-                ? compactDock
-                  ? 'pb-[calc(6rem+var(--dock-offset))] lg:pb-28'
-                  : 'pb-[calc(13rem+var(--dock-offset))] lg:pb-56'
-                : 'pb-[calc(1.5rem+var(--dock-offset))] lg:pb-10'
-            }`}
-          />
+          <ErrorBoundary
+            resetKey={pathname}
+            fallback={(reset) => (
+              <div role="alert" className="mx-auto flex max-w-sm flex-col items-center gap-3 px-4 py-24 text-center">
+                <h2 className="font-display text-xl font-extrabold text-ink">Halaman ini bermasalah</h2>
+                <p className="text-sm text-ink-muted">Ada yang gagal ditampilkan. Aplikasi tetap aman, coba lagi atau muat ulang.</p>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-primary" onClick={reset}>
+                    Coba lagi
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => window.location.reload()}>
+                    Muat ulang
+                  </button>
+                </div>
+              </div>
+            )}
+          >
+            <PageTransition
+              pathname={pathname}
+              onSwap={scrollToTop}
+              className={`mx-auto w-full max-w-6xl px-4 pt-2 lg:px-8 lg:pt-8 ${
+                playerActive
+                  ? compactDock
+                    ? 'pb-[calc(6rem+var(--dock-offset))] lg:pb-28'
+                    : 'pb-[calc(13rem+var(--dock-offset))] lg:pb-56'
+                  : 'pb-[calc(1.5rem+var(--dock-offset))] lg:pb-10'
+              }`}
+            />
+          </ErrorBoundary>
         </main>
         <PlayerDock />
         <BottomNav />
