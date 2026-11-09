@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
  * True begitu elemen (hampir) masuk layar, lalu tetap true (sekali pakai). `margin` memperluas area deteksi supaya muatan
  * dan animasi mulai sedikit sebelum elemen terlihat. Tanpa IntersectionObserver (lingkungan tua) langsung true.
  */
-export function useInView<T extends Element>(margin = '0px'): [RefObject<T | null>, boolean] {
-  const ref = useRef<T | null>(null)
+export function useInView<T extends Element>(margin = '0px'): [RefObject<T>, boolean] {
+  const ref = useRef<T>(null)
   const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined')
 
   useEffect(() => {
