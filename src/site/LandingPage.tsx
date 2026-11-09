@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { APK_RELEASE_URL, DISTRIBUTION_PAUSED } from '../config/apk'
 import FeedbackSection from './FeedbackSection'
-import MigrationNotice from './MigrationNotice'
+import MigrationNotice, { MigrationUpgrade } from './MigrationNotice'
 import PhoneMock from './PhoneMock'
 
 /** Fitur disusun menurut situasi pemakai, bukan daftar spesifikasi. Hanya fitur yang benar-benar ada di APK. */
@@ -138,6 +138,9 @@ export default function LandingPage() {
           <PhoneMock />
         </div>
       </section>
+
+      {/* Kabar upgrade lengkap (hanya selama unduhan dijeda) */}
+      {DISTRIBUTION_PAUSED && <MigrationUpgrade />}
 
       {/* Fitur */}
       <section id="fitur" aria-labelledby="judul-fitur" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">

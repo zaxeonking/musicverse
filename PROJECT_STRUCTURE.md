@@ -65,7 +65,7 @@ Sidebar.tsx| Navigasi samping untuk tampilan desktop.
 BottomNav.tsx| Navigasi bawah mobile bergaya kaca cair: pil melayang, lensa aktif meluncur, turun saat keyboard terbuka (utils/navActive.ts menentukan tab aktif).
 MobileHeader.tsx| Header khusus tampilan mobile.
 UpdateBanner.tsx| Menampilkan pemberitahuan pembaruan aplikasi.
-MigrationNotice.tsx| Pengumuman satu kali (lembar bawah) bahwa MusicVerse dibangun ulang sebagai aplikasi Android native; penanda tutup di `utils/migrationNotice.ts`.
+MigrationNotice.tsx| Pengumuman migrasi (lembar bawah) bahwa MusicVerse dibangun ulang sebagai aplikasi Android native: tampil otomatis sekali, lalu bisa dibuka lagi kapan saja lewat `openMigrationNotice()` (banner Beranda dan lonceng); penanda tutup di `utils/migrationNotice.ts`.
 OfflineBanner.tsx| Menampilkan status atau pemberitahuan ketika offline.
 PageTransition.tsx| Transisi antarhalaman: halaman lama memudar, halaman baru masuk geser maju/mundur.
 
@@ -103,7 +103,8 @@ components/home/
 Berisi komponen Beranda ala StreamBeats (kepala, banner bergulir, Recently, deretan kurasi dan rekomendasi).
 
 File| Fungsi
-HomeHeader.tsx| Kepala Beranda: menu, sapaan, sleep timer, notifikasi, kolom cari dan filter.
+HomeHeader.tsx| Kepala Beranda: menu, sapaan, sleep timer, notifikasi (berisi entri pengumuman migrasi), kolom cari dan filter.
+MigrationBanner.tsx| Banner tetap di Beranda untuk pengumuman migrasi; ketuk membuka kartu pengumuman lagi.
 HomeMenuDrawer.tsx| Laci menu dari kiri (navigasi, Pengaturan, Tutorial).
 HomeBanner.tsx| Banner besar bergulir otomatis: playlist pilihan, artis, dan lagu rekomendasi; tanpa data jadi ajakan membuka tab Cari.
 HomeRecently.tsx| Recently: lagu baru diputar dalam tiga baris menyamping.
@@ -392,7 +393,7 @@ lyricSourcePins.ts| Sumber lirik pilihan pengguna per lagu (menu Sumber lirik).
 lyricOffset.ts| Penyelarasan waktu lirik per lagu (satu sumber untuk panel penuh dan mini player).
 localTrack.ts| Identitas lagu lokal (`local:<id>`, kunci `lc-<id>`, URI MediaStore); murni, dipakai offline.ts dan localMusic.ts.
 artistSearchStore.ts| State pencarian artis di Beranda (mode, fase, urutan lagu).
-migrationNotice.ts| Penanda pengumuman migrasi sudah ditutup (`mv:migration-notice:v1`).
+migrationNotice.ts| Penanda pengumuman migrasi otomatis sudah ditutup (`mv:migration-notice:v1`), ID pengumuman untuk titik lonceng, dan `openMigrationNotice()` / `onMigrationNoticeOpen()` untuk membuka kartunya kapan saja.
 searchHistory.ts| Riwayat kata kunci yang dicari di tab Cari (maks. 20), tampil sebagai chip Pencarian terakhir dan bahan rekomendasi Beranda.
 searchResultsFlag.ts| Penanda (di memori) bahwa hasil di tab Cari sedang dibuka pengguna, supaya playlist hasil pemulihan tidak menutup jelajah.
 deezerMatch.ts| Pencocokan lagu dengan hasil pencarian Deezer.
@@ -473,7 +474,7 @@ File| Fungsi
 SiteApp.tsx| Aplikasi untuk peramban biasa; alamat lain dialihkan ke "/".
 SiteLayout.tsx| Kerangka situs: header, konten, footer.
 LandingPage.tsx| Halaman landing pemasangan APK (selama `DISTRIBUTION_PAUSED`: pengumuman migrasi, tanpa tombol unduh).
-MigrationNotice.tsx| Panel pengumuman migrasi di situs, pengganti tombol Unduh APK saat distribusi dijeda.
+MigrationNotice.tsx| Kartu ringkas di hero (pengganti tombol Unduh APK) dan bagian lengkap `#upgrade` (`MigrationUpgrade`) selama distribusi dijeda.
 PhoneMock.tsx| Ilustrasi ponsel di landing (lirik karangan sendiri).
 EqBars.tsx| Batang equalizer animasi seperti logo.
 FeedbackSection.tsx| Formulir saran, ulasan, dan laporan bug.

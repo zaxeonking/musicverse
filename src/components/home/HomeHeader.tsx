@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Bell, Compass, ListMusic, Mic2, Music2, RefreshCw, Search, Sparkles, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
+import { ArrowDownToLine, Bell, Compass, ListMusic, Mic2, Music2, RefreshCw, Rocket, Search, Sparkles, SlidersHorizontal, Timer, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { SITE_NAME } from '../../config/site'
@@ -10,6 +10,7 @@ import { updatesSupported } from '../../native/appUpdate'
 import { startWhatsNew, unseenWhatsNewSteps } from '../../tour/tourStore'
 import { WHATS_NEW } from '../../tour/steps'
 import { artistSearch } from '../../utils/artistSearchStore'
+import { MIGRATION_NOTICE_ID, openMigrationNotice } from '../../utils/migrationNotice'
 import { markNotificationSeen, notificationSignature, readNotificationSeen } from '../../utils/notificationSeen'
 import SleepTimerSheet from '../player/SleepTimerSheet'
 import HomeMenuDrawer from './HomeMenuDrawer'
@@ -98,6 +99,24 @@ function NotificationPanel({ update, onClose }: { update: AppUpdateState | null;
 
   return (
     <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
+      {/* Pengumuman migrasi: selalu ada di sini dan membuka kartunya lagi kapan pun diketuk. */}
+      <button
+        type="button"
+        onClick={() => {
+          onClose()
+          openMigrationNotice()
+        }}
+        aria-haspopup="dialog"
+        className="focus-ring tap-row flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-veil/10"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+          <Rocket className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-ink">Upgrade Besar MusicVerse</span>
+          <span className="block truncate text-xs text-ink-muted">Dibangun ulang jadi app Android native. Ketuk untuk detail.</span>
+        </span>
+      </button>
       {update && (
         <Link to="/settings/update" onClick={onClose} className="focus-ring tap-row flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-veil/10">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
@@ -156,8 +175,7 @@ function NotificationPanel({ update, onClose }: { update: AppUpdateState | null;
           })}
         </>
       )}
-      {!update && !supported && features.length === 0 && <p className="px-3 py-4 text-center text-sm text-ink-muted">Tidak ada notifikasi baru.</p>}
-    </div>
+          </div>
   )
 }
 
@@ -172,7 +190,7 @@ export default function HomeHeader() {
   const timer = useSleepTimer()
   // Lonceng tetap menampilkan pembaruan walau bannernya sudah ditutup; titiknya hilang saat lonceng dibuka.
   const update = useAppUpdate({ includeDismissed: true })
-  const signature = notificationSignature(update?.release.version ?? null, LATEST_WHATS_NEW?.id ?? null)
+  const signature = notificationSignature(update?.release.version ?? null, LATEST_WHATS_NEW?.id ?? null, MIGRATION_NOTICE_ID)
   const [seenSignature, setSeenSignature] = useState(readNotificationSeen)
   const unread = seenSignature !== signature
   const [drawer, setDrawer] = useState(false)

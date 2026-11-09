@@ -2,7 +2,7 @@ import { Rocket } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useOverlayHistory } from '../../hooks/useOverlayHistory'
-import { dismissMigrationNotice, isMigrationNoticeDismissed } from '../../utils/migrationNotice'
+import { dismissMigrationNotice, isMigrationNoticeDismissed, onMigrationNoticeOpen } from '../../utils/migrationNotice'
 import { isTourDone, useTourState, whatsNewReady } from '../../tour/tourStore'
 import OverlayPortal from '../ui/OverlayPortal'
 
@@ -10,11 +10,12 @@ import OverlayPortal from '../ui/OverlayPortal'
 const SHOW_AFTER_MS = 3900
 
 /**
- * Pengumuman satu kali: MusicVerse sedang dibangun ulang sebagai aplikasi Android native. Lembar bawah memakai
+ * Pengumuman migrasi: MusicVerse sedang dibangun ulang sebagai aplikasi Android native. Muncul otomatis SEKALI, lalu bisa
+ * dibuka lagi kapan saja dari banner di Beranda dan dari lonceng notifikasi (`openMigrationNotice()`). Lembar bawah memakai
  * OverlayPortal (animasi masuk/keluar, seret untuk tutup, tombol Back) dan kartu bertema yang sama dengan UpdateBanner.
  * Tidak memengaruhi pemutaran, unduhan, atau pustaka: musik tetap berjalan di belakang, dan ditutup lewat "Mengerti",
- * ketuk latar, geser turun, Back, atau Esc. Sekali ditutup tidak tampil lagi (utils/migrationNotice.ts).
- * Menunggu tutorial / "Yang baru" selesai dulu supaya tidak bertumpuk.
+ * ketuk latar, geser turun, Back, atau Esc. Sekali ditutup, tampil otomatisnya tidak berulang (utils/migrationNotice.ts).
+ * Menunggu tutorial / "Yang baru" selesai dulu supaya tidak bertumpuk (hanya untuk tampil otomatis; dibuka manual langsung tampil).
  */
 export default function MigrationNotice() {
   const { active } = useTourState()
@@ -28,6 +29,9 @@ export default function MigrationNotice() {
     const timer = window.setTimeout(() => setOpen(true), Math.max(600, SHOW_AFTER_MS - performance.now()))
     return () => window.clearTimeout(timer)
   }, [open, active, pathname])
+
+  // Banner / notifikasi meminta kartu dibuka: langsung tampil, tidak menunggu splash atau tutorial dan tidak peduli penanda "sudah ditutup".
+  useEffect(() => onMigrationNoticeOpen(() => setOpen(true)), [])
 
   const close = useCallback(() => {
     dismissMigrationNotice()
