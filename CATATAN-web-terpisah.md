@@ -29,7 +29,7 @@ Tidak ada perubahan kode di zip ini; hanya catatan. Isinya belum dibangun/dites 
   "Apa yang baru di versi 6.0?" dan "Bagaimana memperbarui dari versi lama?" (saran: ekspor cadangan dulu); teks "Selalu terbaru" tidak lagi
   menyebut pembaruan tampilan tanpa APK (itu fitur OTA Capacitor lama, tidak ada di native); teks "Aman dipasang?" tidak lagi menyebut jeda.
 - Pemeriksaan: hanya tipe sederhana (tsc tanpa node_modules). Jalankan `npm install && npm run build` sebelum deploy.
-- Tombol Unduh mengarah ke `https://github.com/zaxeonking/musicverse-releases/releases/latest`; pastikan rilis v6.0.0 sudah ada (workflow native).
+- Tombol Unduh mengarah ke `https://github.com/zaxeonking/musicverse/releases/latest`; pastikan rilis v6.0.0 sudah ada (workflow native).
 - Teks klaim ("lebih responsif/mulus/stabil/hemat") adalah tujuan dari copy lama; ganti bila belum terbukti setelah app native dites.
 
 ## Pembaruan: unduh langsung versi terbaru (23 Nov 2026, belum dites)
