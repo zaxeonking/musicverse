@@ -1,9 +1,10 @@
 import { ChevronDown, Download } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { APK_RELEASE_URL, DISTRIBUTION_PAUSED } from '../config/apk'
+import { APK_DOWNLOAD_URL, DISTRIBUTION_PAUSED, NATIVE_VERSION } from '../config/apk'
 import FeedbackSection from './FeedbackSection'
 import MigrationNotice, { MigrationUpgrade } from './MigrationNotice'
+import NativeAnnouncement, { NativeLaunchBadge } from './NativeLaunch'
 import PhoneMock from './PhoneMock'
 
 /** Fitur disusun menurut situasi pemakai, bukan daftar spesifikasi. Hanya fitur yang benar-benar ada di APK. */
@@ -34,21 +35,21 @@ const SCENARIOS: ReadonlyArray<{ title: string; text: string }> = [
   },
   {
     title: 'Selalu terbaru',
-    text: 'Cek versi baru langsung dari dalam app. Pembaruan tampilan bisa masuk tanpa perlu mengunduh APK lagi.',
+    text: 'Cek versi baru langsung dari dalam app. Pembaruannya bisa langsung diunduh dan dipasang dari sana.',
   },
 ]
 
 const PLATFORMS: ReadonlyArray<{ name: string; status: 'Tersedia' | 'Dibangun ulang' | 'Menyusul'; note: string }> = [
   DISTRIBUTION_PAUSED
     ? { name: 'Android', status: 'Dibangun ulang', note: 'Sedang dibangun ulang sebagai aplikasi Android native. Unduhan baru dijeda sementara.' }
-    : { name: 'Android', status: 'Tersedia', note: 'Pasang lewat berkas APK dari halaman rilis GitHub.' },
+    : { name: 'Android', status: 'Tersedia', note: `Versi ${NATIVE_VERSION}, aplikasi Android native. Unduh APK versi terbaru langsung dari situs ini.` },
   { name: 'Windows', status: 'Menyusul', note: 'Belum ada tanggal rilis.' },
   { name: 'iOS', status: 'Menyusul', note: 'Belum ada tanggal rilis.' },
 ]
 
 const STEPS: readonly string[] = [
-  'Unduh berkas APK dari halaman rilis GitHub lewat tombol di atas.',
-  'Buka berkasnya. Android akan meminta izin memasang dari sumber ini: izinkan, lalu ketuk Pasang.',
+  'Ketuk tombol Unduh APK di atas. Versi terbaru langsung terunduh, tanpa membuka halaman lain.',
+  'Buka berkas yang terunduh (dari notifikasi unduhan atau folder Download). Android akan meminta izin memasang dari sumber ini: izinkan, lalu ketuk Pasang.',
   'Buka MusicVerse, izinkan notifikasi, dan tempel tautan playlist pertamamu.',
 ]
 
@@ -60,7 +61,16 @@ const FAQ: ReadonlyArray<{ q: string; a: ReactNode }> = [
           a: 'MusicVerse sedang dibangun ulang sebagai aplikasi Android native supaya lebih cepat, mulus, dan stabil. Ini perombakan besar, bukan pembaruan kecil, jadi unduhan baru dijeda selama pengembangan. MusicVerse tidak berhenti; kabar terbarunya akan muncul di halaman ini.',
         },
       ]
-    : []),
+    : [
+        {
+          q: `Apa yang baru di versi ${NATIVE_VERSION}?`,
+          a: 'MusicVerse dibangun ulang dari nol sebagai aplikasi Android native (Kotlin dan Jetpack Compose) supaya lebih responsif, mulus, stabil, dan hemat. Ini perombakan besar, bukan pembaruan kecil.',
+        },
+        {
+          q: 'Bagaimana memperbarui dari versi lama?',
+          a: 'Unduh APK terbaru lalu pasang di atas aplikasi yang sudah ada. Untuk berjaga-jaga, ekspor cadangan playlist dari versi lama dulu sebelum memasang.',
+        },
+      ]),
   {
     q: 'Kenapa tidak ada versi web?',
     a: 'Memutar dan mengunduh lagu butuh akses yang tidak diberikan peramban, dan musik di latar belakang juga tidak bisa seandal di aplikasi. Karena itu MusicVerse hanya ada sebagai aplikasi.',
@@ -92,7 +102,7 @@ const FAQ: ReadonlyArray<{ q: string; a: ReactNode }> = [
   },
   {
     q: 'Aman dipasang?',
-    a: 'APK hanya dibagikan lewat halaman rilis GitHub yang ditautkan di situs ini (saat ini unduhan baru dijeda). Android menampilkan peringatan untuk semua aplikasi yang dipasang dari luar toko aplikasi, dan itu normal. Jangan pasang berkas dari tempat lain.',
+    a: 'APK hanya dibagikan lewat situs ini, berkasnya diambil dari rilis resmi di GitHub. Android menampilkan peringatan untuk semua aplikasi yang dipasang dari luar toko aplikasi, dan itu normal. Jangan pasang berkas dari tempat lain.',
   },
   { q: 'Kapan Windows dan iOS?', a: 'Belum ada tanggal. Kabar terbarunya akan muncul di halaman ini.' },
 ]
@@ -106,6 +116,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section aria-labelledby="judul" className="mx-auto grid w-full max-w-6xl items-center gap-14 px-5 pb-4 pt-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-8 lg:px-8 lg:pt-10">
         <div>
+          {!DISTRIBUTION_PAUSED && <NativeLaunchBadge />}
           <h1 id="judul" className="font-display text-[2.9rem] font-extrabold leading-[0.96] tracking-[-0.035em] sm:text-[4.25rem] lg:text-[5.25rem]">
             Tempel tautan playlist.
             <br />
@@ -121,7 +132,7 @@ export default function LandingPage() {
           ) : (
             <>
               <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
-                <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
+                <a href={APK_DOWNLOAD_URL} download="musicverse.apk" className={primaryBtn}>
                   <Download className="h-5 w-5" aria-hidden="true" />
                   Unduh APK
                 </a>
@@ -129,7 +140,7 @@ export default function LandingPage() {
                   Lihat cara pasang
                 </a>
               </div>
-              <p className="mt-4 text-sm text-site-slate">Gratis. Diunduh dari halaman rilis GitHub. Windows dan iOS menyusul.</p>
+              <p className="mt-4 text-sm text-site-slate">Gratis. Versi terbaru langsung terunduh. Windows dan iOS menyusul.</p>
             </>
           )}
         </div>
@@ -139,8 +150,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Kabar upgrade lengkap (hanya selama unduhan dijeda) */}
-      {DISTRIBUTION_PAUSED && <MigrationUpgrade />}
+      {/* Pengumuman lengkap: migrasi (unduhan dijeda) atau 'sekarang 100% native' (unduhan terbuka) */}
+      {DISTRIBUTION_PAUSED ? <MigrationUpgrade /> : <NativeAnnouncement />}
 
       {/* Fitur */}
       <section id="fitur" aria-labelledby="judul-fitur" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
@@ -206,7 +217,7 @@ export default function LandingPage() {
                 </li>
               ))}
             </ol>
-            <a href={APK_RELEASE_URL} target="_blank" rel="noopener noreferrer" className={`${primaryBtn} mt-9`}>
+            <a href={APK_DOWNLOAD_URL} download="musicverse.apk" className={`${primaryBtn} mt-9`}>
               <Download className="h-5 w-5" aria-hidden="true" />
               Unduh APK
             </a>

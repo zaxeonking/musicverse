@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { APK_RELEASE_URL, DISTRIBUTION_PAUSED, REPO_URL } from '../config/apk'
+import { APK_DOWNLOAD_URL, DISTRIBUTION_PAUSED, REPO_URL } from '../config/apk'
 import SiteLogo from './SiteLogo'
 
 const FONTS_ID = 'mv-site-fonts'
@@ -85,9 +85,8 @@ export default function SiteLayout() {
             </a>
           ) : (
             <a
-              href={APK_RELEASE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={APK_DOWNLOAD_URL}
+              download="musicverse.apk"
               className="ml-1 inline-flex h-10 items-center rounded-full bg-site-ink px-4 text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green focus-visible:ring-offset-2 focus-visible:ring-offset-site-fog"
             >
               Unduh APK

@@ -53,18 +53,6 @@
     overscroll-behavior: none;
   }
 
-  /* Mode APK: tanpa menu tekan-lama pada tautan/gambar dan tanpa seleksi teks acak. */
-  html.native-app {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  html.native-app input,
-  html.native-app textarea {
-    -webkit-user-select: text;
-    user-select: text;
-  }
-
   ::selection {
     background: rgb(var(--mv-accent, 29 185 84) / 0.35);
   }
@@ -559,29 +547,6 @@ html[data-fp-open] [data-mini-slot] {
     transition: none;
   }
 }
-html.reduce-motion [data-mini-slot] {
-  transition: none;
-}
-
-/* ---------- Splash ----------
-   Gaya splash (logo, nama, zoom) ada inline di index.html supaya animasinya mulai segera, tanpa menunggu bundel CSS/JS.
-   Di sini hanya bagian masuknya aplikasi (butuh variabel --ease). */
-/* Aplikasi masuk: dari sedikit mengecil + transparan ke ukuran normal, bersamaan dengan splash yang zoom keluar. */
-html.has-splash #root {
-  opacity: 0;
-  transform: scale(0.94);
-}
-html.has-splash.app-ready #root {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity 560ms var(--ease) 140ms,
-    transform 760ms var(--ease-hero) 100ms;
-}
-html.no-splash #splash {
-  display: none;
-}
-
 @layer utilities {
   .no-scrollbar {
     scrollbar-width: none;
@@ -627,13 +592,6 @@ html[data-theme='light'] .bg-card,
 html[data-theme='light'] .bg-raised {
   outline: 1px solid rgb(0 0 0 / 0.05);
   outline-offset: -1px;
-}
-
-
-/* Mini player sedang berubah bentuk (kartu <-> disc): matikan blur kaca supaya gerakan tidak patah-patah (lihat MiniPlayer.setMorphing). */
-[data-mini-card][data-morphing] {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
 }
 
 

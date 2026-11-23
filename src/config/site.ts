@@ -1,4 +1,4 @@
-/** Info umum situs dan dokumen hukum (dipakai halaman web dan halaman Pengaturan di APK). */
+/** Info umum situs dan dokumen hukum (dipakai halaman web). */
 export const SITE_NAME = 'MusicVerse'
 
 /** Tanggal terakhir Kebijakan Privasi dan Ketentuan Layanan diubah. Perbarui setiap isi dokumen berubah. */
