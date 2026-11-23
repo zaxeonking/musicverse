@@ -62,10 +62,10 @@ export default function FeedbackSection() {
     setOpened(true)
   }
 
-  const field = 'mt-1 w-full rounded-lg border border-site-line bg-site-paper px-3 py-2.5 text-base text-site-ink placeholder:text-site-slate/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green'
+  const field = 'mt-1 w-full rounded-lg border border-site-line bg-site-fog px-3 py-2.5 text-base text-site-ink placeholder:text-site-slate/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-site-green'
 
   return (
-    <section id="masukan" aria-labelledby="judul-masukan" className="mx-auto mt-20 grid w-full max-w-6xl gap-10 px-5 lg:mt-28 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
+    <section id="masukan" aria-labelledby="judul-masukan" className="mx-auto mt-24 grid w-full max-w-6xl scroll-mt-16 gap-10 px-5 lg:mt-32 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16 lg:px-8">
       <div>
         <h2 id="judul-masukan" className="font-display text-3xl font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-5xl">
           Saran dan ulasan
@@ -87,7 +87,7 @@ export default function FeedbackSection() {
         )}
       </div>
 
-      <form onSubmit={submit} noValidate className="space-y-5 rounded-2xl bg-site-paper p-5 sm:p-6">
+      <form onSubmit={submit} noValidate className="space-y-5 rounded-lg bg-site-paper p-5 sm:p-6">
         <fieldset>
           <legend className="font-display text-sm font-bold">Jenis</legend>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -98,7 +98,7 @@ export default function FeedbackSection() {
                 aria-pressed={kind === k.id}
                 onClick={() => setKind(k.id)}
                 className={`h-10 rounded-full px-4 font-display text-sm font-semibold transition-colors ${focusRing} ${
-                  kind === k.id ? 'bg-site-ink text-white' : 'bg-site-fog text-site-slate hover:text-site-ink'
+                  kind === k.id ? 'bg-accent text-accent-on' : 'bg-site-raise text-site-slate hover:text-site-ink'
                 }`}
               >
                 {k.label}
@@ -162,7 +162,7 @@ export default function FeedbackSection() {
         </div>
 
         {error && (
-          <p role="alert" className="text-sm font-semibold text-red-700">
+          <p role="alert" className="text-sm font-semibold text-danger">
             {error}
           </p>
         )}
@@ -170,7 +170,7 @@ export default function FeedbackSection() {
         <div className="flex flex-wrap items-center gap-4">
           <button
             type="submit"
-            className={`inline-flex h-12 items-center gap-2 rounded-full bg-site-ink px-6 font-display text-base font-bold text-white hover:bg-black ${focusRing}`}
+            className={`inline-flex h-12 items-center gap-2 rounded-full bg-accent px-6 font-display text-base font-bold text-accent-on transition-[transform,background-color] hover:bg-accent-soft active:scale-[0.97] ${focusRing}`}
           >
             {CONTACT_EMAIL ? <Mail className="h-5 w-5" aria-hidden="true" /> : <ExternalLink className="h-5 w-5" aria-hidden="true" />}
             {CONTACT_EMAIL ? 'Buka email' : 'Lanjut ke GitHub'}

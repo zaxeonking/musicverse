@@ -41,3 +41,9 @@ Tidak ada perubahan kode di zip ini; hanya catatan. Isinya belum dibangun/dites 
 
 ## Pembersihan Capacitor (23 Nov 2026)
 Semua kode APK Capacitor (native/, src/native, pemutar, halaman app, OTA, workflow APK, api/proxy) sudah dihapus. Repo ini hanya situs: landing, /privacy, /terms.
+
+## Redesain landing (24 Nov 2026, belum dibangun/dites penuh)
+- Tema situs jadi gelap: token `site.*` di `tailwind.config.js` dipetakan ulang (fog #111111, paper/raise sebagai permukaan, hijau #1DB954). Halaman /privacy dan /terms ikut gelap tanpa mengubah isinya.
+- Baru `src/site/ui.tsx`: `DownloadButton`, `Reveal` (animasi masuk, hormati prefers-reduced-motion), `useLatestRelease` (tag, ukuran `musicverse.apk`, tanggal dari GitHub API; bila gagal, angka tidak ditampilkan).
+- `LandingPage.tsx` ditulis ulang (hero, info produk, fitur, pusat unduhan, platform, FAQ accordion). `SiteLayout.tsx`: header sticky + menu mobile + footer 4 kolom. `NativeLaunch.tsx` / `MigrationNotice.tsx` digayakan ulang; `VITE_DISTRIBUTION_PAUSED` tetap menyembunyikan semua tombol/tautan unduh.
+- Pemeriksaan: tipe diperiksa dengan stub (tanpa node_modules). Jalankan `npm install && npm run build` sebelum deploy.

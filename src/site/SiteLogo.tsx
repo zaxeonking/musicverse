@@ -3,7 +3,7 @@ export default function SiteLogo() {
   return (
     <span className="flex items-center gap-2.5">
       <svg viewBox="0 0 32 32" className="h-8 w-8 shrink-0" aria-hidden="true">
-        <rect width="32" height="32" rx="8" fill="#11181B" />
+        <rect width="32" height="32" rx="8" fill="#222222" />
         <g fill="#1DB954">
           <rect x="6" y="14" width="3.5" height="8" rx="1.75" />
           <rect x="11.5" y="9" width="3.5" height="18" rx="1.75" />

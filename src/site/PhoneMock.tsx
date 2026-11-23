@@ -36,7 +36,7 @@ export default function PhoneMock() {
 
   return (
     <div aria-hidden="true" className="relative mx-auto w-[17.75rem] select-none font-sans sm:w-[19rem]">
-      <div className="rounded-[2.6rem] bg-[#0a0a0a] p-[7px] shadow-[0_30px_60px_-24px_rgba(17,24,27,0.55)] ring-1 ring-black/40">
+      <div className="rounded-[2.6rem] bg-[#2a2a2a] p-[7px] shadow-[0_30px_60px_-24px_rgba(0,0,0,0.7)] ring-1 ring-white/10">
         <div className="relative flex h-[36rem] flex-col overflow-hidden rounded-[2.1rem] bg-bg px-5 pb-6 pt-4 text-ink sm:h-[38rem]">
           <span className="absolute left-1/2 top-3 h-2 w-2 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
 

@@ -38,14 +38,15 @@ export default {
         },
         // Lapisan transparan di atas permukaan (hover, tekan, garis tipis): putih di mode gelap, hitam di mode terang.
         veil: 'rgb(var(--mv-veil, 255 255 255) / <alpha-value>)',
-        // Halaman web (landing, privasi, ketentuan). Terang, supaya aplikasi gelap di dalamnya jadi satu-satunya benda pekat.
+        // Halaman web (landing, privasi, ketentuan). Tema gelap: arang netral dengan permukaan bertingkat, aksen hijau MusicVerse.
         site: {
-          fog: '#E8EDEE',
-          paper: '#F5F8F8',
-          ink: '#11181B',
-          slate: '#47565C',
-          green: '#0A6E31',
-          line: 'rgba(17,24,27,0.14)',
+          fog: '#111111',
+          paper: '#181818',
+          raise: '#212121',
+          ink: '#F3F3F1',
+          slate: '#A6A6A2',
+          green: '#1DB954',
+          line: 'rgba(255,255,255,0.12)',
         },
         line: 'rgb(var(--mv-veil, 255 255 255) / 0.08)',
       },
