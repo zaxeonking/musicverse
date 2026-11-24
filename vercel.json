@@ -1,8 +1,18 @@
 {
+  "functions": {
+    "api/p.mjs": { "maxDuration": 10 }
+  },
   "rewrites": [
+    { "source": "/p/:code", "destination": "/api/p?code=:code" },
+    { "source": "/((?!api/|\\.well-known/|assets/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
     }
   ]
 }

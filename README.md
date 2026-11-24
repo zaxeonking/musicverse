@@ -22,3 +22,4 @@ src/
 
 ## Env (opsional, lihat `.env.example`)
 `VITE_GITHUB_REPO`, `VITE_CONTACT_EMAIL`, `VITE_DISTRIBUTION_PAUSED`.
+Server (Vercel, tanpa awalan VITE_): `SUPABASE_SHARE_URL`, `SUPABASE_SHARE_KEY` untuk halaman tautan bagikan `/p/<kode>` (`api/p.mjs`).

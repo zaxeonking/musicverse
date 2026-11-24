@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.musicverse.app",
+      "sha256_cert_fingerprints": [
+"0A:C8:8B:2C:6D:F0:24:16:D6:D5:95:29:86:5B:39:48:B2:A5:85:1A:C6:C5:12:B6:80:9C:C0:8E:30:E1:51:B2"
+      ]
+    }
+  }
+]

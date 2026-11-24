@@ -47,3 +47,13 @@ Semua kode APK Capacitor (native/, src/native, pemutar, halaman app, OTA, workfl
 - Baru `src/site/ui.tsx`: `DownloadButton`, `Reveal` (animasi masuk, hormati prefers-reduced-motion), `useLatestRelease` (tag, ukuran `musicverse.apk`, tanggal dari GitHub API; bila gagal, angka tidak ditampilkan).
 - `LandingPage.tsx` ditulis ulang (hero, info produk, fitur, pusat unduhan, platform, FAQ accordion). `SiteLayout.tsx`: header sticky + menu mobile + footer 4 kolom. `NativeLaunch.tsx` / `MigrationNotice.tsx` digayakan ulang; `VITE_DISTRIBUTION_PAUSED` tetap menyembunyikan semua tombol/tautan unduh.
 - Pemeriksaan: tipe diperiksa dengan stub (tanpa node_modules). Jalankan `npm install && npm run build` sebelum deploy.
+
+## Halaman tautan bagikan `/p/<kode>` dipasang (24 Nov 2026, belum dibangun penuh)
+- Baru `api/p.mjs` (fungsi Vercel; membaca RPC publik `get_shared_playlist`, HTML kecil + Open Graph, semua teks di-escape). Diuji di Node dengan Supabase tiruan:
+  sukses, not_found (404), rate_limited (503), kode tak sah (404), XSS ter-escape.
+- `vercel.json`: rewrite `/p/:code` -> `/api/p?code=:code` SEBELUM catch-all; catch-all kini mengecualikan `api/`, `.well-known/`, `assets/`; header JSON untuk `assetlinks.json`.
+- Baru `public/.well-known/assetlinks.json` (CETAKAN: ganti `sha256_cert_fingerprints` dengan SHA-256 sertifikat penanda tangan APK rilis).
+- Env Vercel yang harus diisi (kunci PUBLIK saja, jangan `sb_secret_`/service_role): `SUPABASE_SHARE_URL`, `SUPABASE_SHARE_KEY`. Lalu redeploy.
+- Halaman ini dibuat server-side, jadi tidak terkena `VITE_DISTRIBUTION_PAUSED`.
+- Batas: semua kunjungan web berbagi satu jatah baca per IP di Supabase (600/jam); respons di-cache CDN 60 dtk.
+- Belum dijalankan: `npm install && npm run build` (sandbox tanpa jaringan).
