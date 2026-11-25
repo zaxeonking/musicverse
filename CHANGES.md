@@ -1,3 +1,21 @@
+# 0.5.56 (Web: akun Google via Firebase, ubah nama, hapus akun)
+
+Lanjutan dari proyek Android 6.1.0 (Google Sign-In + Firestore + Hapus akun) ke situs web.
+
+Files baru: src/account/firebase.ts, src/account/firebaseAccount.ts, src/account/profile.ts, src/site/LegacyAccountPage.tsx (halaman email/password Supabase lama, isi tidak diubah selain nama komponen), scripts/test-account.mjs, docs/firebase/WEB-ACCOUNT.md
+Files diubah: src/site/AccountPage.tsx (ditulis ulang), src/site/SiteApp.tsx (+ rute /account/legacy), src/legal/content.ts (bagian Situs web), src/config/site.ts (LEGAL_UPDATED), package.json (+ firebase, tsx, skrip test:account, versi), .env.example (+ VITE_FIREBASE_*)
+
+1. /account kini "Lanjutkan dengan Google" (Firebase Auth, popup). Profil `users/{uid}` (uid, displayName, email, photoURL, provider, createdAt, updatedAt) dibuat/di-merge; nama hasil edit dipertahankan saat masuk lagi (aturan sama dengan Android).
+2. Ubah nama (3-40 karakter) disimpan ke Firebase Auth dan Firestore. Avatar: inisial langsung tampil, foto Google (thumbnail =sN-c) memudar masuk, inisial bila gagal.
+3. Hapus akun: ketik HAPUS -> pilih akun Google lagi (reauth) -> hapus `users/{uid}` -> hapus pengguna Firebase. Urutan sama dengan Android (bisa diulang bila langkah terakhir gagal).
+4. Supabase tidak dihapus: Guest/Share (api/p.mjs) tidak disentuh; akun email lama di /account/legacy; tautan email lama `/account?mode=verify|reset` otomatis ke halaman lama.
+5. Analytics Firebase sengaja tidak dipasang (Kebijakan Privasi: tanpa analitik).
+
+Catatan
+- BELUM dibangun/diuji: lingkungan tanpa jaringan, `npm install firebase` tidak bisa dijalankan. Hanya `npm run test:account` (logika murni) yang dijalankan dan lolos. Jalankan `npm install && npm run build`.
+- Wajib di Firebase Console: tambahkan domain situs (musicverseid.vercel.app) ke Authentication > Settings > Authorized domains; set VITE_FIREBASE_API_KEY di Vercel.
+- Tidak ikut terhapus saat hapus akun: data Supabase lama, snapshot R2, data lokal Android.
+
 # Riwayat perubahan MusicVerse (arsip)
 
 Gabungan semua catatan versi lama, terbaru di atas. Catatan versi terbaru ada di `CHANGES-0.5.54.7.md`.
