@@ -25,7 +25,7 @@ Jangan mengirim URL file lokal/download. `cover_url` hanya metadata remote yang 
 ## Merge pertama (non-destructive)
 1. Tunggu Auth selesai dan dapatkan `auth.uid()` dari session tervalidasi.
 2. Ambil snapshot lokal dalam transaksi baca yang konsisten; ambil cloud snapshot dengan user JWT.
-3. Gabungkan berdasarkan ID stabil: playlist `playlist_id`; track dalam playlist berdasarkan posisi + identitas track (`track_id`, lalu `isrc`/`external_url` sebagai fallback); liked berdasarkan `track_id`; artist berdasarkan `artist_id`.
+3. Gabungkan berdasarkan ID stabil: playlist `playlist_id`; track dalam playlist `playlist_id + track_id`; liked berdasarkan `track_id`; artist berdasarkan `artist_id`. Posisi hanya atribut urutan, bukan identitas track.
 4. Jika item hanya ada lokal atau hanya cloud, pertahankan. Jangan hapus salah satu sisi pada merge pertama.
 5. Jika ID playlist sama tetapi metadata berbeda, pilih versi dengan `updated_at_ms` terbaru. Jika timestamp sama, jangan overwrite diam-diam: tandai conflict dan pilih versi lokal sebagai default sementara.
 6. Untuk playlist yang sama, union track unik sambil mempertahankan urutan yang ada; track yang hanya ada di satu sisi tetap dimasukkan. Jika posisi bentrok, susun item lokal dulu lalu tambahkan item cloud yang belum ada, kemudian normalisasi posisi 0..N-1.
@@ -42,7 +42,7 @@ V1 memakai revision server + `updated_at_ms` untuk resolusi update biasa. Jangan
 - Realtime bukan transport utama untuk seluruh data; gunakan sebagai sinyal refresh kemudian.
 
 ## Migration
-Jalankan `docs/supabase/account-sync-v1.sql` HANYA pada Account project. Script ini membuat tabel sync dan RLS owner-only. Tidak mengubah schema guest/share. Sesudah migration, verifikasi `rowsecurity=true` untuk semua tabel `mv_*` dan uji dua akun: akun A tidak boleh membaca/mengubah baris akun B.
+Jalankan `docs/supabase/account-sync-v1.sql` HANYA pada Account project untuk instalasi baru. Jika V1 sudah terpasang, jalankan `docs/supabase/account-sync-v2-upgrade.sql`. Upgrade V2 mengganti primary key track dari posisi ke `track_id`; cek duplikasi sebelum migrasi. Tidak mengubah schema guest/share. Sesudah migration, verifikasi `rowsecurity=true` untuk semua tabel `mv_*` dan uji dua akun: akun A tidak boleh membaca/mengubah baris akun B.
 
 ## Status implementasi
-Migration SQL dan kontrak merge sudah disiapkan. Ini belum berarti worker Android, adapter repository, atau sync web sudah selesai; semuanya memerlukan implementasi dan build/test terpisah. Jangan mengklaim cloud sync aktif sebelum kedua klien mengirim/menerima data dengan JWT user dan tes RLS lulus.
+SQL V2, Android Auth/session, Android `AccountCloudSyncEngine`, WorkManager scheduler, dan transport web/Android sudah tersedia di source. Android menjalankan sync snapshot otomatis setelah login, periodik 12 jam, dan saat perubahan yang dipantau. Yang belum selesai: transactional outbox, tombstone/delete propagation, conflict UI, integrasi helper sync pada web (situs belum memiliki music player/local library), serta build/integration tests. Status runtime tetap perlu diuji sebelum rilis. Jangan mengklaim cloud sync aktif sebelum kedua klien mengirim/menerima data dengan JWT user dan tes RLS lulus.
