@@ -90,6 +90,7 @@ export default function SiteLayout() {
                 </a>
               ))}
             </div>
+            <Link to="/account" className={`hidden rounded-full px-3 py-2 text-site-slate transition-colors hover:text-site-ink sm:inline-flex ${FOCUS}`}>Akun</Link>
             {DISTRIBUTION_PAUSED ? (
               <a href={anchor('upgrade')} className={`ml-1 inline-flex h-10 items-center rounded-full bg-accent px-4 font-bold text-accent-on transition-transform active:scale-[0.97] ${FOCUS}`}>
                 Kabar upgrade
@@ -148,7 +149,7 @@ export default function SiteLayout() {
                   CONTACT_EMAIL ? <a key="e" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> : <a key="e" href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">Kontak lewat Issues</a>,
                 ],
               ],
-              ['Hukum', [<Link key="pv" to="/privacy">Kebijakan Privasi</Link>, <Link key="tm" to="/terms">Ketentuan Layanan</Link>]],
+              ['Hukum', [<Link key="ac" to="/account">Akun MusicVerse</Link>, <Link key="pv" to="/privacy">Kebijakan Privasi</Link>, <Link key="tm" to="/terms">Ketentuan Layanan</Link>]],
             ] as const
           ).map(([title, items]) => (
             <nav key={title} aria-label={title}>

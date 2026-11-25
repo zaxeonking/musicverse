@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import LandingPage from './LandingPage'
 import SiteLayout from './SiteLayout'
 import SiteLegalPage from './SiteLegalPage'
+import AccountPage from './AccountPage'
 
 /**
  * Aplikasi untuk peramban biasa. MusicVerse tidak punya versi web: satu-satunya halaman adalah landing untuk
@@ -15,6 +16,7 @@ const router = createBrowserRouter([
       { path: '/', element: <LandingPage /> },
       { path: '/privacy', element: <SiteLegalPage kind="privacy" /> },
       { path: '/terms', element: <SiteLegalPage kind="terms" /> },
+      { path: '/account', element: <AccountPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
