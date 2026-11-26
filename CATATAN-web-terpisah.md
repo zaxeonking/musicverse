@@ -57,3 +57,14 @@ Semua kode APK Capacitor (native/, src/native, pemutar, halaman app, OTA, workfl
 - Halaman ini dibuat server-side, jadi tidak terkena `VITE_DISTRIBUTION_PAUSED`.
 - Batas: semua kunjungan web berbagi satu jatah baca per IP di Supabase (600/jam); respons di-cache CDN 60 dtk.
 - Belum dijalankan: `npm install && npm run build` (sandbox tanpa jaringan).
+
+## Dipasang di repo utama + tautan akun (26 Nov 2026, belum dibangun/dites penuh)
+- Folder ini sekarang `web/` di repo utama (zip `musicverse-6.1.0` dipindah apa adanya). Vercel Root Directory = `web`. `web-share/` lama diganti
+  petunjuk singkat (isinya sudah di sini).
+- `api/p.mjs`: kode berawalan `u` (tautan akun permanen) dibaca dari Firestore lewat REST (`sharedPlaylists/<kode>`); `a` tetap Supabase.
+  Diuji di Node dengan Firestore tiruan (200, 404, 502, tanpa kunci, kode tak sah, XSS ter-escape).
+- Env Vercel baru: `FIREBASE_API_KEY` (WAJIB untuk `u...`; Google menolak REST tanpa kunci), `FIREBASE_PROJECT_ID` (bawaan `musicverse-app`).
+  Kunci web publik; batasi ke Cloud Firestore API. Kunci Android otomatis dari `google-services.json` bisa ditolak bila dibatasi ke app Android.
+- Tanpa kunci, halaman `/p/u...` menjawab 502 "Tidak bisa dibuka"; tautan `a...` tidak terpengaruh.
+- Halaman `/account` masih memakai Supabase akun lama (`cloudSync.ts`, `AccountPage.tsx`), belum disesuaikan dengan akun Firebase.
+- Perlu: `npm install && npm run build`.

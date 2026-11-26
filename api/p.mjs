@@ -3,15 +3,41 @@
 // dan menyajikan HTML kecil: judul, jumlah lagu, beberapa lagu, tombol "Buka di MusicVerse", cadangan unduh.
 // Env Vercel (bukan rahasia, tetapi dibaca di server supaya tidak masuk bundel web): SUPABASE_SHARE_URL, SUPABASE_SHARE_KEY
 // (kunci PUBLIK sb_publishable_...; JANGAN pakai service_role / sb_secret_).
+// Kode berawalan u (tautan akun, permanen) dibaca dari Firestore lewat REST: dokumen sharedPlaylists/<kode>
+// (aturan ../firestore.rules mengizinkan `get` publik, `list` ditolak). Env Vercel: FIREBASE_API_KEY (kunci web publik proyek
+// Firebase; WAJIB untuk tautan u, Google menolak panggilan REST tanpa identitas), FIREBASE_PROJECT_ID (bawaan musicverse-app).
 
-const CODE = /^a[2-9a-hjkmnp-z]{9}$/; // awalan a = database tanpa akun (sama dengan ShareCode.kt / SQL)
+const CODE = /^[au][2-9a-hjkmnp-z]{9}$/; // a = database tanpa akun (Supabase), u = database akun (Firestore); sama dengan ShareCode.kt
 const APP_ID = 'com.musicverse.app';
 const SHOW_TRACKS = 5;
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
+async function fetchAccountPlaylist(code) {
+  const project = (process.env.FIREBASE_PROJECT_ID || 'musicverse-app').trim();
+  const apiKey = (process.env.FIREBASE_API_KEY || '').trim();
+  if (!apiKey) return { status: 'unconfigured' };
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}/databases/(default)/documents/sharedPlaylists/${code}?key=${encodeURIComponent(apiKey)}`;
+  try {
+    const r = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+    if (r.status === 404) return { status: 'not_found' };
+    if (r.status === 429) return { status: 'busy' };
+    if (!r.ok) return { status: 'error' };
+    const j = await r.json();
+    const title = j?.fields?.title?.stringValue;
+    const raw = j?.fields?.tracks?.stringValue;
+    if (typeof title !== 'string' || typeof raw !== 'string') return { status: 'error' };
+    const tracks = JSON.parse(raw);
+    if (!Array.isArray(tracks) || tracks.length === 0) return { status: 'error' };
+    return { status: 'ok', title, tracks };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
 async function fetchPlaylist(code) {
+  if (code.startsWith('u')) return fetchAccountPlaylist(code);
   const base = (process.env.SUPABASE_SHARE_URL || '').trim().replace(/\/+$/, '');
   const key = (process.env.SUPABASE_SHARE_KEY || '').trim();
   if (!base.startsWith('https://') || !key) return { status: 'unconfigured' };
@@ -161,7 +187,14 @@ export default async function handler(req, res) {
     const data = await fetchPlaylist(code);
     if (data.status === 'ok') out = render(code, data);
     else if (data.status === 'not_found') {
-      out = message(code, 'Tautan tidak berlaku', 'Playlist ini sudah dimatikan oleh pengirimnya, sudah kedaluwarsa (tautan berlaku 30 hari), atau tautannya salah.', 404);
+      out = message(
+        code,
+        'Tautan tidak berlaku',
+        code.startsWith('u')
+          ? 'Playlist ini sudah dihapus oleh pemiliknya, atau tautannya salah.'
+          : 'Playlist ini sudah dimatikan oleh pengirimnya, sudah kedaluwarsa (tautan berlaku 30 hari), atau tautannya salah.',
+        404,
+      );
       cache = 'public, s-maxage=30';
     } else if (data.status === 'busy') {
       out = message(code, 'Sedang ramai', 'Terlalu banyak yang membuka tautan sekarang. Coba lagi sebentar lagi.', 503);
