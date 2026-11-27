@@ -103,10 +103,16 @@ export function parseTracks(raw) {
 export function summarize({ title, tracks }) {
   const count = tracks.length;
   const cover = (tracks.find((t) => t.cover) || {}).cover || null;
-  if (count === 1) {
-    return { kind: 'song', label: 'NOW PLAYING', title: tracks[0].title, subtitle: tracks[0].artist, count, cover };
+  // Sampul berbeda (maks. 3) untuk kipas di poster playlist.
+  const covers = [];
+  for (const t of tracks) {
+    if (t.cover && !covers.includes(t.cover)) covers.push(t.cover);
+    if (covers.length === 3) break;
   }
-  return { kind: 'playlist', label: 'PLAYLIST', title, subtitle: `${count} lagu`, count, cover };
+  if (count === 1) {
+    return { kind: 'song', label: 'NOW PLAYING', title: tracks[0].title, subtitle: tracks[0].artist, count, cover, covers };
+  }
+  return { kind: 'playlist', label: 'PLAYLIST', title, subtitle: `${count} lagu`, count, cover, covers };
 }
 
 export const esc = (s) =>

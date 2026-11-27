@@ -1,13 +1,33 @@
 // Poster pratinjau 1200x630 untuk tautan /p/<kode> yang ditempel di chat (og:image dari api/p.mjs).
-// Desain mengikuti poster di aplikasi: latar sampul digelapkan, panel kaca berisi sampul + label + judul + artis/jumlah lagu,
-// merek di bawah. Satori (mesin gambar @vercel/og) belum mendukung blur, jadi latar = sampul diperbesar + lapisan gelap.
+// PLAYLIST: poster kipas tiga sampul (tengah tegak, kiri-kanan miring 9 derajat) + judul + jumlah lagu, SAMA dengan poster di
+// aplikasi (androidApp/.../ui/library/PlaylistPoster.kt; angka tata letak harus sama). LAGU tunggal: kartu panel seperti sebelumnya.
+// Satori (mesin gambar @vercel/og) belum mendukung blur, jadi latar = sampul diperbesar + lapisan gelap.
+// Ganti latar poster playlist: BACKDROP ('cover' | 'paper'), samakan dengan POSTER_BACKDROP di aplikasi.
 import { ImageResponse } from '@vercel/og';
 import { loadShared, normalizeCode, summarize } from './_share.mjs';
 
 export const config = { runtime: 'edge' };
 
 const MAX_COVER_BYTES = 3 * 1024 * 1024;
-const FALLBACK = { kind: 'playlist', label: 'PLAYLIST', title: 'MusicVerse', subtitle: 'Dengarkan bersama', count: 0, cover: null };
+const FALLBACK = { kind: 'playlist', label: 'PLAYLIST', title: 'MusicVerse', subtitle: 'Dengarkan bersama', count: 0, cover: null, covers: [] };
+
+// Tata letak poster playlist (1200x630). SAMA dengan PlaylistPoster.kt.
+const CENTER = 330;
+const SIDE = 290;
+const SIDE_DX = 215;
+const SIDE_DY = 28;
+const ROT = 9;
+const TOP = 56;
+const RADIUS = 36;
+const TITLE_BASELINE = 492;
+const COUNT_BASELINE = 548;
+const TEXT_MAX_W = 1020;
+const BACKDROP = 'cover'; // 'cover' = sampul pertama digelapkan, 'paper' = kertas terang
+const FALLBACK_GRADIENTS = [
+  'linear-gradient(135deg,#6d28d9,#2563eb)',
+  'linear-gradient(135deg,#be185d,#f97316)',
+  'linear-gradient(135deg,#047857,#0ea5e9)',
+];
 
 /**
  * Unduh sampul lebih dulu dan jadikan data URL. Bila sampul gagal/lambat/terlalu besar/bukan gambar, poster tetap dibuat
@@ -32,7 +52,69 @@ async function inlineCover(src) {
 
 const el = (type, style, children) => ({ type, props: { style, children } });
 
-function poster(s) {
+/** Satu sampul kipas: kotak bersudut bulat, dirotasi di sekitar titik tengahnya (cx, cy). */
+function fanCover(src, size, cx, cy, rotation, fallbackBg) {
+  const box = {
+    display: 'flex',
+    position: 'absolute',
+    left: cx - size / 2,
+    top: cy - size / 2,
+    width: size,
+    height: size,
+    borderRadius: RADIUS,
+    overflow: 'hidden',
+    transform: `rotate(${rotation}deg)`,
+    boxShadow: '0 14px 34px rgba(0,0,0,0.47)',
+  };
+  if (src) {
+    return el('div', box, [{ type: 'img', props: { src, width: size, height: size, style: { width: size, height: size, objectFit: 'cover' } } }]);
+  }
+  return el('div', { ...box, alignItems: 'center', justifyContent: 'center', backgroundImage: fallbackBg, fontSize: size * 0.46, color: 'rgba(255,255,255,0.3)' }, '♪');
+}
+
+function playlistPoster(s) {
+  const dark = BACKDROP === 'cover';
+  const ink = dark ? '#ffffff' : '#111111';
+  const inkSoft = dark ? 'rgba(255,255,255,0.8)' : '#555555';
+  const [c0, c1, c2] = s.covers || [];
+  const cx = 1200 / 2;
+  const cySide = TOP + SIDE_DY + SIDE / 2;
+  const layers = [];
+  if (dark && c0) {
+    layers.push({
+      type: 'img',
+      props: { src: c0, width: 1800, height: 945, style: { position: 'absolute', left: -300, top: -158, width: 1800, height: 945, objectFit: 'cover' } },
+    });
+  }
+  if (dark) layers.push(el('div', { display: 'flex', position: 'absolute', left: 0, top: 0, width: 1200, height: 630, background: 'rgba(0,0,0,0.5)' }, ''));
+  layers.push(fanCover(c1, SIDE, cx - SIDE_DX, cySide, -ROT, FALLBACK_GRADIENTS[1]));
+  layers.push(fanCover(c2, SIDE, cx + SIDE_DX, cySide, ROT, FALLBACK_GRADIENTS[2]));
+  layers.push(fanCover(c0, CENTER, cx, TOP + CENTER / 2, 0, FALLBACK_GRADIENTS[0]));
+  layers.push(
+    el(
+      'div',
+      { display: 'flex', position: 'absolute', left: (1200 - TEXT_MAX_W) / 2, top: TITLE_BASELINE - 50, width: TEXT_MAX_W, justifyContent: 'center', fontSize: 50, fontWeight: 700, color: ink, lineClamp: 1 },
+      s.title,
+    ),
+  );
+  if (s.count) {
+    layers.push(el('div', { display: 'flex', position: 'absolute', left: 0, top: COUNT_BASELINE - 32, width: 1200, justifyContent: 'center', fontSize: 32, color: inkSoft }, s.subtitle));
+  }
+  return el(
+    'div',
+    {
+      display: 'flex',
+      position: 'relative',
+      width: 1200,
+      height: 630,
+      overflow: 'hidden',
+      backgroundImage: dark ? 'linear-gradient(135deg,#1f1b2e,#0f172a)' : 'linear-gradient(180deg,#ffffff,#d2d2d2)',
+    },
+    layers,
+  );
+}
+
+function songPoster(s) {
   const cover = s.cover;
   const bg = cover
     ? { backgroundImage: `url(${cover})`, backgroundSize: '100% 100%' }
@@ -79,8 +161,10 @@ export default async function handler(request) {
       found = true;
     }
   }
-  summary = { ...summary, cover: await inlineCover(summary.cover) };
-  return new ImageResponse(poster(summary), {
+  // Sampul diunduh lebih dulu (paralel); yang gagal jadi null dan poster tetap dibuat dengan sampul cadangan.
+  const covers = await Promise.all((summary.covers || []).slice(0, 3).map(inlineCover));
+  summary = { ...summary, cover: await inlineCover(summary.cover), covers };
+  return new ImageResponse(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary), {
     width: 1200,
     height: 630,
     headers: {

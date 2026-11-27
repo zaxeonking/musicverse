@@ -3834,3 +3834,7 @@ yang mengambil 1 MB per potongan tanpa baca-depan, jadi sedikit hiccup jaringan 
 - Fallback TVHTML5 + cipher (3rd strategy ytmusic.bex) belum diport.
 - Memuat file .bex langsung (WASM component) tidak mungkin di WebView; ytmusic.ts adalah port TS-nya.
 - Antrean unduhan masih di JS (geser dari recent apps menghentikan lagu berjalan, tapi .part disambung nanti).
+
+## Poster playlist = poster aplikasi (27 Nov 2026)
+- api/og.mjs: playlist digambar sebagai kipas tiga sampul + judul + jumlah lagu (sama dengan PlaylistPoster.kt di aplikasi); lagu tunggal tetap kartu panel.
+- api/_share.mjs: summarize() menambah `covers` (maks. 3 sampul berbeda).
