@@ -36,12 +36,19 @@ const FALLBACK_GRADIENTS = [
 async function inlineCover(src) {
   if (!src) return null;
   try {
-    const r = await fetch(src, { signal: AbortSignal.timeout(4000) });
-    const type = (r.headers.get('content-type') || '').split(';')[0].trim();
-    if (!r.ok || !/^image\/(png|jpe?g|webp|gif)$/.test(type)) return null;
+    // Minta jpeg/png saja: Google/Deezer memberi webp bila Accept membolehkan, dan Satori gagal membaca webp (galat di tengah stream).
+    const r = await fetch(src, { signal: AbortSignal.timeout(2500), headers: { accept: 'image/jpeg,image/png,image/gif;q=0.9' } });
+    if (!r.ok) return null;
     const buf = await r.arrayBuffer();
     if (buf.byteLength === 0 || buf.byteLength > MAX_COVER_BYTES) return null;
     const bytes = new Uint8Array(buf);
+    // Jenis dari ISI berkas, bukan header content-type (sering salah): hanya png/jpeg/gif yang lolos.
+    const type =
+      bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg'
+      : bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 ? 'image/png'
+      : bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 ? 'image/gif'
+      : null;
+    if (!type) return null;
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
     return `data:${type};base64,${btoa(bin)}`;
@@ -162,8 +169,16 @@ export default async function handler(request) {
     }
   }
   // Sampul diunduh lebih dulu (paralel); yang gagal jadi null dan poster tetap dibuat dengan sampul cadangan.
-  const covers = await Promise.all((summary.covers || []).slice(0, 3).map(inlineCover));
-  summary = { ...summary, cover: await inlineCover(summary.cover), covers };
+  // Kandidat (maks. 12) dicoba paralel; 3 yang berhasil dipakai, kurang dari 3 diulang. Satu sampul rusak tidak lagi
+  // meninggalkan kotak kosong selama masih ada sampul lain yang bisa dimuat.
+  if (summary.kind === 'song') {
+    summary = { ...summary, cover: await inlineCover(summary.cover) };
+  } else {
+    const loaded = (await Promise.all((summary.candidates || summary.covers || []).map(inlineCover))).filter(Boolean);
+    const ok = loaded.slice(0, 3);
+    const covers = ok.length ? Array.from({ length: 3 }, (_, i) => ok[i % ok.length]) : [];
+    summary = { ...summary, covers };
+  }
   return new ImageResponse(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary), {
     width: 1200,
     height: 630,

@@ -1,6 +1,6 @@
 // Tes tanpa jaringan untuk api/_share.mjs dan api/p.mjs (fetch tiruan). Poster api/og.mjs butuh @vercel/og + Vercel, tidak diuji di sini.
 import assert from 'node:assert/strict';
-import { isValidCode, normalizeCode, loadShared, parseTracks, summarize, esc } from '../api/_share.mjs';
+import { isValidCode, normalizeCode, loadShared, parseTracks, summarize, esc, padFan, uniqueCovers } from '../api/_share.mjs';
 
 // Kode: awalan a/u + 9 dari 31 karakter (tanpa i, l, o, 0, 1).
 assert.equal(isValidCode('a2345678ac'), true);
@@ -27,6 +27,11 @@ const pl = summarize({ title: 'EPIC: The Musical', tracks: tr });
 assert.equal(pl.kind, 'playlist');
 assert.equal(pl.subtitle, '2 lagu');
 assert.equal(pl.cover, 'https://i.scdn.co/x');
+// Kipas: sampul unik yang kurang diulang (album = satu sampul), kandidat cadangan tersedia.
+assert.deepEqual(pl.covers, ['https://i.scdn.co/x', 'https://i.scdn.co/x', 'https://i.scdn.co/x']);
+assert.deepEqual(padFan(['a', 'b']), ['a', 'b', 'a']);
+assert.deepEqual(padFan([]), []);
+assert.deepEqual(uniqueCovers([{ cover: 'https://i.ytimg.com/vi_webp/ID/hqdefault.webp' }, { cover: null }], 12), ['https://i.ytimg.com/vi/ID/hqdefault.jpg']);
 
 // Supabase + Firestore tiruan
 globalThis.fetch = async (u, init = {}) => {

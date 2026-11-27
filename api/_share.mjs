@@ -103,16 +103,31 @@ export function parseTracks(raw) {
 export function summarize({ title, tracks }) {
   const count = tracks.length;
   const cover = (tracks.find((t) => t.cover) || {}).cover || null;
-  // Sampul berbeda (maks. 3) untuk kipas di poster playlist.
-  const covers = [];
-  for (const t of tracks) {
-    if (t.cover && !covers.includes(t.cover)) covers.push(t.cover);
-    if (covers.length === 3) break;
-  }
+  // Sampul berbeda untuk kipas di poster playlist: `candidates` (maks. 12, cadangan bila ada yang rusak) dan `covers` (3 pertama,
+  // kurang dari 3 diulang berurutan supaya sampul samping tidak kosong; samakan dengan fanCovers() di aplikasi).
+  const candidates = uniqueCovers(tracks, 12);
+  const covers = padFan(candidates.slice(0, 3));
   if (count === 1) {
-    return { kind: 'song', label: 'NOW PLAYING', title: tracks[0].title, subtitle: tracks[0].artist, count, cover, covers };
+    return { kind: 'song', label: 'NOW PLAYING', title: tracks[0].title, subtitle: tracks[0].artist, count, cover, covers, candidates };
   }
-  return { kind: 'playlist', label: 'PLAYLIST', title, subtitle: `${count} lagu`, count, cover, covers };
+  return { kind: 'playlist', label: 'PLAYLIST', title, subtitle: `${count} lagu`, count, cover, covers, candidates };
+}
+
+/** Alamat sampul berbeda urut dari lagu pertama (maks. [limit]). YouTube `vi_webp/...webp` diganti `vi/...jpg` (webp tidak didukung pembuat poster). */
+export function uniqueCovers(tracks, limit) {
+  const out = [];
+  for (const t of tracks) {
+    const u = t.cover ? t.cover.replace(/\/vi_webp\/([^/?]+)\/([a-z0-9_]+)\.webp/i, '/vi/$1/$2.jpg') : null;
+    if (u && !out.includes(u)) out.push(u);
+    if (out.length === limit) break;
+  }
+  return out;
+}
+
+/** Isi sampai 3 sampul: [A] -> [A,A,A], [A,B] -> [A,B,A]; kosong tetap kosong. */
+export function padFan(list) {
+  if (!list.length) return [];
+  return Array.from({ length: 3 }, (_, i) => list[i % list.length]);
 }
 
 export const esc = (s) =>

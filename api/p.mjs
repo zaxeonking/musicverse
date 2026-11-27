@@ -105,11 +105,7 @@ function message(code, heading, text, status) {
 function render(code, data, origin) {
   const tracks = data.tracks;
   const s = summarize(data);
-  const covers = [];
-  for (const t of tracks) {
-    if (t.cover && !covers.includes(t.cover)) covers.push(t.cover);
-    if (covers.length === 3) break;
-  }
+  const covers = s.covers;
   const img = (src, cls) => (src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<i class="${cls}"></i>`);
   const count = tracks.length;
   const rows = tracks
