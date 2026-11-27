@@ -68,3 +68,20 @@ Semua kode APK Capacitor (native/, src/native, pemutar, halaman app, OTA, workfl
 - Tanpa kunci, halaman `/p/u...` menjawab 502 "Tidak bisa dibuka"; tautan `a...` tidak terpengaruh.
 - Halaman `/account` masih memakai Supabase akun lama (`cloudSync.ts`, `AccountPage.tsx`), belum disesuaikan dengan akun Firebase.
 - Perlu: `npm install && npm run build`.
+
+## Poster pratinjau dari `web-share/` digabung ke sini (27 Nov 2026, belum dibangun/dites di Vercel)
+- Isi `web-share/` di repo app (poster `/api/og` + halaman `/p` versi edge) disatukan ke web ini; folder itu kini hanya petunjuk.
+- Baru `api/_share.mjs`: satu pustaka data untuk `p.mjs` dan `og.mjs` (batas waktu 8 dtk, tolak `sb_secret_`, status ok/not_found/busy/
+  unconfigured/error). IP pengunjung kini diteruskan ke Supabase (`x-forwarded-for`), jadi jatah 600/jam dihitung per pengunjung,
+  bukan per IP Vercel. Lagu tanpa judul dilewati (tidak membuat seluruh playlist gagal).
+- `api/p.mjs`: tampilan halaman TIDAK berubah; tag Open Graph ditambah (`og:url`, `og:type`, `og:image` = `/api/og?code=<kode>`
+  1200x630, `twitter:image`). Domain diambil dari permintaan (domain kustom/preview ikut benar), cadangan `musicverseid.vercel.app`.
+  Satu lagu: deskripsi = artis · Dengarkan di MusicVerse.
+- Baru `api/og.mjs` (edge, `@vercel/og` 0.6.8): desain poster dari web-share, warna merek disesuaikan dengan situs (hijau #1DB954).
+  Sampul diunduh dulu (4 dtk, maks 3 MB, harus gambar); bila gagal poster tetap jadi dengan ikon ♪, tidak error 500.
+  Cache: 1 jam di edge bila ketemu; 60 dtk bila tautan mati/gagal.
+- Env tidak bertambah (sama: `SUPABASE_SHARE_*`, `FIREBASE_*`). Tanpa `FIREBASE_API_KEY`, poster `u...` = poster umum MusicVerse.
+- Tes: `npm test` lolos (data, halaman, escape XSS, host aneh). `og.mjs` dites dengan `@vercel/og` tiruan (sampul jadi data URL,
+  sampul rusak -> ♪, kode salah -> poster umum). Penggambaran asli belum diuji.
+- Perlu: `npm install && npm run build`, deploy, lalu buka `/api/og?code=<kode asli>`. WhatsApp/Telegram menyimpan pratinjau
+  di cache; uji dengan tautan yang baru dibagikan.

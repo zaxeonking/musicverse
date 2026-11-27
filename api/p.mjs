@@ -1,67 +1,24 @@
 // Halaman tautan bagikan: https://<domain>/p/<kode>  (vercel.json: /p/:code -> /api/p?code=:code).
-// Membaca playlist lewat fungsi RPC publik `get_shared_playlist` di Supabase (skema: docs/supabase/anon-share-schema.sql)
-// dan menyajikan HTML kecil: judul, jumlah lagu, beberapa lagu, tombol "Buka di MusicVerse", cadangan unduh.
-// Env Vercel (bukan rahasia, tetapi dibaca di server supaya tidak masuk bundel web): SUPABASE_SHARE_URL, SUPABASE_SHARE_KEY
-// (kunci PUBLIK sb_publishable_...; JANGAN pakai service_role / sb_secret_).
-// Kode berawalan u (tautan akun, permanen) dibaca dari Firestore lewat REST: dokumen sharedPlaylists/<kode>
-// (aturan ../firestore.rules mengizinkan `get` publik, `list` ditolak). Env Vercel: FIREBASE_API_KEY (kunci web publik proyek
-// Firebase; WAJIB untuk tautan u, Google menolak panggilan REST tanpa identitas), FIREBASE_PROJECT_ID (bawaan musicverse-app).
+// Data dibaca lewat ./_share.mjs: kode a... dari RPC publik Supabase `get_shared_playlist` (docs/supabase/anon-share-schema.sql),
+// kode u... dari Firestore `sharedPlaylists/<kode>` (../firestore.rules: `get` publik, `list` ditolak).
+// HTML kecil: judul, jumlah lagu, beberapa lagu, tombol "Buka di MusicVerse", cadangan unduh, plus tag Open Graph yang
+// menunjuk ke poster /api/og?code=<kode> (api/og.mjs) supaya tautan yang ditempel di WhatsApp/Telegram/Discord tampil sebagai poster.
+// Env Vercel: lihat _share.mjs.
+import { SITE, esc, loadShared, normalizeCode, summarize } from './_share.mjs';
 
-const CODE = /^[au][2-9a-hjkmnp-z]{9}$/; // a = database tanpa akun (Supabase), u = database akun (Firestore); sama dengan ShareCode.kt
 const APP_ID = 'com.musicverse.app';
 const SHOW_TRACKS = 5;
 
-const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
-
-async function fetchAccountPlaylist(code) {
-  const project = (process.env.FIREBASE_PROJECT_ID || 'musicverse-app').trim();
-  const apiKey = (process.env.FIREBASE_API_KEY || '').trim();
-  if (!apiKey) return { status: 'unconfigured' };
-  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}/databases/(default)/documents/sharedPlaylists/${code}?key=${encodeURIComponent(apiKey)}`;
-  try {
-    const r = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
-    if (r.status === 404) return { status: 'not_found' };
-    if (r.status === 429) return { status: 'busy' };
-    if (!r.ok) return { status: 'error' };
-    const j = await r.json();
-    const title = j?.fields?.title?.stringValue;
-    const raw = j?.fields?.tracks?.stringValue;
-    if (typeof title !== 'string' || typeof raw !== 'string') return { status: 'error' };
-    const tracks = JSON.parse(raw);
-    if (!Array.isArray(tracks) || tracks.length === 0) return { status: 'error' };
-    return { status: 'ok', title, tracks };
-  } catch {
-    return { status: 'error' };
-  }
+/** Asal situs dari permintaan (domain kustom / preview), cadangan SITE. */
+function originOf(req) {
+  const h = req.headers || {};
+  const host = String(h['x-forwarded-host'] || h.host || '').split(',')[0].trim();
+  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return SITE;
+  const proto = String(h['x-forwarded-proto'] || 'https').split(',')[0].trim() === 'http' ? 'http' : 'https';
+  return `${proto}://${host}`;
 }
 
-async function fetchPlaylist(code) {
-  if (code.startsWith('u')) return fetchAccountPlaylist(code);
-  const base = (process.env.SUPABASE_SHARE_URL || '').trim().replace(/\/+$/, '');
-  const key = (process.env.SUPABASE_SHARE_KEY || '').trim();
-  if (!base.startsWith('https://') || !key) return { status: 'unconfigured' };
-  if (key.startsWith('sb_secret_')) return { status: 'unconfigured' }; // jangan pernah pakai kunci rahasia di sini
-  try {
-    const r = await fetch(`${base}/rest/v1/rpc/get_shared_playlist`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', apikey: key, accept: 'application/json' },
-      body: JSON.stringify({ p_code: code }),
-      signal: AbortSignal.timeout(8000),
-    });
-    const j = await r.json();
-    if (j && j.ok === true && typeof j.title === 'string' && Array.isArray(j.tracks)) {
-      return { status: 'ok', title: j.title, tracks: j.tracks };
-    }
-    if (j && j.error === 'not_found') return { status: 'not_found' };
-    if (j && j.error === 'rate_limited') return { status: 'busy' };
-    return { status: 'error' };
-  } catch {
-    return { status: 'error' };
-  }
-}
-
-function page({ title, desc, image, body, code }) {
+function page({ title, desc, image, url, body, code }) {
   return `<!doctype html>
 <html lang="id">
 <head>
@@ -73,7 +30,19 @@ function page({ title, desc, image, body, code }) {
 <meta property="og:site_name" content="MusicVerse">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
-${image ? `<meta property="og:image" content="${esc(image)}">\n<meta name="twitter:card" content="summary_large_image">` : '<meta name="twitter:card" content="summary">'}
+<meta property="og:type" content="website">
+${url ? `<meta property="og:url" content="${esc(url)}">` : ''}
+${
+  image
+    ? `<meta property="og:image" content="${esc(image)}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(title)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${esc(image)}">`
+    : '<meta name="twitter:card" content="summary">'
+}
 <meta name="theme-color" content="#121212">
 <style>
 :root{--bg:#121212;--card:#1b1b1b;--raised:#262626;--ink:#eceFea;--muted:#a3a8a1;--accent:#1db954;--deep:#148a3f;--on:#06140b}
@@ -133,11 +102,12 @@ function message(code, heading, text, status) {
   };
 }
 
-function render(code, data) {
-  const tracks = data.tracks.filter((t) => t && typeof t.t === 'string');
+function render(code, data, origin) {
+  const tracks = data.tracks;
+  const s = summarize(data);
   const covers = [];
   for (const t of tracks) {
-    if (typeof t.c === 'string' && t.c.startsWith('https://') && !covers.includes(t.c)) covers.push(t.c);
+    if (t.cover && !covers.includes(t.cover)) covers.push(t.cover);
     if (covers.length === 3) break;
   }
   const img = (src, cls) => (src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<i class="${cls}"></i>`);
@@ -146,19 +116,22 @@ function render(code, data) {
     .slice(0, SHOW_TRACKS)
     .map(
       (t) => `<li>${
-        typeof t.c === 'string' && t.c.startsWith('https://')
-          ? `<img src="${esc(t.c)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
-          : '<i></i>'
-      }<div><b>${esc(t.t)}</b>${t.a ? `<span>${esc(t.a)}</span>` : ''}</div></li>`,
+        t.cover ? `<img src="${esc(t.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<i></i>'
+      }<div><b>${esc(t.title)}</b>${t.artist ? `<span>${esc(t.artist)}</span>` : ''}</div></li>`,
     )
     .join('');
   const more = count > SHOW_TRACKS ? `<p class="more">+${count - SHOW_TRACKS} lagu lainnya</p>` : '';
   return {
     status: 200,
     html: page({
-      title: `${data.title} · MusicVerse`,
-      desc: `Playlist ${count} lagu dibagikan lewat MusicVerse.`,
-      image: covers[0],
+      title: `${s.title} · MusicVerse`,
+      desc:
+        s.kind === 'song'
+          ? `${s.subtitle ? s.subtitle + ' · ' : ''}Dengarkan di MusicVerse`
+          : `Playlist ${count} lagu dibagikan lewat MusicVerse.`,
+      // Poster 1200x630 dibuat server (api/og.mjs) dari sampul + judul + artis/jumlah lagu.
+      image: `${origin}/api/og?code=${code}`,
+      url: `${origin}/p/${code}`,
       code,
       body: `<section class="fan">
 <div class="stack">${img(covers[1], 'b')}${img(covers[2], 'c')}${img(covers[0], 'a')}</div>
@@ -176,16 +149,15 @@ function render(code, data) {
 }
 
 export default async function handler(req, res) {
-  const raw = String(Array.isArray(req.query?.code) ? req.query.code[0] : req.query?.code || '').toLowerCase();
-  const code = CODE.test(raw) ? raw : '';
+  const code = normalizeCode(req.query?.code);
   let out;
   let cache = 'public, s-maxage=60, stale-while-revalidate=300';
   if (!code) {
     out = message('', 'Tautan tidak valid', 'Alamat ini bukan tautan playlist MusicVerse yang sah.', 404);
     cache = 'public, s-maxage=3600';
   } else {
-    const data = await fetchPlaylist(code);
-    if (data.status === 'ok') out = render(code, data);
+    const data = await loadShared(code, process.env, req.headers?.['x-forwarded-for']);
+    if (data.status === 'ok') out = render(code, data, originOf(req));
     else if (data.status === 'not_found') {
       out = message(
         code,
