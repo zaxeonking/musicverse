@@ -18,12 +18,9 @@ const OUT_W = 600;
 const OUT_H = Math.round((OUT_W * 630) / 1200);
 const OUT_SCALE = OUT_W / 1200;
 
-/** Bungkus kanvas 1200x630 menjadi OUT_W x OUT_H. */
-function scaled(canvas) {
-  return el('div', { display: 'flex', position: 'relative', width: OUT_W, height: OUT_H, overflow: 'hidden' }, [
-    el('div', { display: 'flex', position: 'absolute', left: 0, top: 0, width: 1200, height: 630, transform: `scale(${OUT_SCALE})`, transformOrigin: '0 0' }, [canvas]),
-  ]);
-}
+/** Ukuran dari kanvas 1200x630 ke ukuran keluaran (tanpa transform: Satori menskalakan dari titik tengah, bukan pojok). */
+const px = (n) => Math.round(n * OUT_SCALE * 100) / 100;
+
 const FALLBACK = { kind: 'playlist', label: 'PLAYLIST', title: 'MusicVerse', subtitle: 'Dengarkan bersama', count: 0, cover: null, covers: [] };
 
 // Tata letak poster playlist (1200x630). SAMA dengan PlaylistPoster.kt.
@@ -74,24 +71,24 @@ async function inlineCover(src) {
 
 const el = (type, style, children) => ({ type, props: { style, children } });
 
-/** Satu sampul kipas: kotak bersudut bulat, dirotasi di sekitar titik tengahnya (cx, cy). */
+/** Satu sampul kipas: kotak bersudut bulat, dirotasi di sekitar titik tengahnya (cx, cy). Semua angka dalam kanvas 1200x630. */
 function fanCover(src, size, cx, cy, rotation, fallbackBg) {
   const box = {
     display: 'flex',
     position: 'absolute',
-    left: cx - size / 2,
-    top: cy - size / 2,
-    width: size,
-    height: size,
-    borderRadius: RADIUS,
+    left: px(cx - size / 2),
+    top: px(cy - size / 2),
+    width: px(size),
+    height: px(size),
+    borderRadius: px(RADIUS),
     overflow: 'hidden',
     transform: `rotate(${rotation}deg)`,
-    boxShadow: '0 14px 34px rgba(0,0,0,0.47)',
+    boxShadow: `0 ${px(14)}px ${px(34)}px rgba(0,0,0,0.47)`,
   };
   if (src) {
-    return el('div', box, [{ type: 'img', props: { src, width: size, height: size, style: { width: size, height: size, objectFit: 'cover' } } }]);
+    return el('div', box, [{ type: 'img', props: { src, width: px(size), height: px(size), style: { width: px(size), height: px(size), objectFit: 'cover' } } }]);
   }
-  return el('div', { ...box, alignItems: 'center', justifyContent: 'center', backgroundImage: fallbackBg, fontSize: size * 0.46, color: 'rgba(255,255,255,0.3)' }, '♪');
+  return el('div', { ...box, alignItems: 'center', justifyContent: 'center', backgroundImage: fallbackBg, fontSize: px(size * 0.46), color: 'rgba(255,255,255,0.3)' }, '\u266a');
 }
 
 function playlistPoster(s) {
@@ -108,20 +105,20 @@ function playlistPoster(s) {
   layers.push(
     el(
       'div',
-      { display: 'flex', position: 'absolute', left: (1200 - TEXT_MAX_W) / 2, top: TITLE_BASELINE - 50, width: TEXT_MAX_W, justifyContent: 'center', fontSize: 50, fontWeight: 700, color: ink, lineClamp: 1 },
+      { display: 'flex', position: 'absolute', left: px((1200 - TEXT_MAX_W) / 2), top: px(TITLE_BASELINE - 50), width: px(TEXT_MAX_W), justifyContent: 'center', fontSize: px(50), fontWeight: 700, color: ink, lineClamp: 1 },
       s.title,
     ),
   );
   if (s.count) {
-    layers.push(el('div', { display: 'flex', position: 'absolute', left: 0, top: COUNT_BASELINE - 32, width: 1200, justifyContent: 'center', fontSize: 32, color: inkSoft }, s.subtitle));
+    layers.push(el('div', { display: 'flex', position: 'absolute', left: 0, top: px(COUNT_BASELINE - 32), width: OUT_W, justifyContent: 'center', fontSize: px(32), color: inkSoft }, s.subtitle));
   }
   return el(
     'div',
     {
       display: 'flex',
       position: 'relative',
-      width: 1200,
-      height: 630,
+      width: OUT_W,
+      height: OUT_H,
       overflow: 'hidden',
       backgroundImage: dark ? 'linear-gradient(135deg,#1f1b2e,#0f172a)' : 'linear-gradient(180deg,#ffffff,#d2d2d2)',
     },
@@ -132,33 +129,34 @@ function playlistPoster(s) {
 function songPoster(s) {
   const cover = s.cover;
   const bg = { backgroundImage: 'linear-gradient(135deg,#1db954,#0c3b20 60%,#111111)' };
+  const CV = px(420);
   const coverBox = cover
-    ? { type: 'img', props: { src: cover, width: 420, height: 420, style: { width: 420, height: 420, borderRadius: 40, objectFit: 'cover' } } }
+    ? { type: 'img', props: { src: cover, width: CV, height: CV, style: { width: CV, height: CV, borderRadius: px(40), objectFit: 'cover' } } }
     : el(
         'div',
-        { display: 'flex', width: 420, height: 420, borderRadius: 40, background: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', fontSize: 190, color: 'rgba(255,255,255,0.35)' },
-        '♪',
+        { display: 'flex', width: CV, height: CV, borderRadius: px(40), background: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', fontSize: px(190), color: 'rgba(255,255,255,0.35)' },
+        '\u266a',
       );
-  const textCol = el('div', { display: 'flex', flexDirection: 'column', justifyContent: 'center', marginLeft: 52, flex: 1, minWidth: 0 }, [
-    el('div', { display: 'flex', fontSize: 26, letterSpacing: 5, color: 'rgba(255,255,255,0.8)', marginBottom: 18 }, s.label),
-    el('div', { display: 'flex', fontSize: 66, fontWeight: 700, color: '#fff', lineHeight: 1.08, lineClamp: 3 }, s.title),
-    el('div', { display: 'flex', fontSize: 34, color: 'rgba(255,255,255,0.85)', marginTop: 18, lineClamp: 1 }, (s.subtitle || '').toUpperCase() || ' '),
+  const textCol = el('div', { display: 'flex', flexDirection: 'column', justifyContent: 'center', marginLeft: px(52), flex: 1, minWidth: 0 }, [
+    el('div', { display: 'flex', fontSize: px(26), letterSpacing: px(5), color: 'rgba(255,255,255,0.8)', marginBottom: px(18) }, s.label),
+    el('div', { display: 'flex', fontSize: px(66), fontWeight: 700, color: '#fff', lineHeight: 1.08, lineClamp: 3 }, s.title),
+    el('div', { display: 'flex', fontSize: px(34), color: 'rgba(255,255,255,0.85)', marginTop: px(18), lineClamp: 1 }, (s.subtitle || '').toUpperCase() || ' '),
   ]);
   const panel = el(
     'div',
-    { display: 'flex', alignItems: 'center', padding: 44, borderRadius: 64, background: 'rgba(255,255,255,0.14)', border: '2px solid rgba(255,255,255,0.22)', width: 1060 },
+    { display: 'flex', alignItems: 'center', padding: px(44), borderRadius: px(64), background: 'rgba(255,255,255,0.14)', border: `${px(2)}px solid rgba(255,255,255,0.22)`, width: px(1060) },
     [coverBox, textCol],
   );
-  const brand = el('div', { display: 'flex', alignItems: 'center', marginTop: 30, fontSize: 36, fontWeight: 700, color: '#fff' }, [
+  const brand = el('div', { display: 'flex', alignItems: 'center', marginTop: px(30), fontSize: px(36), fontWeight: 700, color: '#fff' }, [
     el(
       'div',
-      { display: 'flex', alignItems: 'flex-end', marginRight: 14 },
-      [14, 28, 20, 34].map((h) => el('div', { width: 8, height: h, borderRadius: 4, background: '#1db954', marginRight: 5 }, '')),
+      { display: 'flex', alignItems: 'flex-end', marginRight: px(14) },
+      [14, 28, 20, 34].map((h) => el('div', { width: px(8), height: px(h), borderRadius: px(4), background: '#1db954', marginRight: px(5) }, '')),
     ),
     'MusicVerse',
   ]);
-  return el('div', { display: 'flex', width: 1200, height: 630, ...bg }, [
-    el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 1200, height: 630, background: 'rgba(0,0,0,0.25)' }, [panel, brand]),
+  return el('div', { display: 'flex', width: OUT_W, height: OUT_H, ...bg }, [
+    el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: OUT_W, height: OUT_H, background: 'rgba(0,0,0,0.25)' }, [panel, brand]),
   ]);
 }
 
@@ -185,7 +183,7 @@ export default async function handler(request) {
     const covers = ok.length ? Array.from({ length: 3 }, (_, i) => ok[i % ok.length]) : [];
     summary = { ...summary, covers };
   }
-  return new ImageResponse(scaled(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary)), {
+  return new ImageResponse(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary), {
     width: OUT_W,
     height: OUT_H,
     headers: {
