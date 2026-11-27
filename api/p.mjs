@@ -36,8 +36,8 @@ ${
   image
     ? `<meta property="og:image" content="${esc(image)}">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image:width" content="600">
+<meta property="og:image:height" content="315">
 <meta property="og:image:alt" content="${esc(title)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${esc(image)}">`
@@ -125,7 +125,7 @@ function render(code, data, origin) {
         s.kind === 'song'
           ? `${s.subtitle ? s.subtitle + ' · ' : ''}Dengarkan di MusicVerse`
           : `Playlist ${count} lagu dibagikan lewat MusicVerse.`,
-      // Poster 1200x630 dibuat server (api/og.mjs) dari sampul + judul + artis/jumlah lagu.
+      // Poster 600x315 (ringan untuk WhatsApp) dibuat server (api/og.mjs) dari sampul + judul + artis/jumlah lagu.
       image: `${origin}/api/og?code=${code}`,
       url: `${origin}/p/${code}`,
       code,

@@ -9,6 +9,21 @@ import { loadShared, normalizeCode, summarize } from './_share.mjs';
 export const config = { runtime: 'edge' };
 
 const MAX_COVER_BYTES = 3 * 1024 * 1024;
+
+// UKURAN KELUARAN. Tata letak tetap digambar di kanvas 1200x630 (angka di bawah tidak berubah), tetapi PNG yang dikirim
+// diperkecil lewat transform scale. WhatsApp membuang og:image yang lebih dari ~300 KB (Telegram/Discord tidak seketat itu),
+// dan PNG foto 1200x630 gampang 600 KB - 1 MB. 600x315 membuatnya jauh di bawah batas. Ubah OUT_W (mis. 800) bila mau lebih
+// tajam, lalu samakan og:image:width/height di api/p.mjs (OUT_H = OUT_W * 630 / 1200).
+const OUT_W = 600;
+const OUT_H = Math.round((OUT_W * 630) / 1200);
+const OUT_SCALE = OUT_W / 1200;
+
+/** Bungkus kanvas 1200x630 menjadi OUT_W x OUT_H. */
+function scaled(canvas) {
+  return el('div', { display: 'flex', position: 'relative', width: OUT_W, height: OUT_H, overflow: 'hidden' }, [
+    el('div', { display: 'flex', position: 'absolute', left: 0, top: 0, width: 1200, height: 630, transform: `scale(${OUT_SCALE})`, transformOrigin: '0 0' }, [canvas]),
+  ]);
+}
 const FALLBACK = { kind: 'playlist', label: 'PLAYLIST', title: 'MusicVerse', subtitle: 'Dengarkan bersama', count: 0, cover: null, covers: [] };
 
 // Tata letak poster playlist (1200x630). SAMA dengan PlaylistPoster.kt.
@@ -22,7 +37,7 @@ const RADIUS = 36;
 const TITLE_BASELINE = 492;
 const COUNT_BASELINE = 548;
 const TEXT_MAX_W = 1020;
-const BACKDROP = 'cover'; // 'cover' = sampul pertama digelapkan, 'paper' = kertas terang
+const BACKDROP = 'cover'; // 'cover' = latar gelap, 'paper' = kertas terang. (Foto sampul tidak lagi dipakai sebagai latar: terlalu berat untuk WhatsApp.)
 const FALLBACK_GRADIENTS = [
   'linear-gradient(135deg,#6d28d9,#2563eb)',
   'linear-gradient(135deg,#be185d,#f97316)',
@@ -37,7 +52,7 @@ async function inlineCover(src) {
   if (!src) return null;
   try {
     // Minta jpeg/png saja: Google/Deezer memberi webp bila Accept membolehkan, dan Satori gagal membaca webp (galat di tengah stream).
-    const r = await fetch(src, { signal: AbortSignal.timeout(2500), headers: { accept: 'image/jpeg,image/png,image/gif;q=0.9' } });
+    const r = await fetch(src, { signal: AbortSignal.timeout(2000), headers: { accept: 'image/jpeg,image/png,image/gif;q=0.9' } });
     if (!r.ok) return null;
     const buf = await r.arrayBuffer();
     if (buf.byteLength === 0 || buf.byteLength > MAX_COVER_BYTES) return null;
@@ -87,13 +102,6 @@ function playlistPoster(s) {
   const cx = 1200 / 2;
   const cySide = TOP + SIDE_DY + SIDE / 2;
   const layers = [];
-  if (dark && c0) {
-    layers.push({
-      type: 'img',
-      props: { src: c0, width: 1800, height: 945, style: { position: 'absolute', left: -300, top: -158, width: 1800, height: 945, objectFit: 'cover' } },
-    });
-  }
-  if (dark) layers.push(el('div', { display: 'flex', position: 'absolute', left: 0, top: 0, width: 1200, height: 630, background: 'rgba(0,0,0,0.5)' }, ''));
   layers.push(fanCover(c1, SIDE, cx - SIDE_DX, cySide, -ROT, FALLBACK_GRADIENTS[1]));
   layers.push(fanCover(c2, SIDE, cx + SIDE_DX, cySide, ROT, FALLBACK_GRADIENTS[2]));
   layers.push(fanCover(c0, CENTER, cx, TOP + CENTER / 2, 0, FALLBACK_GRADIENTS[0]));
@@ -123,9 +131,7 @@ function playlistPoster(s) {
 
 function songPoster(s) {
   const cover = s.cover;
-  const bg = cover
-    ? { backgroundImage: `url(${cover})`, backgroundSize: '100% 100%' }
-    : { backgroundImage: 'linear-gradient(135deg,#1db954,#0c3b20 60%,#111111)' };
+  const bg = { backgroundImage: 'linear-gradient(135deg,#1db954,#0c3b20 60%,#111111)' };
   const coverBox = cover
     ? { type: 'img', props: { src: cover, width: 420, height: 420, style: { width: 420, height: 420, borderRadius: 40, objectFit: 'cover' } } }
     : el(
@@ -152,7 +158,7 @@ function songPoster(s) {
     'MusicVerse',
   ]);
   return el('div', { display: 'flex', width: 1200, height: 630, ...bg }, [
-    el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 1200, height: 630, background: 'rgba(0,0,0,0.55)' }, [panel, brand]),
+    el('div', { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 1200, height: 630, background: 'rgba(0,0,0,0.25)' }, [panel, brand]),
   ]);
 }
 
@@ -174,14 +180,14 @@ export default async function handler(request) {
   if (summary.kind === 'song') {
     summary = { ...summary, cover: await inlineCover(summary.cover) };
   } else {
-    const loaded = (await Promise.all((summary.candidates || summary.covers || []).map(inlineCover))).filter(Boolean);
+    const loaded = (await Promise.all((summary.candidates || summary.covers || []).slice(0, 6).map(inlineCover))).filter(Boolean);
     const ok = loaded.slice(0, 3);
     const covers = ok.length ? Array.from({ length: 3 }, (_, i) => ok[i % ok.length]) : [];
     summary = { ...summary, covers };
   }
-  return new ImageResponse(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary), {
-    width: 1200,
-    height: 630,
+  return new ImageResponse(scaled(summary.kind === 'song' ? songPoster(summary) : playlistPoster(summary)), {
+    width: OUT_W,
+    height: OUT_H,
     headers: {
       // Poster gagal (tautan mati/Supabase sibuk) jangan di-cache lama supaya cepat pulih.
       'cache-control': found ? 'public, max-age=600, s-maxage=3600, stale-while-revalidate=86400' : 'public, max-age=60, s-maxage=60',
