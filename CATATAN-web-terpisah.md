@@ -85,3 +85,9 @@ Semua kode APK Capacitor (native/, src/native, pemutar, halaman app, OTA, workfl
   sampul rusak -> ♪, kode salah -> poster umum). Penggambaran asli belum diuji.
 - Perlu: `npm install && npm run build`, deploy, lalu buka `/api/og?code=<kode asli>`. WhatsApp/Telegram menyimpan pratinjau
   di cache; uji dengan tautan yang baru dibagikan.
+
+
+## Tautan gabung Listen Together `/t/<kode>` (28 Nov 2026, belum dideploy/diuji)
+- Baru `api/t.mjs` (halaman statis tanpa basis data), rewrite `/t/:code` -> `/api/t?code=:code` di `vercel.json` (sebelum catch-all).
+- `public/.well-known/assetlinks.json` tidak diubah; intent-filter app kini menangkap `/p/` dan `/t/` untuk host yang sama.
+- Setelah deploy: buka `/t/abc234` (halaman tampil), `/t/salah` (404), lalu ketuk tautan asli di ponsel (App Links membuka app tanpa pilihan bila verifikasi berhasil).

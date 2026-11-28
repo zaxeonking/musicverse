@@ -4,6 +4,7 @@
   },
   "rewrites": [
     { "source": "/p/:code", "destination": "/api/p?code=:code" },
+    { "source": "/t/:code", "destination": "/api/t?code=:code" },
     { "source": "/((?!api/|\\.well-known/|assets/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -33,6 +33,12 @@ Server (Vercel, tanpa awalan VITE_), untuk halaman tautan bagikan `/p/<kode>` (`
   di WhatsApp/Telegram/Discord. Uji: buka `/api/og?code=<kode asli>` di browser.
 - `npm test`: tes tanpa jaringan untuk data + halaman (poster tidak ikut diuji).
 
+## Tautan gabung Listen Together `/t/<kode>`
+- `api/t.mjs`: halaman kecil tanpa basis data dan tanpa env: menampilkan kode room (6 karakter, tanpa i/l/o/0/1), tombol "Buka di MusicVerse"
+  (`musicverse://t/<kode>`, di Chrome Android lewat `intent://`) dan cadangan unduh. Kode salah bentuk = 404. Rewrite `/t/:code` di `vercel.json`.
+- `assetlinks.json` TIDAK berubah: App Links berlaku per host, jadi `/t/` ikut terverifikasi bersama `/p/` (intent-filter app memuat kedua jalur).
+- Tautan hanya membuka lembar Dengar bareng di app dengan kode terisi; bergabung tetap ketukan pengguna.
+
 ## Letak di repo
 Folder ini = `web/` di repo utama (app Android native ada di luarnya). Vercel: Settings > General > **Root Directory = `web`**.
 Aturan Firestore untuk tautan akun ada di `../firestore.rules` (deploy: `firebase deploy --only firestore:rules`).
